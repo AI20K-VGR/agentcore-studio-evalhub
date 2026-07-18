@@ -2,10 +2,10 @@
 
 > Eval harness, LLM-judge, scorecard, golden-set.
 
-**Owner:** AIE-2 · **Loại:** uv workspace member (Python 3.14) · **Repo cha:** [agentcore-studio-kit](https://github.com/hieubui2409/agentcore-studio-kit)
+**Owner:** AIE-2 — Lưu Tiến Duy · **Loại:** uv workspace member (Python 3.14) · **Repo cha:** [agentcore-studio-kit](https://github.com/hieubui2409/agentcore-studio-kit)
 
 ## Repo này là gì
-Submodule `packages/evalhub` của workspace `agentcore-studio-kit`. Owner: **AIE-2**. Chứa eval harness, LLM-judge, scorecard, golden-set. (Tên `evalhub`, không phải `eval`, để tránh shadow builtin.)
+Submodule `packages/evalhub` của workspace `agentcore-studio-kit`. Owner: **AIE-2 — Lưu Tiến Duy**. Chứa eval harness, LLM-judge, scorecard, golden-set. (Tên `evalhub`, không phải `eval`, để tránh shadow builtin.)
 
 ## ⚠️ Không build/test độc lập được
 `agentcore-studio-evalhub` phụ thuộc `agentcore-studio-contracts` + uv.lock + `docker/postgres-init` của repo cha, và cần **Postgres** cho test. Vì vậy:
