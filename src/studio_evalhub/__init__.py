@@ -6,7 +6,8 @@ next — see harness.py/judge.py/compute.py docstrings for each seam's contract.
 """
 
 from studio_evalhub.compute import compute_scorecard
+from studio_evalhub.golden_case import GoldenCase, GoldenSet
 from studio_evalhub.harness import EvalHarness
 from studio_evalhub.judge import LLMJudge
 
-__all__ = ["EvalHarness", "LLMJudge", "compute_scorecard"]
+__all__ = ["EvalHarness", "GoldenCase", "GoldenSet", "LLMJudge", "compute_scorecard"]
