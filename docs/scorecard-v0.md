@@ -163,10 +163,20 @@ Adapter (`EngineAgentRunner`, sống ở `studio_app` composition root — evalh
 
 Node id lấy theo `node.type == llm-step` (**KHÔNG** hardcode `"n_llm"` — recipe đổi id vẫn chạy).
 
-**Hệ quả (ghi để không hoảng):** `refused = not retrieved_chunks` + `kb.search` của DE tuần này còn
-trả `[]` ⇒ luồng thật mark **mọi case `refused=True`** ⇒ case trả-lời-được (cần `refused=False`) fail
-hết. Nên smoke Day 4 chạy qua stub (`cli._DemoRunner`); nối luồng thật khi `kb.search` trả chunk
-(D4–6, #29).
+**Hệ quả trên luồng thật (cập nhật 2026-07-23, sau khi đọc DE `StaticKbSearch`):** DE đã ship
+`StaticKbSearch` (kb.search thô) lọc **cả `tenant` lẫn `section_role`** (`if chunk.tenant != tenant or
+chunk.section_role not in allowed`), chỉ khác là *tin giá trị client khai* — phân giải server-side
+(chống T6-spoof) để S3. Vì `refused = not retrieved_chunks`, cả 5 case hành xử **đúng nhãn** ở tầng
+retrieval:
+
+- SC-01/02/03 (trả-lời-được): đúng tenant+vai → có chunk → `refused=False` → PASS được (nếu `answer`
+  chứa cụm `expected`).
+- SC-04 (chéo-tenant): tenant chặn → rỗng → `refused=True` → refusal PASS.
+- SC-05 (chéo-vai): role chặn (`hr ∉ [engineering]`) → rỗng → `refused=True` → refusal PASS.
+
+Nhưng Protocol seam `KbSearchService.search` **vẫn `NotImplementedError`** — dùng `StaticKbSearch` hay
+seam nào là do wiring `studio_app` quyết. Day 4 vẫn chạy qua stub (`cli._DemoRunner`) cho **tất định**,
+không phụ thuộc wiring; nối luồng thật ở D4–6 (#29).
 
 **Còn treo (→ mentor):** ai viết adapter + dựng/tiêm `kb_search`/`llm`/`embedding`/`trace_writer` ở
 `studio_app` (mentor sở hữu, AIE-2 READ). Xem Q4 §3.
