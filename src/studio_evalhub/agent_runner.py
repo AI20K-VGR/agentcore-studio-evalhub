@@ -39,7 +39,12 @@ class AgentAnswer(BaseModel):
 
     refused: bool = False
     """Agent có từ chối trả lời không. Nhánh từ-chối yêu cầu cờ này True (fail-closed): không suy
-    "từ chối" từ nội dung `answer` để tránh đoán mò trên văn bản tự do."""
+    "từ chối" từ nội dung `answer` để tránh đoán mò trên văn bản tự do.
+
+    Nguồn (chốt với AIE-1, D4 2026-07-23): engine cấp cờ này **structural** qua output `llm-step`
+    (`studio_engine` commit `71caeb8`: `refused = not retrieved_chunks`) — đúng thiết kế "không đoán
+    text". Adapter ở `studio_app` map `final_state[<llm node>]["refused"]` vào trường này. Xem
+    `docs/scorecard-v0.md` §2.7."""
 
 
 @runtime_checkable
