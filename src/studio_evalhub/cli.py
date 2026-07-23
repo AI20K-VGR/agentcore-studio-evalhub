@@ -1,9 +1,9 @@
 """CLI smoke-eval — chạy `python -m studio_evalhub.cli`.
 
-Dựng bộ 5 smoke-case Callisto (sao chép từ golden-set của DE, `callisto-smoke-5-v0`) + một runner
+Dựng bộ 5 smoke-case Callisto (nguồn từ golden-set của DE, `callisto-smoke-5-v0`) + một runner
 mô phỏng, chạy qua `EvalHarness.run_smoke`, rồi in bảng điểm 5 dòng (`case_id · success · citation_acc`).
-Chưa nối interpreter thật (AIE-1) hay đọc file YAML của DE (loader hoãn): case dựng in-code, runner là
-câu trả lời mô phỏng — đổi sang đồ thật khi DE push golden-set + AIE-1 chốt output shape.
+Chưa nối interpreter thật hay đọc file YAML của DE: case dựng in-code, runner là câu trả lời mô phỏng
+— đổi sang đồ thật khi có loader (`pyyaml`/`uv.lock` — mentor) + adapter luồng thật ở `apps/studio`.
 """
 
 from __future__ import annotations
@@ -18,9 +18,10 @@ _AGENT_ID = "agent-smoke-demo"
 
 
 def _demo_golden_set() -> GoldenSet:
-    """Bộ 5 smoke-case Callisto — **sao chép 100%** từ golden-set của DE (`callisto-smoke-5-v0`,
-    `packages/kb/golden/smoke-5.yaml`; DE sinh + gán nhãn tay, AIE-2 chỉ đọc). Dựng in-code tạm vì file
-    YAML của DE chưa push + loader hoãn; đổi sang loader khi DE push. Không suy diễn/đổi wording/bịa id.
+    """Bộ 5 smoke-case Callisto — **nguồn từ golden-set của DE** (`callisto-smoke-5-v0`,
+    `packages/kb/golden/smoke-5.yaml`; DE sinh + gán nhãn tay, AIE-2 chỉ đọc). Dựng in-code tạm vì
+    loader hoãn (`pyyaml` chưa khai là dep — cần sửa `uv.lock` ở repo cha, mentor); đổi sang loader khi
+    khai xong. Không suy diễn/đổi wording/bịa id.
     """
     return GoldenSet(
         golden_set_ref="callisto-smoke-5-v0",
