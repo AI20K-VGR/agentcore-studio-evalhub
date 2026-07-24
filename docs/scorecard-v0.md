@@ -3,6 +3,7 @@
 > **Trạng thái:** v0 draft · chưa freeze · `SCHEMA_VERSION = "0.1.0-draft"`
 > **Bút:** AIE-2 — Lưu Tiến Duy · **Ngày:** 2026-07-21 (D2, issue #9)
 > **Cập nhật:** 2026-07-23 (D4, issue #19) — nhánh trả-lời-được chuyển sang **token-contains**; thêm `expected_section_role` (trục T6); §2.7 chốt mapping `final_state → AgentAnswer` với AIE-1. Xem §2.3, §2.5, §2.6, §2.7.
+> **Cập nhật:** 2026-07-24 (D5, issue #24) — citation-accuracy + leak-check đọc từ **TRACE** (gom `citations` **node-agnostic**; carrier thực tế là event `llm-step`, xác nhận qua thread-check), seam trả `CaseRun{answer, events}` nhận `tenant_id: UUID` (D-13); leak-check là sanity slug, fence thật = RLS-UUID; SC-04 bug đã biết. Xem §2.3, §2.7.
 > **Freeze:** workshop contract-negotiation D11 — các câu ở §3 cần chốt trước mốc đó.
 
 Ghi chú của người giữ bút `scorecard`: ghi lại quyết định đã ra và phần chưa quyết. Contract nằm ở
@@ -97,6 +98,26 @@ token-contains. DE đổi `expected` từ câu đầy đủ sang cụm ngắn (c
 đúng-ý-khác-chữ bị chấm sai (bias xuống). Token-contains **chỉ** áp nhánh trả-lời-được; nhánh từ-chối
 giữ nguyên fail-closed (nới ở đó là thủng fence).
 
+**Đổi D5 (#24) — nguồn citations = TRACE:** citation-accuracy (nhánh trả-lời-được) **và** leak-check
+(nhánh từ-chối) đọc chunk đã trích từ **TRACE** (`harness._retrieved_citations` gom `citations`
+**node-agnostic** — mọi event có, bỏ `None`), KHÔNG từ `AgentAnswer.citations` (agent tự khai). Trace
+là mặt quan sát thật — cái node thực sự truy, không phải cái LLM khai. **Carrier node:** thread-check
+2026-07-24 xác nhận interpreter (AIE-1) nâng citations lên event **`llm-step`** (không phải
+`kb-retrieve` như contract chú thích) — gom node-agnostic để robust với cả hai, chốt node chính xác
+với AIE-1 (follow-up). `citation_accuracy` dùng **set-semantics**
+(`|expected ∩ retrieved| / |expected|`, ≤1.0 kể cả trace trùng) và **là metric riêng, KHÔNG gate
+`success`** ở nhánh trả-lời-được (trace sai/rỗng ⇒ accuracy 0.0 nhưng vẫn PASS nếu answer đúng).
+`AgentAnswer.citations` giữ lại làm *cái LLM khai* để cross-check hallucination (claimed ⊆ retrieved)
+về sau.
+
+**D-13 — leak-check là SANITY, không phải fence:** vế "không trích chunk thuộc `expected_tenant`" so
+theo **tiền tố slug của `chunk_id`** (`ankor-...` → `ankor`). Đây là **sanity thứ cấp**, KHÔNG chứng
+minh fence: `TraceEvent.citations` là `list[str]` chunk_id, **không mang `tenant_id` per-chunk**, nên
+scorer không kiểm được ở mức UUID. **Fence thật = RLS trên `tenant_id` UUID phía máy chủ** (KB/kb.search).
+Vì `core.tenants.name↔id` song ánh, so slug ≡ so UUID (không cần resolve trong scorer). Contract gap
+(muốn kiểm leak mức UUID thì trace cần `tenant_id` per-chunk) → follow-up với DE/mentor, không đổi
+contract ở PR này.
+
 ### 2.4 Phân bổ 5 smoke-case
 
 | # | Loại | Kiểm gì |
@@ -143,7 +164,7 @@ không tưởng đã kín.
 > khớp bằng **token liên tiếp có normalize** (định nghĩa §2.6) — chặn `"11 ngày"` mà không trượt oan
 > dấu câu/đầu-cuối câu. Nhánh từ-chối + `expected_citation` giữ nguyên (không token hoá).
 
-### 2.7 Seam → adapter mapping — chốt với AIE-1 (D4 2026-07-23)
+### 2.7 Seam → adapter mapping — chốt với AIE-1 (D4 2026-07-23; cập nhật D5 2026-07-24)
 
 AIE-1 đã điền interpreter (`studio_engine`, commit `71caeb8` + `15d7081`). `RunResult.final_state` là
 `dict[node_id, output]`; node `llm-step` cho output:
@@ -152,16 +173,22 @@ AIE-1 đã điền interpreter (`studio_engine`, commit `71caeb8` + `15d7081`). 
 final_state[<llm node>] = {"answer": str, "tokens": ..., "citations": list[str], "refused": bool}
 ```
 
-Adapter (`EngineAgentRunner`, sống ở `studio_app` composition root — evalhub **cấm** import
-`studio_engine`, `.importlinter`) map sang `AgentAnswer`:
+Seam evalhub trả **`CaseRun{answer: AgentAnswer, events: list[TraceEvent]}`** (D5 #24). Adapter
+(`EngineAgentRunner`, sống ở `studio_app` composition root — evalhub **cấm** import `studio_engine`,
+`.importlinter`) map:
 
-| `AgentAnswer` | Nguồn `final_state[<llm node>]` |
+| Đích evalhub | Nguồn `studio_engine.RunResult` |
 | --- | --- |
-| `answer` | `["answer"]` |
-| `citations` | `["citations"]` — đã ground theo chunk retrieved, hỗ trợ format DE `{doc_id}#c{n}` |
-| `refused` | `["refused"]` = `not retrieved_chunks` (STRUCTURAL, không đoán text — khớp docstring `AgentAnswer.refused`) |
+| `AgentAnswer.answer` | `final_state[<llm node>]["answer"]` |
+| `AgentAnswer.refused` | `final_state[<llm node>]["refused"]` = `not retrieved_chunks` (STRUCTURAL, không đoán text) |
+| `AgentAnswer.citations` | `final_state[<llm node>]["citations"]` — *cái LLM khai* (không dùng chấm; để cross-check) |
+| **`CaseRun.events`** | **`RunResult.events`** (list `TraceEvent`) — **nguồn chấm citations** (gom node-agnostic; carrier thực tế = event `llm-step`) |
 
 Node id lấy theo `node.type == llm-step` (**KHÔNG** hardcode `"n_llm"` — recipe đổi id vẫn chạy).
+Seam nhận **`tenant_id: UUID`** (D-13): adapter resolve slug→UUID qua `core.tenants` **trước** khi gọi
+`kb.search`/`interpreter.run`; evalhub `run_smoke`/CLI resolve tường minh phía trên seam. **Lưu ý:**
+`RunResult.events` hiện **`[]`** (AIE-1 populate là việc D5 của họ) — evalhub chấm được ngay khi trace
+được đổ; demo dùng trace stub cho tất định.
 
 **Hệ quả trên luồng thật (cập nhật 2026-07-23, sau khi đọc DE `StaticKbSearch`):** DE đã ship
 `StaticKbSearch` (kb.search thô) lọc **cả `tenant` lẫn `section_role`** (`if chunk.tenant != tenant or
@@ -171,15 +198,25 @@ retrieval:
 
 - SC-01/02/03 (trả-lời-được): đúng tenant+vai → có chunk → `refused=False` → PASS được (nếu `answer`
   chứa cụm `expected`).
-- SC-04 (chéo-tenant): tenant chặn → rỗng → `refused=True` → refusal PASS.
 - SC-05 (chéo-vai): role chặn (`hr ∉ [engineering]`) → rỗng → `refused=True` → refusal PASS.
 
-Nhưng Protocol seam `KbSearchService.search` **vẫn `NotImplementedError`** — dùng `StaticKbSearch` hay
-seam nào là do wiring `studio_app` quyết. Day 4 vẫn chạy qua stub (`cli._DemoRunner`) cho **tất định**,
-không phụ thuộc wiring; nối luồng thật ở D4–6 (#29).
+**⚠️ Bug đã biết — SC-04 (D5, DE nêu ở report D4):** trước đây ghi "SC-04 → rỗng → `refused=True` →
+PASS" là **SAI**. `ankor-expense-001` front-matter `public` (chỉ `#c2` override `finance`), nên hỏi
+*"hạn mức chi Borea"* từ ankor/public: fence chặn chunk borea ĐÚNG (không leak) **nhưng** semantic
+search vẫn nhặt được chunk **public** của ankor → `retrieved_chunks` KHÔNG rỗng → `refused =
+not retrieved_chunks = False` → golden expect refusal ⇒ **chấm FAIL**. Gốc: `refused = not
+retrieved_chunks` sai semantics cho T1 (chỉ bắt refusal khi scope rỗng tuyệt đối). Đang chốt 3 bên
+(AIE-1 tín hiệu `refused` · DE corpus · AIE-2 luật chấm) — hướng: T1 chấm theo **leak-safety từ trace**
+làm chính. **KHÔNG đổi pass-rule ở PR này**; phải chốt trước khi nối luồng thật kẻo adapter khuếch đại.
 
-**Còn treo (→ mentor):** ai viết adapter + dựng/tiêm `kb_search`/`llm`/`embedding`/`trace_writer` ở
-`studio_app` (mentor sở hữu, AIE-2 READ). Xem Q4 §3.
+Protocol seam `KbSearchService.search` **vẫn `NotImplementedError`** — dùng `StaticKbSearch` hay seam
+nào là do wiring `studio_app` quyết. Demo chạy qua `StubAgentRunner` (trace stub) cho **tất định**,
+không phụ thuộc wiring.
+
+**Adapter #29 (chốt mentor D5 2026-07-24):** mentor **KHÔNG viết hộ** — đây là mảnh tích-hợp học cao
+nhất. `apps/studio` mở cho PR: **đồng-tác AIE-1 (nguồn `final_state`/`events`) + AIE-2 (đích
+`CaseRun`/`AgentAnswer`)**, SWE review recipe/DAG. Repos đã public → AIE-2 có write `apps/studio`
+(fence chuyển sang tầng CODEOWNERS). Xem Q4 §3.
 
 ---
 
