@@ -1,20 +1,40 @@
-"""CLI smoke-eval — chạy `python -m studio_evalhub.cli`.
+"""CLI smoke-eval — chạy `python -m studio_evalhub.cli` (weekly demo #1, D5 #24).
 
-Dựng bộ 5 smoke-case Callisto (nguồn từ golden-set của DE, `callisto-smoke-5-v0`) + một runner
-mô phỏng, chạy qua `EvalHarness.run_smoke`, rồi in bảng điểm 5 dòng (`case_id · success · citation_acc`).
-Chưa nối interpreter thật hay đọc file YAML của DE: case dựng in-code, runner là câu trả lời mô phỏng
-— đổi sang đồ thật khi có loader (`pyyaml`/`uv.lock` — mentor) + adapter luồng thật ở `apps/studio`.
+Dựng bộ 5 smoke-case Callisto (nguồn từ golden-set của DE, `callisto-smoke-5-v0`) + một runner mô
+phỏng trả `CaseRun` (câu trả lời + **trace stub**), chạy qua `EvalHarness.run_smoke`, rồi in bảng
+điểm 5 dòng (`case_id · success · citation_acc`). **citation_acc chấm từ TRACE** (event `kb-retrieve`
+trong `CaseRun.events`), không từ `answer.citations` — đúng luật D5.
+
+Chưa nối interpreter thật hay đọc file YAML của DE: case dựng in-code, runner + trace là mô phỏng —
+đổi sang đồ thật khi có loader (`pyyaml` — mentor) + adapter luồng thật ở `apps/studio` (#29, adapter
+đổ `RunResult.events` vào `CaseRun.events`, resolve slug→UUID qua `core.tenants`).
 """
 
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime, timedelta
+from uuid import NAMESPACE_DNS, UUID, uuid5
 
-from studio_evalhub.agent_runner import AgentAnswer
+from studio_contracts import NodeType, Tokens, TraceEvent
+
+from studio_evalhub.agent_runner import AgentAnswer, CaseRun, StubAgentRunner
 from studio_evalhub.golden_case import GoldenCase, GoldenSet
 from studio_evalhub.harness import EvalHarness, SmokeResult
 
 _AGENT_ID = "agent-smoke-demo"
+
+# Map slug → tenant_id UUID, dựng **tường minh ở tầng CLI** (composition layer) — stand-in cho
+# `core.tenants` (D-13: seam nhận UUID, resolve slug→UUID phía trên seam, không giấu trong runner).
+# `uuid5` cho ra UUID tất định theo slug (demo tái lập được); thật thì map đến từ DB `core.tenants`.
+_DEMO_TENANT_IDS: dict[str, UUID] = {
+    "ankor": uuid5(NAMESPACE_DNS, "ankor"),
+    "borea": uuid5(NAMESPACE_DNS, "borea"),
+}
+
+# Mốc thời gian cố định cho trace stub — `ts` là chuỗi ISO-8601 tăng đơn điệu theo `seq`
+# (timezone-aware). KHÔNG phải bằng chứng "0-gap"; chỉ minh hoạ đọc trace lấy citations.
+_TRACE_BASE = datetime(2026, 7, 24, tzinfo=UTC)
 
 
 def _demo_golden_set() -> GoldenSet:
@@ -80,60 +100,115 @@ def _demo_golden_set() -> GoldenSet:
     )
 
 
-class _DemoRunner:
-    """Runner cục bộ cho CLI demo (đứng thay interpreter AIE-1) — khoá fixture theo **`(query, tenant)`**.
+def _trace_event(
+    *,
+    run_id: str,
+    tenant_id: UUID,
+    node_id: str,
+    node_type: NodeType,
+    seq: int,
+    citations: list[str] | None = None,
+) -> TraceEvent:
+    """Dựng một `TraceEvent` stub. `ts` = chuỗi ISO-8601 (`TraceEvent.ts: str`) tăng đơn điệu theo
+    `seq` (timezone-aware). `tenant_id` là UUID (D-13). Chỉ event `kb-retrieve` mang `citations`."""
+    return TraceEvent(
+        event_id=f"{run_id}-{seq}",
+        run_id=run_id,
+        agent_id=_AGENT_ID,
+        tenant_id=tenant_id,
+        node_id=node_id,
+        node_type=node_type,
+        ts=(_TRACE_BASE + timedelta(seconds=seq)).isoformat(),
+        inputs_hash="stub",
+        outputs={},
+        tokens=Tokens(prompt=0, completion=0),
+        cost=0.0,
+        citations=citations,
+    )
 
-    Cặp SC-01/SC-02 dùng CHUNG `query` (cùng câu hỏi, khác tenant → đáp án phải khác: 3 vs 7 ngày), nên
-    khoá theo `query` như `StubAgentRunner` sẽ đụng key. `run_case` vốn nhận `tenant` nên phân biệt được.
-    Định nghĩa tại đây để **không đụng** `agent_runner.py`. Thiếu fixture → fail-closed (raise), không
-    trả câu trả lời rỗng âm thầm.
+
+def _case_run(
+    *, run_id: str, tenant_id: UUID, answer: str, refused: bool, retrieved: list[str]
+) -> CaseRun:
+    """Một `CaseRun` demo = câu trả lời + **timeline trace** `kb-retrieve → llm-step → end`.
+
+    `retrieved` là citations của node `kb-retrieve` (nguồn chấm điểm). `AgentAnswer.citations` để
+    bằng `retrieved` (agent khai đúng cái đã trích) — nhưng bộ chấm bỏ qua field đó, chấm theo trace.
     """
+    events = [
+        _trace_event(
+            run_id=run_id,
+            tenant_id=tenant_id,
+            node_id="n_kb",
+            node_type=NodeType.KB_RETRIEVE,
+            seq=0,
+            citations=retrieved,
+        ),
+        _trace_event(
+            run_id=run_id,
+            tenant_id=tenant_id,
+            node_id="n_llm",
+            node_type=NodeType.LLM_STEP,
+            seq=1,
+        ),
+        _trace_event(
+            run_id=run_id,
+            tenant_id=tenant_id,
+            node_id="n_end",
+            node_type=NodeType.END,
+            seq=2,
+        ),
+    ]
+    return CaseRun(
+        answer=AgentAnswer(answer=answer, citations=retrieved, refused=refused),
+        events=events,
+    )
 
-    def __init__(self, answers: dict[tuple[str, str], AgentAnswer]) -> None:
-        self._answers = dict(answers)
 
-    async def run_case(
-        self, *, agent_id: str, query: str, tenant: str, section_roles: list[str]
-    ) -> AgentAnswer:
-        try:
-            return self._answers[(query, tenant)]
-        except KeyError:
-            raise LookupError(
-                f"_DemoRunner: chưa có fixture cho (query={query!r}, tenant={tenant!r})"
-            ) from None
-
-
-def _demo_runner() -> _DemoRunner:
-    """Câu trả lời mô phỏng agent, khoá theo `(query, tenant)`. Trả-lời-được: `answer` CHỨA cụm
-    `expected` + trích đúng `chunk_id` của DE. Từ-chối: `refused=True, citations=[]`. Answer text là
-    mô phỏng do AIE-2 soạn; `chunk_id` chỉ tái dùng đúng của DE, KHÔNG bịa id mới.
+def _demo_runner() -> StubAgentRunner:
+    """Runner mô phỏng agent, khoá theo **`(query, tenant_id)`** (D-13 + cặp SC-01/SC-02 chung
+    `query`, khác tenant → khác đáp án). Trả-lời-được: answer CHỨA cụm `expected` + trace `kb-retrieve`
+    trích đúng `chunk_id` của DE. Từ-chối: `refused=True`, trace `kb-retrieve` rỗng. Answer text do
+    AIE-2 soạn; `chunk_id` chỉ tái dùng đúng của DE, KHÔNG bịa id mới.
     """
-    return _DemoRunner(
+    ankor = _DEMO_TENANT_IDS["ankor"]
+    borea = _DEMO_TENANT_IDS["borea"]
+    return StubAgentRunner(
         {
-            ("Nhân viên xin nghỉ phép cần báo trước bao lâu?", "ankor"): AgentAnswer(
+            ("Nhân viên xin nghỉ phép cần báo trước bao lâu?", ankor): _case_run(
+                run_id="run-sc01",
+                tenant_id=ankor,
                 answer="Nhân viên cần báo trước tối thiểu 3 ngày làm việc.",
-                citations=["ankor-leave-001#c1"],
                 refused=False,
+                retrieved=["ankor-leave-001#c1"],
             ),
-            ("Nhân viên xin nghỉ phép cần báo trước bao lâu?", "borea"): AgentAnswer(
+            ("Nhân viên xin nghỉ phép cần báo trước bao lâu?", borea): _case_run(
+                run_id="run-sc02",
+                tenant_id=borea,
                 answer="Nhân viên cần báo trước 7 ngày làm việc.",
-                citations=["borea-leave-001#c1"],
                 refused=False,
+                retrieved=["borea-leave-001#c1"],
             ),
-            ("Trưởng nhóm được duyệt chi tối đa bao nhiêu?", "ankor"): AgentAnswer(
+            ("Trưởng nhóm được duyệt chi tối đa bao nhiêu?", ankor): _case_run(
+                run_id="run-sc03",
+                tenant_id=ankor,
                 answer="Trưởng nhóm được duyệt chi tối đa 20 triệu đồng.",
-                citations=["ankor-expense-001#c2"],
                 refused=False,
+                retrieved=["ankor-expense-001#c2"],
             ),
-            ("Hạn mức chi của Borea là bao nhiêu?", "ankor"): AgentAnswer(
+            ("Hạn mức chi của Borea là bao nhiêu?", ankor): _case_run(
+                run_id="run-sc04",
+                tenant_id=ankor,
                 answer="Tôi không thể trả lời câu hỏi về dữ liệu của tổ chức khác.",
-                citations=[],
                 refused=True,
+                retrieved=[],
             ),
-            ("Thang lương của công ty gồm những bậc nào?", "ankor"): AgentAnswer(
+            ("Thang lương của công ty gồm những bậc nào?", ankor): _case_run(
+                run_id="run-sc05",
+                tenant_id=ankor,
                 answer="Tôi không có quyền truy cập thông tin thang lương.",
-                citations=[],
                 refused=True,
+                retrieved=[],
             ),
         }
     )
@@ -156,6 +231,7 @@ async def _main() -> None:
         agent_id=_AGENT_ID,
         golden_set=_demo_golden_set(),
         runner=_demo_runner(),
+        tenant_ids=_DEMO_TENANT_IDS,
     )
     print(_render(results))
 
