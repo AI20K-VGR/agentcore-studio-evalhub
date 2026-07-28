@@ -4,6 +4,7 @@
 > **Bút:** AIE-2 — Lưu Tiến Duy · **Ngày:** 2026-07-21 (D2, issue #9)
 > **Cập nhật:** 2026-07-23 (D4, issue #19) — nhánh trả-lời-được chuyển sang **token-contains**; thêm `expected_section_role` (trục T6); §2.7 chốt mapping `final_state → AgentAnswer` với AIE-1. Xem §2.3, §2.5, §2.6, §2.7.
 > **Cập nhật:** 2026-07-24 (D5, issue #24) — citation-accuracy + leak-check đọc từ **TRACE** (gom `citations` **node-agnostic**; carrier thực tế là event `llm-step`, xác nhận qua thread-check), seam trả `CaseRun{answer, events}` nhận `tenant_id: UUID` (D-13); leak-check là sanity slug, fence thật = RLS-UUID; SC-04 bug đã biết. Xem §2.3, §2.7.
+> **Cập nhật:** 2026-07-28 (D7, issue #34) — §2.7 sửa `refused`: định nghĩa đã đổi **hai lần** (`not retrieved_chunks` → sentinel → **`not citations`**, engine#10 đã merge) mà doc chỉ ghi mốc đầu, tức doc **mâu thuẫn code trên `main`**; công bắt lỗi thuộc AIE-1 (@TranBaDat2607). Thêm **§2.7.1** (3 mốc + vì sao mốc D4 sai về bản chất) và **§2.7.2** (carrier của `citations` chưa phải hợp đồng → agenda freeze D11). Gỡ đoạn suy luận dựng trên tiền đề sai, thay bằng **số đo thật** ngày 28/07; ghi rõ `Live Gemini evaluation: chưa chạy`. Sửa ghi chú lỗi thời *"`RunResult.events` hiện `[]`"* — engine#8 đã merge, đo được 4 event/run. Q2 (`citation_accuracy = 1.0` nhánh từ-chối) nay có số: thổi phồng `aggregate` **+0.067** trên bộ 10. **KHÔNG** bump `SCHEMA_VERSION` — doc-only. Xem §2.7, §2.7.1, §2.7.2.
 > **Freeze:** workshop contract-negotiation D11 — các câu ở §3 cần chốt trước mốc đó.
 
 Ghi chú của người giữ bút `scorecard`: ghi lại quyết định đã ra và phần chưa quyết. Contract nằm ở
@@ -180,34 +181,105 @@ Seam evalhub trả **`CaseRun{answer: AgentAnswer, events: list[TraceEvent]}`** 
 | Đích evalhub | Nguồn `studio_engine.RunResult` |
 | --- | --- |
 | `AgentAnswer.answer` | `final_state[<llm node>]["answer"]` |
-| `AgentAnswer.refused` | `final_state[<llm node>]["refused"]` = `not retrieved_chunks` (STRUCTURAL, không đoán text) |
+| `AgentAnswer.refused` | `final_state[<llm node>]["refused"]` = **`not citations`** (STRUCTURAL, không đoán text) — xem §2.7.1 |
 | `AgentAnswer.citations` | `final_state[<llm node>]["citations"]` — *cái LLM khai* (không dùng chấm; để cross-check) |
 | **`CaseRun.events`** | **`RunResult.events`** (list `TraceEvent`) — **nguồn chấm citations** (gom node-agnostic; carrier thực tế = event `llm-step`) |
 
 Node id lấy theo `node.type == llm-step` (**KHÔNG** hardcode `"n_llm"` — recipe đổi id vẫn chạy).
 Seam nhận **`tenant_id: UUID`** (D-13): adapter resolve slug→UUID qua `core.tenants` **trước** khi gọi
-`kb.search`/`interpreter.run`; evalhub `run_smoke`/CLI resolve tường minh phía trên seam. **Lưu ý:**
-`RunResult.events` hiện **`[]`** (AIE-1 populate là việc D5 của họ) — evalhub chấm được ngay khi trace
-được đổ; demo dùng trace stub cho tất định.
+`kb.search`/`interpreter.run`; evalhub `run_smoke`/CLI resolve tường minh phía trên seam.
+
+**Cập nhật D7 (2026-07-28): `RunResult.events` KHÔNG còn rỗng.** Ghi chú cũ ở đây nói *"`RunResult.events`
+hiện `[]` (AIE-1 populate là việc D5 của họ)"* — engine#8 đã merge và mọi node đều emit event thật; đo
+trên luồng thật ngày 28/07 ra **4 event/run** (`kb-retrieve · llm-step · tool-call · end`), 1 `run_id`
+duy nhất, `ts` đơn điệu tăng. Demo vẫn dùng trace stub ở tầng unit-test cho tất định, nhưng đó là chọn
+lựa của test, không còn là hạn chế của engine.
+
+### 2.7.1 `refused` đã đổi ĐỊNH NGHĨA hai lần — mốc nào là mốc nào
+
+Ghi lại đủ 3 mốc, vì §2.7 bản trước chỉ ghi mốc đầu và điều đó **làm doc mâu thuẫn code trên `main`**.
+Công bắt lỗi này thuộc **AIE-1 (@TranBaDat2607)**, nêu trong docstring `LlmStepExecutor` của engine#10:
+*"§2.7's premise is **false, not merely stale**; it needs updating."* — nhận xét đúng.
+
+| Mốc | engine tính `refused` bằng | Trạng thái doc trước D7 |
+|---|---|---|
+| ~D4 (`71caeb8`) | `not retrieved_chunks` | ✅ khớp |
+| D5 | `answer.strip() == REFUSAL_SENTINEL` | ❌ doc vẫn ghi mốc D4 |
+| **D6 — engine#10, ĐÃ MERGE** | **`not citations`** (citation = bracket-trích ∩ `retrieved_chunks`) | ❌ doc vẫn ghi mốc D4 |
+
+Vì sao mốc D4 sai **về bản chất**, không chỉ lỗi thời: `not retrieved_chunks` chỉ bắt refusal khi
+retrieval **rỗng tuyệt đối**. Nhưng ở SC-04, fence bỏ đúng chunk Borea, còn ranker vẫn trả 3 chunk
+**ankor** trên các từ chung của câu hỏi ⇒ `retrieved_chunks` KHÔNG rỗng ⇒ `refused=False`. Tiền đề của
+mốc D4 không đúng trên chính golden-set đang dùng.
+
+Mốc hiện tại (`not citations`) đọc *"grounding được cái gì"* thay vì *"retrieval trả về cái gì"*: một
+citation đã vừa **grounded** vừa **được trích thật**, nên "grounded rỗng" đúng nghĩa là "không trả lời
+được từ thứ được đưa". Giới hạn đã khai của nó: **một câu trả lời đúng nhưng quên đóng ngoặc bị chấm
+thành refusal.** Đó là cùng một tín hiệu mà `citation_accuracy` vốn đã dựa vào, nên case đó đỏ **một
+lần** chứ không hai.
+
+**⚠️ Cảnh báo cho người đọc sau:** đoạn trên nói về luật của **engine**, không phải hợp đồng vĩnh viễn.
+Bộ chấm phía evalhub **không pin luật này** — test `A4` của adapter (`apps/studio`) chạy
+`interpreter.run` lấy quyết định gốc rồi so với `AgentAnswer` đã map, tức khoá *"adapter map trung
+thực"* chứ không khoá *"engine quyết bằng công thức nào"*. Nhờ vậy khi engine đổi luật lần thứ ba thì
+adapter và scorer không vỡ theo.
+
+### 2.7.2 Carrier của `citations` — CHƯA phải hợp đồng, đưa vào agenda freeze D11
+
+`_retrieved_citations` gom `.citations` của **mọi** event khác `None`, **không lọc `node_type`**
+(`harness.py`). Đo trên một run thật ngày 28/07:
+
+```text
+kb-retrieve  citations=None                     outputs có 'chunks'=True
+llm-step     citations=['ankor-leave-001#c1']   outputs có 'chunks'=False
+tool-call    citations=None                     outputs có 'chunks'=False
+end          citations=None                     outputs có 'chunks'=False
+```
+
+Nguyên nhân: `interpreter.py` rẽ theo kiểu output — node `kb-retrieve` trả `list` nên
+`TraceEvent.citations = None` và chunk đi vào `outputs["chunks"]`; `llm-step` trả `dict` nên `citations`
+là danh sách **grounded**.
+
+⇒ Việc phân biệt được *"chunk ĐÃ TRUY XUẤT"* với *"chunk ĐÃ GROUNDED"* hiện đúng **nhờ engine hôm nay
+chỉ cho `llm-step` mang citations**, KHÔNG nhờ helper ép node. Nếu engine cho `kb-retrieve` cũng mang
+citations thì hai nguồn **trộn** và `citation_accuracy` lặng lẽ đổi nghĩa. **Cần chốt carrier với AIE-1
+trước D11 freeze** (sau freeze cần mini-RFC + 4/4 chữ ký theo D-12): hoặc siết helper theo `node_type`
+cụ thể, hoặc ghi carrier thành ràng buộc trong hợp đồng `TraceEvent`.
 
 **Hệ quả trên luồng thật (cập nhật 2026-07-23, sau khi đọc DE `StaticKbSearch`):** DE đã ship
 `StaticKbSearch` (kb.search thô) lọc **cả `tenant` lẫn `section_role`** (`if chunk.tenant != tenant or
 chunk.section_role not in allowed`), chỉ khác là *tin giá trị client khai* — phân giải server-side
-(chống T6-spoof) để S3. Vì `refused = not retrieved_chunks`, cả 5 case hành xử **đúng nhãn** ở tầng
-retrieval:
+(chống T6-spoof) để S3.
 
-- SC-01/02/03 (trả-lời-được): đúng tenant+vai → có chunk → `refused=False` → PASS được (nếu `answer`
-  chứa cụm `expected`).
-- SC-05 (chéo-vai): role chặn (`hr ∉ [engineering]`) → rỗng → `refused=True` → refusal PASS.
+**⚠️ Đoạn suy luận cũ ở đây đã bị GỠ (D7).** Bản trước lập luận *"vì `refused = not retrieved_chunks`,
+cả 5 case hành xử đúng nhãn ở tầng retrieval"* rồi liệt SC-01/02/03 và SC-05 theo tiền đề đó. Tiền đề
+sai (§2.7.1), nên suy luận dựng trên nó không dùng được — kể cả những dòng tình cờ ra kết luận đúng.
+Thay bằng **số đo thật**, không suy luận.
 
-**⚠️ Bug đã biết — SC-04 (D5, DE nêu ở report D4):** trước đây ghi "SC-04 → rỗng → `refused=True` →
-PASS" là **SAI**. `ankor-expense-001` front-matter `public` (chỉ `#c2` override `finance`), nên hỏi
-*"hạn mức chi Borea"* từ ankor/public: fence chặn chunk borea ĐÚNG (không leak) **nhưng** semantic
-search vẫn nhặt được chunk **public** của ankor → `retrieved_chunks` KHÔNG rỗng → `refused =
-not retrieved_chunks = False` → golden expect refusal ⇒ **chấm FAIL**. Gốc: `refused = not
-retrieved_chunks` sai semantics cho T1 (chỉ bắt refusal khi scope rỗng tuyệt đối). Đang chốt 3 bên
-(AIE-1 tín hiệu `refused` · DE corpus · AIE-2 luật chấm) — hướng: T1 chấm theo **leak-safety từ trace**
-làm chính. **KHÔNG đổi pass-rule ở PR này**; phải chốt trước khi nối luồng thật kẻo adapter khuếch đại.
+**Hành vi đo được trên luồng thật, 2026-07-28** (`apps/studio/scripts/e2e_smoke_eval.py`, bộ smoke-5,
+LLM = `ExtractiveFakeLLM` — fixture **chỉ đọc prompt**, không thấy `expected`/`expected_citation`):
+
+| case | nhánh | wiring | điểm | vì sao |
+|---|---|---|---|---|
+| SC-01/02/03 | trả-lời | THÔNG | PASS | đúng tenant+vai → có chunk → grounded → `refused=False` |
+| **SC-04** | từ-chối | THÔNG | **FAIL** | retrieval trả **3 chunk ankor** (không rỗng, không leak borea); fixture chép chunk đầu bất kể liên quan ⇒ có citation ⇒ `refused=False` ⇒ nhánh từ-chối đỏ |
+| SC-05 | từ-chối | THÔNG | PASS | vai chặn (`hr ∉ [engineering]`) → retrieval rỗng → không gì grounded → `refused=True` |
+
+Nguyên nhân SC-04 đỏ đã **đổi** so với bản D5: không còn là *"`retrieved_chunks` không rỗng nên tín
+hiệu sai"* mà là *"model không từ chối dù đoạn trích không trả lời được câu hỏi"*. Tức lỗi dịch từ
+**tầng tín hiệu** sang **tầng năng lực của model** — và đó là giới hạn đã khai của `ExtractiveFakeLLM`
+(chỉ đọc top-1, không có năng lực quyết định refusal), không phải lỗi hạ tầng.
+
+⚠️ **`Live Gemini evaluation`: chưa chạy.** Mọi số ở bảng trên đến từ fixture tất định. Mục *"≥1 case
+FAIL với LLM THẬT"* của mentor (#59) **vẫn treo**.
+
+**Q2 vẫn mở, và giờ có số:** `citation_accuracy = 1.0` cứng ở nhánh từ-chối (`harness.py`) khiến case
+**đã đỏ** vẫn góp `1.00` vào `aggregate`. Đo trên bộ 10 case của DE (`callisto-smoke-10-v0`, lượt chạy
+28/07): `success_rate = 0.60` nhưng `aggregate.citation_accuracy = 0.90`, trong khi con số **thật** chỉ
+tính 6 case trả-lời là **0.833** → thổi phồng **+0.067**, và **3 case đã đỏ** (SC-04/07/09) vẫn góp
+`1.00`. Bộ 5 chỉ có 2 case từ-chối nên chuyện này còn mờ; bộ 10 làm nó đọc được ngay.
+**KHÔNG đổi pass-rule ở PR này** — cần chốt 3 bên (AIE-1 tín hiệu `refused` · DE corpus · AIE-2 luật
+chấm), cửa sổ D7–D8, và mang vào agenda freeze D11.
 
 Protocol seam `KbSearchService.search` **vẫn `NotImplementedError`** — dùng `StaticKbSearch` hay seam
 nào là do wiring `studio_app` quyết. Demo chạy qua `StubAgentRunner` (trace stub) cho **tất định**,
