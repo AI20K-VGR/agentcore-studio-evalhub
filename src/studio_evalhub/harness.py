@@ -57,9 +57,22 @@ def _citation_tenant(chunk_id: str) -> str | None:
     return prefix
 
 
-def _retrieved_citations(events: list[TraceEvent]) -> list[str]:
+def citations_from_trace(events: list[TraceEvent]) -> list[str]:
     """Tập chunk **quan sát được** của một run: gom `.citations` từ **mọi** trace event có
     (bỏ `None`), **không phụ thuộc `node_type`** (D5 #24 — chấm điểm theo trace, mặt quan sát thật).
+
+    **API công khai từ D7** (trước là `_retrieved_citations`). Lý do đổi: nó là *phép đo* mà mọi
+    consumer của scorecard cần — `apps/studio` dùng ở cả script e2e lẫn test chấm-từ-Postgres, và
+    `scripts/smoke_eval_d6.py` ở repo cha import nó **xuyên repo**. Một hàm có người ngoài quadrant
+    phụ thuộc thì không còn là chi tiết nội bộ; giữ dấu gạch dưới chỉ khiến người dùng phải phá
+    quy ước để làm việc đúng. Alias `_retrieved_citations` giữ lại ở cuối module nên không consumer
+    nào vỡ khi đổi.
+
+    Vì sao tên là `citations_from_trace` chứ không phải `retrieved_citations`: `score_case` đã có
+    **tham số** tên `retrieved_citations`, và 14 call-site truyền nó bằng keyword nên tên tham số
+    không đổi được. Đặt hàm cùng tên sẽ che tham số trong thân `score_case` — ai sau này gọi
+    `retrieved_citations(events)` ở đó sẽ gặp `list is not callable`. Tên hiện tại nói đúng việc
+    (trích citation TỪ trace) và không đụng gì.
 
     Node nào mang citations là do engine quyết: thực tế (interpreter AIE-1, branch day5) nâng
     citations từ output **`llm-step`** lên trace event của node đó (chunk agent thực sự trích —
@@ -108,7 +121,7 @@ def score_case(
     `GoldenCase.expects_refusal` (xét cả T1 chéo-tenant lẫn T6 chéo-vai).
 
     `retrieved_citations` = chunk đã trích **theo TRACE** (event `kb-retrieve`, từ
-    `_retrieved_citations`) — nguồn chấm citation, KHÔNG dùng `answer.citations` (agent tự khai):
+    `citations_from_trace`) — nguồn chấm citation, KHÔNG dùng `answer.citations` (agent tự khai):
 
     - **trả-lời-được**: `success` khi agent KHÔNG từ chối VÀ `answer` CHỨA cụm `expected`
       (`_contains_phrase` — so token liên tiếp, không bắt khớp cả câu/chính tả). `citation_accuracy`
@@ -174,7 +187,7 @@ class EvalHarness:
     ) -> list[SmokeResult]:
         """Phác skeleton smoke-eval (D3 #14; D5 #24 đọc trace): duyệt `golden_set.cases`, chạy mỗi
         case qua `runner` (seam `AgentRunner`), chấm bằng `score_case` với citations lấy từ TRACE
-        (`_retrieved_citations` trên `CaseRun.events`), trả danh sách `SmokeResult`.
+        (`citations_from_trace` trên `CaseRun.events`), trả danh sách `SmokeResult`.
 
         `tenant_ids` map slug (`GoldenCase.tenant`) → `tenant_id` UUID: **resolve tường minh ở đây,
         phía trên seam** (D-13) — golden giữ slug làm nhãn, runner nhận UUID; thiếu slug ⇒ `KeyError`
@@ -192,6 +205,19 @@ class EvalHarness:
                 tenant_id=tenant_id,
                 section_roles=case.section_roles,
             )
-            retrieved = _retrieved_citations(case_run.events)
+            retrieved = citations_from_trace(case_run.events)
             results.append(score_case(case, case_run.answer, retrieved))
         return results
+
+
+# ── Alias tương thích ngược ─────────────────────────────────────────────────────────────────────
+# `retrieved_citations` đổi tên từ `_retrieved_citations` ở D7 (xem docstring hàm). Giữ tên cũ vì có
+# consumer NGOÀI quadrant đang import nó: `scripts/smoke_eval_d6.py` ở repo cha (bút DE) và
+# `apps/studio` (script e2e + test chấm-từ-Postgres). Đổi tên mà không giữ alias sẽ làm vỡ một file
+# đã merge vào `main` của repo cha — đúng loại vỡ mà `workbench#4` vừa gây ra khi xoá
+# `builder_d4.py`, và bài học rút ra là: bề mặt có người ngoài dùng thì không xoá cùng lúc với đổi.
+#
+# Không đánh dấu deprecated bằng warning: `run_smoke` chạy trong CI của 3 repo, một `DeprecationWarning`
+# ở đó chỉ tạo tiếng ồn mà không ai hành động. Dọn alias khi 3 consumer trên đã chuyển hết — theo dõi
+# ở #34, KHÔNG dọn trước D11 freeze.
+_retrieved_citations = citations_from_trace
