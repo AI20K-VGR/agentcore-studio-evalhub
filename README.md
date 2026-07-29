@@ -35,11 +35,21 @@ Hai chỗ in bảng điểm, **hai con số khác nhau**, và chỗ dễ tìm h�
 | 2 | `apps/studio/tests/test_spine_scored_from_postgres.py` | chấm điểm từ trace **đọc ra từ Postgres** (vế cuối DoD #30) |
 | 3 | `packages/kb/tests/test_spine_live.py` (bút DE) | `engine → PgTraceWriter → obs.trace_events → PgTraceReader` |
 
-Riêng trong repo này: `tests/test_determinism.py` khoá *"chạy lại ra cùng bảng điểm"*, `tests/test_smoke_runner.py` khoá luật chấm 2 nhánh, `docs/scorecard-v0.md` là hợp đồng chấm.
+Riêng trong repo này: `tests/test_determinism.py` khoá *"chạy lại ra cùng bảng điểm"*, `tests/test_smoke_runner.py` khoá luật chấm 2 nhánh, `tests/test_tenant_scope.py` khoá nhất-quán tenant mức trace (D8), `docs/scorecard-v0.md` là hợp đồng chấm.
 
 ### Nợ đã biết khiến hai con số lệch nhau
 
-`_demo_golden_set()` là bản **chép in-code** của `packages/kb/golden/smoke-5.yaml` (bút DE) — nguồn sự thật thứ hai. Đọc YAML thật cần khai `pyyaml`, mà `uv.lock` nằm ở repo cha nên `uv lock --check` đỏ nếu khai ở đây. Đóng bằng PR ở repo cha; theo dõi ở điểm gãy #8/#12.
+`_demo_golden_set()` là bản **chép in-code** của `packages/kb/golden/smoke-5.yaml` (bút DE) — nguồn sự thật thứ hai. Đóng bằng PR ở repo cha; theo dõi ở điểm gãy #8/#12.
+
+**Không phải giới hạn của `run_smoke`.** Bộ **10 case** của DE (`callisto-smoke-10-v0`) đã đang được chấm qua chính harness này: `scripts/smoke_eval_d6.py` ở repo cha đọc thẳng `packages/kb/golden/smoke-10.yaml` rồi gọi `EvalHarness().run_smoke(...)` với cả 10 — con số **6/10** ra từ đó. `run_smoke` chỉ duyệt `golden_set.cases`, không có giả định 5 ở đâu. Thứ đứng ở 5 chỉ là hàm demo này.
+
+Ba lý do chưa chuyển nó sang bộ 10 — không lý do nào là "chưa có thư viện":
+
+1. **`_demo_golden_set` bị 2 file `apps/studio` import** (`scripts/e2e_smoke_eval.py`, `tests/test_spine_scored_from_postgres.py`). Là hàm private nhưng trên thực tế đã là API công khai — đổi nó là đổi hành vi 2 consumer một cách im lặng.
+2. **Đọc YAML của DE = đọc file trong submodule SIBLING.** `.importlinter` chỉ soi *import*, không cấm đọc file, nhưng `studio_evalhub` khi dùng độc lập thì `packages/kb/golden/` không tồn tại. Script của DE làm được vì nó ở repo cha, nơi đường dẫn đó ổn định.
+3. **`pyyaml` chưa được `pyproject.toml` nào khai** (kiểm 29/07). Nó CÓ trong `uv.lock` (6.0.3) và CÓ trong `.venv` — nhưng vào bằng đường **`uvicorn[standard]`**, extra đó kéo `httptools` + `python-dotenv` + `pyyaml`. Nghĩa là mọi `import yaml` trong workspace hôm nay đang **ăn ké extra của một web-server**; ai đổi `uvicorn[standard]` → `uvicorn` là loader YAML chết **im lặng**. Khai tường minh cần sửa `pyproject.toml` + `uv lock` ở **repo cha** (đang gộp vào PR bump con trỏ).
+
+Và lối đúng **không** phải nạp YAML vào test của repo này: test unit nên hermetic, tự mang fixture. Cho nó đọc file của quadrant khác thì DE sửa một nhãn là test ở đây đỏ, mà lỗi lại không nằm ở code ở đây. Nhãn thì tái dùng nguyên văn của DE (xem `_paired_case` trong `tests/test_smoke_runner.py`), còn fixture thuộc về test.
 
 ## CI
 `.github/workflows/ci.yml` chỉ là **stub** gọi reusable workflow chung ở repo cha:

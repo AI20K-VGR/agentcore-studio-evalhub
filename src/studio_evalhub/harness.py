@@ -89,6 +89,36 @@ def citations_from_trace(events: list[TraceEvent]) -> list[str]:
     return retrieved
 
 
+def tenant_scope_ok(events: list[TraceEvent], expected: UUID) -> bool:
+    """Mọi trace event của một run có mang ĐÚNG `expected` ở `tenant_id` hay không (D8 #39).
+
+    **API công khai từ D8.** Bất biến này trước đó chỉ tồn tại dưới dạng một dòng trong *script*
+    `apps/studio/scripts/e2e_smoke_eval.py` (`tenant_consistent = all(...)`). Script không chạy thì
+    bất biến không được kiểm, và script đó lại nằm trong một PR chưa merge — nên nó được nâng lên
+    thành hàm thuần ở đây để sống độc lập với việc PR kia có vào `main` hay không.
+
+    **Fail-closed: `events` rỗng ⇒ `False`.** Không có trace thì không CHỨNG MINH được scope đúng, và
+    "không chứng minh được" phải đọc là chưa đạt, không phải mặc định đạt. Đây là chỗ dễ chọn sai:
+    `all([])` trong Python là `True`, nên viết thẳng `all(...)` sẽ cho một run **không có event nào**
+    điểm hợp lệ — đúng loại xanh-giả mà `_LeakyKb` được dựng ra để phát hiện.
+
+    Quan hệ với DoD *"`tenant_id` NOT NULL"* (`day-08.md`): `TraceEvent.tenant_id` đã là `UUID`
+    non-optional trong `studio_contracts`, nên NOT NULL đúng sẵn **ở mức kiểu** — pydantic chặn
+    `None` trước khi event tồn tại. Thứ *chưa* ai đo là **nhất quán**: mọi event trong CÙNG một run
+    trỏ về cùng một tenant. Một run mà node đầu mang ankor còn node sau mang borea vẫn thoả NOT NULL
+    từng dòng mà vỡ hoàn toàn ở mức run. Hàm này đo đúng khoảng trống đó.
+
+    **Observe-only — KHÔNG gate `success`.** Bộ chấm quan sát hàng rào, không tạo ra hàng rào: fence
+    thật là mandatory filter server-side (`StaticKbSearch` so UUID) cộng RLS. Hàm này chỉ báo. Vì thế
+    nó nằm ngoài `score_case` chứ không thêm vào luật chấm — và cũng vì `score_case` không nhận
+    `events` (chỉ nhận `retrieved_citations`), nên nó cấu trúc mà nói không đọc được `tenant_id`.
+    Đổi chữ ký `score_case` để nhét vào là chuyện khác: 3 consumer ngoài quadrant đang gọi nó.
+    """
+    if not events:
+        return False
+    return all(event.tenant_id == expected for event in events)
+
+
 def _tokenize(text: str) -> list[str]:
     r"""Tách `text` thành token cho so token-contains: lowercase + cắt theo `\w+` (unicode — chữ có
     dấu tiếng Việt và chữ số giữ nguyên thành một token). So theo token nguyên vẹn nên `"1 ngày"`

@@ -351,3 +351,148 @@ async def test_stub_missing_fixture_raises() -> None:
 
     with pytest.raises(LookupError):
         await runner.run_case(agent_id="a", query="chưa-có", tenant_id=_ANKOR, section_roles=[])
+
+
+# --- tenant scope tầng run_smoke (D8 #39) -------------------------------------------------------
+# Vì sao ở tầng `run_smoke` chứ không `score_case`: 26 test phía trên khoá LUẬT CHẤM, và mọi test
+# `run_smoke` hiện có đều chạy một-tenant (`tenant_ids={"ankor": _ANKOR}`). Bước resolve slug→UUID
+# trong `run_smoke` vì thế chưa có test nào đi qua với >1 tenant — nó là mắt DUY NHẤT quyết định
+# case nào chạy với danh tính nào, mà lại là mắt chưa được khoá. `_BOREA` đã khai từ D5 và tới giờ
+# vẫn không được dùng ở đâu, đúng dấu vết của chỗ bỏ dở này.
+#
+# Phạm vi: đây là **tenant-consistency sanity (observe-only)**, KHÔNG phải leak-test T1
+# (`day-08.md`: *"chưa cần test T1 IDOR / T6 label-spoof — để Sprint 2"*).
+
+_LEAVE_QUERY = "Nhân viên xin nghỉ phép cần báo trước bao lâu?"
+
+
+def _paired_case(case_id: str, tenant: str, expected: str, citation: str) -> GoldenCase:
+    """Một vế của cặp SC-01↔SC-02 (bút DE, `packages/kb/golden/smoke-10.yaml`): CÙNG `query`, khác
+    `tenant` → đáp án PHẢI khác. Phép thử rẻ nhất cho trục tenant; hai vế ra cùng kết quả nghĩa là
+    hàng rào hở trục đó. `expected_tenant == tenant` và `expected_section_role ∈ section_roles` nên
+    case rơi vào nhánh trả-lời-được (không kích T1 lẫn T6)."""
+    return GoldenCase(
+        case_id=case_id,
+        query=_LEAVE_QUERY,
+        tenant=tenant,
+        section_roles=["public"],
+        expected_tenant=tenant,
+        expected_section_role="public",
+        expected=expected,
+        expected_citation=[citation],
+    )
+
+
+def _tenant_pair_fixture() -> tuple[GoldenSet, StubAgentRunner]:
+    """Golden-set 2 case cùng query khác tenant + runner khoá theo `(query, tenant_id)`.
+
+    Tách thành helper vì test chính và negative control phải dùng **CHUNG dữ liệu** — chỉ khác đúng
+    `tenant_ids` truyền vào `run_smoke`. Chung dữ liệu là điều kiện để negative control có nghĩa:
+    nếu hai test khác nhau ở nhiều hơn một biến thì không kết luận được biến nào gây ra khác biệt.
+
+    `chunk_id` và cụm `expected` tái dùng đúng của DE (`smoke-10.yaml` SC-01/SC-02), không bịa mới.
+    """
+    golden_set = GoldenSet(
+        golden_set_ref="gs-tenant-pair",
+        cases=[
+            _paired_case("SC-01", "ankor", "3 ngày làm việc", "ankor-leave-001#c1"),
+            _paired_case("SC-02", "borea", "7 ngày làm việc", "borea-leave-001#c1"),
+        ],
+    )
+    runner = StubAgentRunner(
+        {
+            (_LEAVE_QUERY, _ANKOR): _run(
+                "Nhân viên cần báo trước tối thiểu 3 ngày làm việc.",
+                retrieved=["ankor-leave-001#c1"],
+                tenant_id=_ANKOR,
+            ),
+            (_LEAVE_QUERY, _BOREA): _run(
+                "Nhân viên cần báo trước 7 ngày làm việc.",
+                retrieved=["borea-leave-001#c1"],
+                tenant_id=_BOREA,
+            ),
+        }
+    )
+    return golden_set, runner
+
+
+async def test_run_smoke_hai_tenant_khong_lan_chunk() -> None:
+    """Cặp cùng query khác tenant chạy qua `run_smoke`: mỗi case chỉ nhận chunk của KHO MÌNH.
+
+    `citation_accuracy == 1.0` ở cả hai vế là bằng chứng định tuyến đúng, không phải chỉ "có điểm":
+    nếu case ankor nhận `CaseRun` của borea thì trace mang `borea-leave-001#c1`, giao với
+    `expected_citation=["ankor-leave-001#c1"]` là rỗng ⇒ 0.0. Xem
+    `test_run_smoke_dao_map_tenant_lam_diem_sup` cho chiều ngược lại."""
+    golden_set, runner = _tenant_pair_fixture()
+
+    results = await EvalHarness().run_smoke(
+        agent_id="agent-1",
+        golden_set=golden_set,
+        runner=runner,
+        tenant_ids={"ankor": _ANKOR, "borea": _BOREA},
+    )
+
+    by_id = {r.case_id: r for r in results}
+    assert by_id["SC-01"].citation_accuracy == 1.0
+    assert by_id["SC-02"].citation_accuracy == 1.0
+    assert by_id["SC-01"].success is True
+    assert by_id["SC-02"].success is True
+
+    # Cùng query mà ra cùng câu trả lời = hàng rào hở trục tenant (luật cặp của DE, smoke-10.yaml).
+    assert by_id["SC-01"].actual != by_id["SC-02"].actual
+    assert "3 ngày làm việc" in by_id["SC-01"].actual
+    assert "7 ngày làm việc" in by_id["SC-02"].actual
+
+
+async def test_run_smoke_dao_map_tenant_lam_diem_sup() -> None:
+    """Negative control của test trên — đổi ĐÚNG MỘT biến: map slug→UUID bị đảo.
+
+    Golden-set và runner giữ nguyên. Nếu điểm vẫn 1.0 thì phép đo ở test trên không thật sự đi qua
+    bước resolve trong `run_smoke`, mà chỉ tình cờ đúng — đây là chỗ để lộ điều đó. Không có test
+    này thì test trên xanh mà rỗng nghĩa."""
+    golden_set, runner = _tenant_pair_fixture()
+
+    results = await EvalHarness().run_smoke(
+        agent_id="agent-1",
+        golden_set=golden_set,
+        runner=runner,
+        tenant_ids={"ankor": _BOREA, "borea": _ANKOR},  # ← đảo: đây là biến duy nhất đổi
+    )
+
+    by_id = {r.case_id: r for r in results}
+    # Case ankor chạy với danh tính borea → nhận chunk borea → 0 chunk kỳ vọng nào khớp.
+    assert by_id["SC-01"].citation_accuracy == 0.0
+    assert by_id["SC-02"].citation_accuracy == 0.0
+    # Câu trả lời cũng đảo theo — chứng minh chính RUNNER đã trả fixture của tenant kia, tức lệch
+    # xảy ra ở bước resolve chứ không ở bước chấm.
+    assert "7 ngày làm việc" in by_id["SC-01"].actual
+    assert "3 ngày làm việc" in by_id["SC-02"].actual
+    # `success` fail vì answer KHÔNG chứa cụm `expected`, KHÔNG phải vì accuracy 0.0 — citation là
+    # metric riêng, không gate `success` (§2.3). Ghi rõ để không ai đọc ngược luật chấm từ test này.
+    assert by_id["SC-01"].success is False
+    assert by_id["SC-02"].success is False
+
+
+async def test_run_smoke_slug_la_raise_keyerror() -> None:
+    """Resolve fail-closed: slug không có trong `tenant_ids` ⇒ `KeyError`. KHÔNG lặng lẽ bỏ case,
+    KHÔNG chạy với một tenant mặc định nào.
+
+    Runner để RỖNG có chủ đích. Nếu resolve chặn MUỘN (sau khi đã gọi runner) thì lỗi bật ra sẽ là
+    `LookupError` của `StubAgentRunner`, không phải `KeyError` — nên phân biệt được hai loại lỗi
+    chính là cách chứng minh THỨ TỰ. Phép phân biệt chỉ chạy đúng theo chiều này: `KeyError` là con
+    của `LookupError`, nên `raises(KeyError)` loại được `LookupError` thuần, còn `raises(LookupError)`
+    thì bắt cả hai và không nói được gì."""
+    golden_set = GoldenSet(
+        golden_set_ref="gs-slug-la",
+        cases=[_paired_case("SC-XX", "callisto", "không quan trọng", "callisto-x-001#c1")],
+    )
+
+    with pytest.raises(KeyError) as excinfo:
+        await EvalHarness().run_smoke(
+            agent_id="agent-1",
+            golden_set=golden_set,
+            runner=StubAgentRunner({}),
+            tenant_ids={"ankor": _ANKOR, "borea": _BOREA},
+        )
+
+    assert "callisto" in str(excinfo.value)
