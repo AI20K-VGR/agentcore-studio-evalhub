@@ -292,6 +292,52 @@ nhất. `apps/studio` mở cho PR: **đồng-tác AIE-1 (nguồn `final_state`/`
 
 ---
 
+### 2.8 tag ≠ isolation — bộ chấm đứng ở đâu trong hàng rào (D8 2026-07-29, #39)
+
+Đoạn này **không lặp lại** lập luận tag-vs-isolation tổng quát: `engine#12` đã viết nó khá đầy trong
+docstring `studio_engine/session.py` (AIE-1, merge 29/07 08:02). Đây là phần chỉ tầng eval nói được —
+bộ chấm dựa vào cái gì, và cái đó là tag hay isolation.
+
+**Toàn bộ leak-check nhánh từ-chối của scorecard đứng trên một TAG.** `_citation_tenant()` suy tenant
+bằng cách cắt tiền tố chuỗi `chunk_id`: `"ankor-leave-001#c1"` → `"ankor"`. Đó là **nhãn mềm** —
+chuỗi do bên sinh dữ liệu tự đặt, trùng được, sửa được, và `TraceEvent.citations` là `list[str]`
+không mang `tenant_id` per-chunk nên không có gì để đối chiếu. Suy ra: `no_leak` ở §2.3 là **sanity
+theo slug**, **không** chứng minh fence RLS-UUID. Đã ghi ở §2.3, nhắc lại ở đây vì đây là hệ quả
+trực tiếp của phân biệt tag/isolation.
+
+**Isolation thật nằm ở chỗ khác, và bộ chấm không sở hữu chỗ đó.** `StaticKbSearch` so
+`chunk.tenant_id != tenant_id` bằng **UUID** (`packages/kb/src/studio_kb/static_search.py:92`);
+`interpreter.run()` lấy `tenant_id` từ `session_context`, không từ `recipe.tenant_id` (`engine#12`);
+RLS trên `kb.chunks` khoá theo `app.tenant_id`. Ba lớp đó là fence. Bộ chấm **quan sát** chúng.
+
+**Vì sao "nhờ LLM đừng nói" là fake fence — bằng chứng đã có trong repo, không phải lập luận.**
+`_LeakyKb` (`apps/studio/scripts/e2e_smoke_eval.py`) là một KB cố ý hỏng fence: nó bỏ qua `tenant_id`
+được truyền vào và tra bằng tenant khác. Chạy XF-02 với nó thì agent **vẫn nói năng lịch sự bình
+thường** — không có gì trong câu trả lời tố cáo điều gì — mà conjunct `no_leak` đỏ, vì chunk chéo
+tenant **đã nằm trong trace trước khi LLM mở miệng**. Hàng rào đặt ở đầu ra không đổi được sự thật là
+dữ liệu đã bị lấy ra; nó chỉ đổi cách dữ liệu được phát âm. Đây cũng là lý do citation-accuracy chấm
+theo **trace** chứ theo `AgentAnswer.citations` (§2.7): cái agent tự khai là một tag nữa.
+
+**`tenant_id NOT NULL` — phân biệt hai câu khác nhau.** `TraceEvent.tenant_id: UUID` là non-optional
+trong `studio_contracts`, nên NOT NULL đúng sẵn **ở mức kiểu**: pydantic chặn `None` trước khi event
+tồn tại, không cần test nào. Thứ chưa ai đo là **nhất quán ở mức run** — mọi event trong CÙNG một run
+trỏ về cùng một tenant. Một run mà node đầu mang ankor còn node sau mang borea vẫn thoả NOT NULL từng
+dòng mà vỡ hoàn toàn ở mức run. `tenant_scope_ok()` (D8, `harness.py`) đo đúng khoảng trống đó, và
+fail-closed khi `events` rỗng: không có trace thì không chứng minh được, và không-chứng-minh-được
+phải đọc là chưa đạt. (`all([])` là `True` — viết thẳng `all(...)` sẽ cho một run không có event nào
+điểm hợp lệ.)
+
+**Ranh giới cố ý:** `tenant_scope_ok` **observe-only, không gate `success`**. Hai lý do, cả hai đều
+là lý do chứ không phải tiện: (a) bộ chấm không tạo fence nên không nên phát verdict thay fence;
+(b) `score_case` chỉ nhận `retrieved_citations`, không nhận `events`, nên cấu trúc mà nói không đọc
+được `tenant_id` — và đổi chữ ký nó là chuyện khác, có 3 consumer ngoài quadrant đang gọi.
+
+**Nợ để lại, vào agenda D11:** muốn leak-check chứng minh được ở mức UUID thì `TraceEvent.citations`
+phải mang `tenant_id` per-chunk. Đó là đổi contract → mini-RFC + 4/4 chữ ký. Không làm ở D8 (`day-08.md`:
+*"chưa fence chunk-level — để Sprint 3"*), nhưng ghi ra để lúc đó không phải suy lại vì sao cần.
+
+---
+
 ## 3. Câu hỏi treo — gửi mentor D2, chốt ở D11
 
 ### Q1 — `CaseResult.judge` điền gì khi case không qua judge
