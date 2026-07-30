@@ -106,9 +106,7 @@ class GoldenCase(BaseModel):
         Vế thứ hai bắt trường hợp agent lấy được nội dung kho khác rồi diễn đạt lại: phép so `expected`
         không phát hiện, danh sách trích dẫn thì có.
         """
-        return (self.expected_tenant != self.tenant) or (
-            self.expected_section_role not in self.section_roles
-        )
+        return (self.expected_tenant != self.tenant) or (self.expected_section_role not in self.section_roles)
 
 
 class GoldenSet(BaseModel):

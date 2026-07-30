@@ -127,9 +127,7 @@ def _trace_event(
     )
 
 
-def _case_run(
-    *, run_id: str, tenant_id: UUID, answer: str, refused: bool, retrieved: list[str]
-) -> CaseRun:
+def _case_run(*, run_id: str, tenant_id: UUID, answer: str, refused: bool, retrieved: list[str]) -> CaseRun:
     """Một `CaseRun` demo = câu trả lời + **timeline trace** `kb-retrieve → llm-step → end`.
 
     `retrieved` là citations của node `kb-retrieve` (nguồn chấm điểm). `AgentAnswer.citations` để
