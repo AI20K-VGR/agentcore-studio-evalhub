@@ -267,7 +267,7 @@ def test_equality_actually_discriminates() -> None:
 # được, và `sys.path` hack sẽ làm bài test phụ thuộc layout thư mục. Dựng lại kịch bản tối thiểu ngay
 # trong payload — nó chỉ cần đi qua `run_smoke` → `score_case` → `citations_from_trace`, không cần
 # trùng khít với các test trên.
-_SUBPROCESS_PAYLOAD = '''
+_SUBPROCESS_PAYLOAD = """
 import asyncio, hashlib, json
 from uuid import NAMESPACE_DNS, uuid5
 from studio_contracts import NodeType, Tokens, TraceEvent
@@ -334,7 +334,7 @@ for c in golden.cases:
 payload = {"scores": [r.model_dump(mode="json") for r in results], "citations": cites}
 blob = json.dumps(payload, sort_keys=True, ensure_ascii=False)
 print(hashlib.sha256(blob.encode()).hexdigest())
-'''
+"""
 
 
 def _score_hash_in_subprocess(hash_seed: str) -> str:
@@ -392,6 +392,4 @@ def test_bang_diem_bat_bien_qua_pythonhashseed() -> None:
 
     assert first, "tiến trình con không in ra hash — kịch bản chạy lỗi"
     assert len(first) == 64, f"hash không phải sha256 hex: {first!r}"
-    assert first == second, (
-        "bảng điểm đổi theo PYTHONHASHSEED — có iteration thứ-tự-phụ-thuộc trong đường chấm điểm"
-    )
+    assert first == second, "bảng điểm đổi theo PYTHONHASHSEED — có iteration thứ-tự-phụ-thuộc trong đường chấm điểm"

@@ -45,8 +45,14 @@ def _event(node_type: NodeType, citations: list[str] | None, *, tenant_id: UUID 
     )
 
 
-def _run(answer: str, *, refused: bool = False, retrieved: list[str] | None = None,
-         claimed: list[str] | None = None, tenant_id: UUID = _ANKOR) -> CaseRun:
+def _run(
+    answer: str,
+    *,
+    refused: bool = False,
+    retrieved: list[str] | None = None,
+    claimed: list[str] | None = None,
+    tenant_id: UUID = _ANKOR,
+) -> CaseRun:
     """`CaseRun` với một event `kb-retrieve` mang `retrieved` (nguồn chấm điểm). `claimed` = cái LLM
     tự khai (`AgentAnswer.citations`) — mặc định rỗng để chứng minh bộ chấm bỏ qua field này."""
     return CaseRun(
@@ -101,9 +107,7 @@ def _cross_role_refusal_case() -> GoldenCase:
 
 def test_answerable_success() -> None:
     case = _answerable_case()
-    answer = AgentAnswer(
-        answer="Nhân viên Ankor được nghỉ 12 ngày mỗi năm.", citations=[], refused=False
-    )
+    answer = AgentAnswer(answer="Nhân viên Ankor được nghỉ 12 ngày mỗi năm.", citations=[], refused=False)
 
     result = score_case(case, answer, retrieved_citations=["ankor-leave-001#c1"])
 
@@ -336,9 +340,7 @@ def test_citation_accuracy_capped_at_one_with_duplicate_trace() -> None:
     case = _answerable_case()  # expected_citation = ["ankor-leave-001#c1"]
     answer = AgentAnswer(answer="Nghỉ 12 ngày.", citations=[], refused=False)
 
-    result = score_case(
-        case, answer, retrieved_citations=["ankor-leave-001#c1", "ankor-leave-001#c1"]
-    )
+    result = score_case(case, answer, retrieved_citations=["ankor-leave-001#c1", "ankor-leave-001#c1"])
 
     assert result.citation_accuracy == 1.0
 
@@ -377,9 +379,7 @@ async def test_run_smoke_over_set() -> None:
     # cả hai case tenant "ankor" → key theo (query, _ANKOR)
     runner = StubAgentRunner(
         {
-            ("Ankor nghỉ phép mấy ngày?", _ANKOR): _run(
-                "Được nghỉ 12 ngày.", retrieved=["ankor-leave-001#c1"]
-            ),
+            ("Ankor nghỉ phép mấy ngày?", _ANKOR): _run("Được nghỉ 12 ngày.", retrieved=["ankor-leave-001#c1"]),
             ("Thưởng của Borea?", _ANKOR): _run("Không thể trả lời.", refused=True, retrieved=[]),
         }
     )
