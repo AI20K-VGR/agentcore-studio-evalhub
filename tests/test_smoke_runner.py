@@ -18,7 +18,7 @@ from studio_evalhub.golden_case import GoldenCase, GoldenSet
 from studio_evalhub.harness import (
     EvalHarness,
     _contains_phrase,
-    _retrieved_citations,
+    citations_from_trace,
     score_case,
 )
 
@@ -218,6 +218,19 @@ def test_contains_phrase_negation_known_limitation() -> None:
 
 
 def test_refusal_success() -> None:
+    """GHI HÀNH VI HIỆN TẠI, không phải khẳng định luật đúng (ghi chú D9).
+
+    `retrieved_citations=[]` làm hai vế leak-check **rỗng-nghĩa**: `all([])` là `True` nên cả
+    `all_parseable` lẫn `no_leak` đúng mà không kiểm gì, và chỉ conjunct `refused` làm việc. Nên bài này
+    khoá đường `refused=True` ⇒ PASS, KHÔNG khoá phần leak-check.
+
+    Invariant mong muốn cho đúng ca này nằm ở `test_tu_choi_khong_co_trace_phai_fail_closed` bên dưới,
+    và nó khẳng định **ngược** với dòng assert ở đây. Mâu thuẫn đó là **có chủ đích**: một bài ghi cái
+    đang là, một bài ghi cái nên là. Ngày `score_case` fail-closed cho trace rỗng, cả hai cùng báo —
+    bài kia XPASS (⇒ FAIL vì `strict=True`), bài này đỏ — nên không bỏ sót được.
+
+    Phần leak-check được khảo thật ở ba bài dùng trace KHÔNG rỗng: `test_refusal_leak_fails`,
+    `test_refusal_unparseable_citation_fails`, `test_refusal_other_tenant_citation_still_fails_closed`."""
     case = _refusal_case()
     answer = AgentAnswer(answer="Không thể trả lời.", citations=[], refused=True)
 
@@ -256,10 +269,43 @@ def test_refusal_other_tenant_citation_still_fails_closed() -> None:
     assert score_case(case, answer, retrieved_citations=["carib-x-001#c1"]).success is True
 
 
-# --- _retrieved_citations: chỉ gom event KB_RETRIEVE, bỏ None, không vượt 1.0 --------------------
+@pytest.mark.xfail(
+    strict=True,
+    reason="no-trace-no-proof — score_case chưa fail-closed khi trace rỗng (agenda freeze D11)",
+)
+def test_tu_choi_khong_co_trace_phai_fail_closed() -> None:
+    """Khoá INVARIANT MONG MUỐN: case từ-chối không có trace nào phải TRƯỢT, không phải đạt.
+
+    `harness.py:175-177` dựng `success` từ ba conjunct, hai trong đó là `all(...)` trên
+    `retrieved_citations`. `all([])` trong Python là `True`, nên trace rỗng làm cả `all_parseable` lẫn
+    `no_leak` đúng một cách rỗng-nghĩa, và `success` rơi về đúng `answer.refused`. Hệ quả: một run
+    **không emit event nào** vẫn được tính là đã vượt phần leak-check — mà không có trace thì không có
+    gì để chứng minh là đã không rò. "Không chứng minh được" phải đọc là chưa đạt.
+
+    Bất nhất trong cùng quadrant, và đây là lý do bài này tồn tại: `tenant_scope_ok` ĐÃ chặn đúng ca này
+    (`if not events: return False`, có test riêng `test_khong_co_event_thi_fail_closed`), còn
+    `score_case` thì chưa. Hai hàm cùng đọc một mặt quan sát mà một bên fail-closed, một bên fail-open.
+
+    Cố ý khẳng định NGƯỢC với `test_refusal_success` ở trên, cùng input: bài đó ghi hành vi đang là, bài
+    này ghi hành vi nên là. Xem ghi chú chéo ở docstring bài đó.
+
+    `strict=True` có chủ đích: ngày `score_case` được vá, bài này XPASS ⇒ pytest báo FAIL ⇒ buộc gỡ
+    marker và đọc lại luật. Không cho phép chuyển xanh trong im lặng — đúng lỗi mà D9 vừa sửa ở
+    `test_eval_gate.py`.
+
+    KHÔNG sửa `score_case` trong D9: đổi luật lật `SC-04`/`SC-05` thành FAIL trên bảng điểm demo, một
+    ngày trước gate cứng. Đổi luật cần đủ cả hai — chốt 3-bên trên #44, và trace đã đổ thật trên `main`.
+    """
+    case = _refusal_case()
+    answer = AgentAnswer(answer="Không thể trả lời.", citations=[], refused=True)
+
+    assert score_case(case, answer, retrieved_citations=[]).success is False
 
 
-def test_retrieved_citations_node_agnostic_skips_none() -> None:
+# --- citations_from_trace: chỉ gom event KB_RETRIEVE, bỏ None, không vượt 1.0 --------------------
+
+
+def test_citations_from_trace_node_agnostic_skips_none() -> None:
     # citations thật nằm ở event llm-step (interpreter AIE-1, xác nhận qua thread-check 2026-07-24);
     # node-agnostic gom mọi event có, bỏ None. kb-retrieve để None (output là list) → bỏ.
     events = [
@@ -268,21 +314,21 @@ def test_retrieved_citations_node_agnostic_skips_none() -> None:
         _event(NodeType.END, None),
     ]
 
-    assert _retrieved_citations(events) == ["ankor-a#c1", "ankor-b#c1"]
+    assert citations_from_trace(events) == ["ankor-a#c1", "ankor-b#c1"]
 
 
-def test_retrieved_citations_collects_regardless_of_node() -> None:
+def test_citations_from_trace_collects_regardless_of_node() -> None:
     # robust với contract (`# from kb-retrieve`) lẫn impl (llm-step): node nào mang citations cũng gom
     events = [
         _event(NodeType.KB_RETRIEVE, ["ankor-a#c1"]),
         _event(NodeType.LLM_STEP, ["ankor-b#c1"]),
     ]
 
-    assert _retrieved_citations(events) == ["ankor-a#c1", "ankor-b#c1"]
+    assert citations_from_trace(events) == ["ankor-a#c1", "ankor-b#c1"]
 
 
-def test_retrieved_citations_empty_when_all_none() -> None:
-    assert _retrieved_citations([_event(NodeType.KB_RETRIEVE, None), _event(NodeType.END, None)]) == []
+def test_citations_from_trace_empty_when_all_none() -> None:
+    assert citations_from_trace([_event(NodeType.KB_RETRIEVE, None), _event(NodeType.END, None)]) == []
 
 
 def test_citation_accuracy_capped_at_one_with_duplicate_trace() -> None:
