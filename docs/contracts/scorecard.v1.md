@@ -148,8 +148,15 @@ một** ứng viên, nên ranking không quyết định gì. 2 case còn lại 
 
 **Hệ quả phải nói thẳng:** `citation_accuracy` hiện **không phát hiện được hồi quy embedding**. Gateway
 thật về mà embedding tệ hơn stub thì điểm vẫn `6/6`. Tức một trục của gate `AND` đang **không có răng**
-trên bộ hiện tại — và điều đó làm ngưỡng `citation_accuracy = 0.95` (`builder.py:49`) đo một thứ khác
-với thứ tên nó gợi ra.
+trên bộ hiện tại — và điều đó làm ngưỡng `citation_accuracy = 0.95` đo một thứ khác với thứ tên nó gợi
+ra.
+
+> **Ba chỗ giữ ngưỡng, cho người recalibrate ở D16** (đã đếm, không phải một chỗ như dễ tưởng):
+> `builder.py:48-49` — **default param** của `create_dynamic_recipe`
+> (`success_threshold: float = 0.9`, `citation_accuracy_threshold: float = 0.95`); và
+> `builder.py:114` + `builder.py:192` — hai chỗ **hardcode** `ScorecardThreshold(success=0.9,
+> citation_accuracy=0.95)` trong sample recipe. Đổi chỉ default mà quên hai chỗ hardcode là cách
+> recalibrate ra hai bộ số cùng tồn tại.
 
 **Sửa ở BỘ GOLDEN, không sửa ở embedding.** Cần case có **≥2 ứng viên cùng `tenant` + cùng
 `section_role`** để ranking buộc phải chọn thật. Hiện chỉ **2/6** case có tình huống đó. Đây là yêu cầu
