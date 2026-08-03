@@ -10,7 +10,7 @@ date: 2026-08-03
 supersedes: docs/scorecard-v0.md
 schema_version_at_freeze: 0.2.0-draft
 contracts_sha_at_freeze: 3d7004b2e55d500e3706b9eac412fc809eb4e839
-signatures: []   # chữ ký thật = Approve trên PR (ADR-D11-01 lớp 1); dấu vết ở kit:docs/decisions/scorecard.md
+signatures: []   # chữ ký thật = Approve trên PR (ADR-D11-01 lớp 1); dấu vết ở docs/decisions/scorecard.md
 ---
 
 # 🖊️ scorecard — HỢP ĐỒNG v1 (FREEZE-READY)
@@ -48,7 +48,10 @@ thực bằng tài khoản GitHub. File này **không** chứa bảng tự-đi�
 khác, nên một bảng tự-điền không phải chữ ký.
 
 Dấu vết Approve (ai · PR nào · ngày · `<repo>@<sha>`) ghi ở
-`agentcore-studio-kit/docs/decisions/scorecard.md`.
+[`docs/decisions/scorecard.md`](../decisions/scorecard.md) — **cùng repo này**, không ở kit.
+Chỗ đặt theo lần lặp cuối của kit#130 (*"kit stays pure index, no repo's content duplicated here"*):
+nội dung ở repo của bút, kit chỉ giữ index (`kit:docs/decisions/README.md`). DE và SWE cũng đặt
+decision-log trong repo của mình.
 
 ## §0.3 Điều kiện còn thiếu để lật `FROZEN`
 
@@ -218,9 +221,17 @@ bịa**. Trên bài kiểm hàng rào, xanh-giả tệ hơn. Chủ đề xuất 
 **Đây KHÔNG phải đổi contract.** `TraceEvent.outputs` vẫn là `dict[str, object]`; `SCHEMA_VERSION`
 **không** bump; không cần mini-RFC. Engine đã emit shape này từ D5 (`interpreter.py:265-268`) và **4
 chỗ đang đọc**: `scripts/smoke_eval_d6.py:247,270` · `apps/studio/scripts/e2e_smoke_eval.py:265-271`
-· `packages/kb/tests/test_spine_live.py:135`. Thiếu là **một dòng hợp đồng** —
-`trace-event.v0.md:77` đang khai `outputs` là *"⏸ hoãn S2"*, tức field đang chở bằng chứng của bộ chấm
-thì hợp đồng khai là chưa quy định.
+· `packages/kb/tests/test_spine_live.py:135`. Thiếu là **một dòng hợp đồng** — `trace-event.v0.md`
+**§7 (bảng carrier)** khai `outputs` là *"⏸ hoãn S2"* / *"có trong schema, chưa điền"*, tức field đang
+chở bằng chứng của bộ chấm thì hợp đồng khai là chưa quy định.
+
+> Trích theo **§ + tên field**, không theo số dòng: bản kb#10 đang mở dịch dòng đó từ `:77` sang `:113`.
+> Một trích dẫn theo số dòng qua repo khác là một trích dẫn sẽ mục — đúng lớp lỗi vừa nêu thành finding
+> trên kb#10, nên không tự mắc lại.
+
+**Đã verify trên HEAD của kb#10 (2026-08-03):** `outputs` **vẫn** `⏸ hoãn S2`. DE đã sửa drift
+`tenant: str` → `tenant_id: UUID` trong cùng PR (hàng `d13-align`), nhưng clause `outputs` thì chưa —
+nên F-5 còn mở, không phải đã đóng.
 
 **Vì sao cần:** biến leak-check từ **sanity theo slug** thành **chứng minh mức UUID**. Hôm nay
 `_citation_tenant` cắt tiền tố chuỗi `chunk_id` (`harness.py:49-57`) — nhãn mềm, trùng được, sửa được.
@@ -265,4 +276,4 @@ blocking, chủ **mentor**, hạn **D18**. Ghi ra để D18 không phải phát 
 | 03/08 (D11) | **`citation_accuracy` nhánh từ-chối** | Per-case giữ `1.0` **là quy ước, có pin test**; aggregate **loại khỏi mẫu số**; render in `n/a`. Số: `0.90` báo vs `0.833` thật (+0.067, 3 case đỏ góp 1.00); `10×1.0 + 20×0.85 = đúng 0.90` ⇒ `>=` cho bản đáng FAIL lại PASS. Cách biểu diễn trong `Aggregate` → D16, chủ AIE-2 |
 | 03/08 (D11) | **`no-trace-no-proof`** | Invariant đúng = *"không có trace quan sát được ⇒ FAIL"*, **không** phải *"citation rỗng ⇒ FAIL"*; cưỡng chế ở tầng giữ `events`, không ở `score_case` (chữ ký không nhận `events`). F02 (`GUIDE-C:592`) giữ nguyên: refused + có run + 0 citation ⇒ **PASS**. Hiện thực D16. xfail `test_smoke_runner.py:276` **đổi neo** sang ca `run_smoke` có `events == []`, giữ `strict=True` |
 | 03/08 (D11) | **`Gate.threshold` ≡ `Recipe.scorecard_threshold`** | Giữ **hai** class (`ScorecardThreshold` 8 file vs `GateThreshold` 2 file), **không hợp nhất**; thay bằng **invariant** bằng-từng-field. Test do AIE-2 viết. Giá trị ngưỡng = **dữ liệu**, chủ AIE-2, recalibrate D16 |
-| 03/08 (D11) | **Chữ ký + decision-log** | Theo **ADR-D11-01**: chữ ký thật = Approve trên PR; dấu vết ở `kit:docs/decisions/scorecard.md` (khung kit#130). Bỏ ý định làm bảng tự-điền trong file contract, và bỏ ý định làm `sig-<id>.md` per-người — tách theo **hợp đồng** đã giải quyết vấn đề "một người gõ hộ bốn dòng" |
+| 03/08 (D11) | **Chữ ký + decision-log** | Theo **ADR-D11-01**: chữ ký thật = Approve trên PR; dấu vết ở `docs/decisions/scorecard.md` **cùng repo này**. Bỏ ý định làm bảng tự-điền trong file contract, và bỏ ý định làm `sig-<id>.md` per-người — tách theo **hợp đồng** đã giải quyết vấn đề "một người gõ hộ bốn dòng". **Đổi chỗ hai lần trong ngày, ghi lại cả hai:** ban đầu định gom vào `kit:docs/decision-log.md`; rồi theo khung kit#130 (`kit:docs/decisions/<contract>.md`); rồi kit#130 **closed** và lần lặp cuối của nó chốt *"kit stays pure index"* ⇒ nội dung về repo của bút, kit chỉ giữ `docs/decisions/README.md` làm index. DE (kb) và SWE (workbench) cũng đặt trong repo mình |
