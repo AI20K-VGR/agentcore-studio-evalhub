@@ -34,6 +34,7 @@ tức những chỗ mà hai người đọc cùng một field ra hai nghĩa khá
 | ✅ | `CaseResult.judge` nhận `None` khi không có judge chạy (§1) | quyết rồi — chờ contracts#1 merge |
 | ✅ | Luật bump cho nới `required`→`optional` (§2) | quyết rồi — ADR-D11-02 |
 | ✅ | `citation_accuracy` nhánh từ-chối: quy ước, **không phải phép đo** (§3) | quyết rồi + pin test |
+| ✅ | `citation_accuracy` đo **fence**, KHÔNG đo **truy xuất** — giới hạn khai vào hợp đồng (§3.1) | quyết rồi — null control đã tái lập |
 | ✅ | `no-trace-no-proof` thuộc tầng giữ `events`, không thuộc `score_case` (§4) | quyết rồi + xfail đổi neo |
 | ✅ | `Gate.threshold` ≡ `Recipe.scorecard_threshold` từng field (§5) | quyết rồi — test AIE-2 viết |
 | ⏳ | Carrier của `citations` chỉ trên `llm-step` (§6) | **chờ AIE-1** — hành vi đã đúng, clause chưa có |
@@ -122,6 +123,49 @@ một bản **đáng FAIL** lại PASS ngay tại ngưỡng 0.9.
 **Không đụng `harness.py:159`** — GUIDE-C `:305`: *"There is no conflict, and `harness.py:159` must
 NOT be changed"* (register §11 D-19 từng bảo đổi rồi **thu hồi**, CP-2.1). Sửa duy nhất được phép:
 thêm một câu trỏ tới gate ở tầng aggregate.
+
+### §3.1 · GIỚI HẠN — `citation_accuracy` đo sức mạnh FENCE, không đo sức mạnh TRUY XUẤT
+
+**Clause.** Trên bộ golden hiện tại, `citation_accuracy` **KHÔNG** chứng minh chất lượng truy xuất.
+Bất kỳ ai đọc một `citation_accuracy` cao và kết luận *"retrieval tốt"* là đọc sai hợp đồng này.
+
+**Bằng chứng — null control của AIE-1 (`engine#15`), đã tự tái lập ngày 03/08:**
+
+```
+$ uv run python packages/engine/scripts/measure_chunk_embed.py --null
+embedding                                     recall@1  tranh   top1 không hoà
+bag-of-words dim=8 (đang chạy)                     6/6      2                2
+bag-of-words dim=256                               6/6      2                2
+NULL: vector hằng số (0 thông tin)                 6/6      2                0
+NULL: băm cả câu (không cấu trúc cosine)           5/6      2                1
+```
+
+Một **vector hằng số — 0 bit thông tin** đạt `recall@1 = 6/6`, **bằng đúng** bản thật.
+
+**Vì sao:** fence tự quyết **4/6 case** — sau khi lọc `tenant_id` + `section_role` thì chỉ còn **đúng
+một** ứng viên, nên ranking không quyết định gì. 2 case còn lại vector hằng số thắng nhờ **hoà điểm rồi
+ăn may thứ tự sort** (cột *"top1 không hoà"* = **0** chính là chỗ đó).
+
+**Hệ quả phải nói thẳng:** `citation_accuracy` hiện **không phát hiện được hồi quy embedding**. Gateway
+thật về mà embedding tệ hơn stub thì điểm vẫn `6/6`. Tức một trục của gate `AND` đang **không có răng**
+trên bộ hiện tại — và điều đó làm ngưỡng `citation_accuracy = 0.95` (`builder.py:49`) đo một thứ khác
+với thứ tên nó gợi ra.
+
+**Sửa ở BỘ GOLDEN, không sửa ở embedding.** Cần case có **≥2 ứng viên cùng `tenant` + cùng
+`section_role`** để ranking buộc phải chọn thật. Hiện chỉ **2/6** case có tình huống đó. Đây là yêu cầu
+**bổ sung** cho golden-30 (§DE-4 / `callisto-golden-30-v1`), chủ **DE**, hạn **D15** — và nó là yêu cầu
+*"có tranh chấp trong cùng fence"*, khác với các yêu cầu đã nêu (phủ 2 tenant, có refusal T1/T6,
+`section_roles` đa dạng).
+
+**Vì sao ghi giới hạn này VÀO bản freeze thay vì đợi sửa xong:** một hợp đồng khai đúng thứ nó chưa
+chứng minh được thì **mạnh hơn**, không yếu đi. Không ghi thì đến D16 sẽ có người đọc `0.95` là bằng
+chứng retrieval, và đó là **xanh-giả** — cùng lớp nguy hiểm với `refused` dương-tính-giả ở §6.
+
+**Ghi công:** phép đo là của **AIE-1 (@TranBaDat2607)** trên `engine#15`
+(`docs/design-notes/aie1-day11.md` §3). Nêu ra trên `evalhub#6` **trước khi** freeze đóng, và lời đề
+nghị nguyên văn là: *"đừng ghi vào scorecard v1 rằng `citation_accuracy` chứng minh chất lượng truy
+xuất — hiện chưa"*. Clause này là làm đúng điều đó. Đã tự chạy lại `--null` để xác nhận, không nhận ở
+mức báo cáo.
 
 ## §4 · `no-trace-no-proof` — invariant đúng, và nó KHÔNG thuộc `score_case`
 
@@ -274,6 +318,7 @@ blocking, chủ **mentor**, hạn **D18**. Ghi ra để D18 không phải phát 
 | 03/08 (D11) | **`CaseResult.judge` nhận `None`** | `Judge \| None = None`; `None` = "không có judge chạy". Hằng số bị cấm (`judge.py:6-9` + INV-4). PR: contracts#1 (@Dozyboy mở, AIE-2 xác nhận với tư cách giữ bút). Không bump — xem dòng dưới |
 | 03/08 (D11) | **Luật bump cho nới `required`→`optional`** | **Không bump**, điều kiện: đếm được **0 reader giả định non-null**. Đo: 0 reader / 4 constructor; `331→333 passed` đúng +2 test mới. Quy tắc `__init__.py:5-12` chỉ liệt kê 3 loại breaking ⇒ đây là **ca thứ tư** (tương thích dây, không tương thích reader), guard hiện có **không phát hiện**. ADR-D11-02 |
 | 03/08 (D11) | **`citation_accuracy` nhánh từ-chối** | Per-case giữ `1.0` **là quy ước, có pin test**; aggregate **loại khỏi mẫu số**; render in `n/a`. Số: `0.90` báo vs `0.833` thật (+0.067, 3 case đỏ góp 1.00); `10×1.0 + 20×0.85 = đúng 0.90` ⇒ `>=` cho bản đáng FAIL lại PASS. Cách biểu diễn trong `Aggregate` → D16, chủ AIE-2 |
+| 03/08 (D11) | **`citation_accuracy` đo FENCE, không đo TRUY XUẤT** (§3.1) | Null control của AIE-1 (`engine#15`), **đã tự tái lập**: vector hằng số **0 bit thông tin** đạt `recall@1 = 6/6`, bằng đúng bag-of-words thật; cột *"top1 không hoà"* = **0**. Vì fence tự quyết **4/6 case** (lọc `tenant_id`+`section_role` còn đúng 1 ứng viên), 2 case còn lại thắng nhờ hoà điểm. ⇒ `citation_accuracy` **không phát hiện được hồi quy embedding**; một trục của gate `AND` đang **không có răng**. Sửa ở **bộ golden** (cần ≥2 ứng viên cùng tenant+section_role; hiện 2/6), **không** sửa embedding. Chủ **DE**, hạn **D15**, gộp vào yêu cầu `callisto-golden-30-v1`. Ghi công AIE-1; nêu trước khi freeze đóng |
 | 03/08 (D11) | **`no-trace-no-proof`** | Invariant đúng = *"không có trace quan sát được ⇒ FAIL"*, **không** phải *"citation rỗng ⇒ FAIL"*; cưỡng chế ở tầng giữ `events`, không ở `score_case` (chữ ký không nhận `events`). F02 (`GUIDE-C:592`) giữ nguyên: refused + có run + 0 citation ⇒ **PASS**. Hiện thực D16. xfail `test_smoke_runner.py:276` **đổi neo** sang ca `run_smoke` có `events == []`, giữ `strict=True` |
 | 03/08 (D11) | **`Gate.threshold` ≡ `Recipe.scorecard_threshold`** | Giữ **hai** class (`ScorecardThreshold` 8 file vs `GateThreshold` 2 file), **không hợp nhất**; thay bằng **invariant** bằng-từng-field. Test do AIE-2 viết. Giá trị ngưỡng = **dữ liệu**, chủ AIE-2, recalibrate D16 |
 | 03/08 (D11) | **Chữ ký + decision-log** | Theo **ADR-D11-01**: chữ ký thật = Approve trên PR; dấu vết ở `docs/decisions/scorecard.md` **cùng repo này**. Bỏ ý định làm bảng tự-điền trong file contract, và bỏ ý định làm `sig-<id>.md` per-người — tách theo **hợp đồng** đã giải quyết vấn đề "một người gõ hộ bốn dòng". **Đổi chỗ hai lần trong ngày, ghi lại cả hai:** ban đầu định gom vào `kit:docs/decision-log.md`; rồi theo khung kit#130 (`kit:docs/decisions/<contract>.md`); rồi kit#130 **closed** và lần lặp cuối của nó chốt *"kit stays pure index"* ⇒ nội dung về repo của bút, kit chỉ giữ `docs/decisions/README.md` làm index. DE (kb) và SWE (workbench) cũng đặt trong repo mình |
