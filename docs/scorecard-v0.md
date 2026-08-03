@@ -1,6 +1,20 @@
 # Scorecard v0 — ghi chú bút (AIE-2)
 
-> **Trạng thái:** v0 draft · chưa freeze · `SCHEMA_VERSION = "0.1.0-draft"`
+> ## ⛔ SUPERSEDED BY [`docs/contracts/scorecard.v1.md`](contracts/scorecard.v1.md) — D11, 2026-08-03
+>
+> File này **giữ nguyên làm log suy luận D2→D7**, không phải hợp đồng. Hợp đồng hiệu lực là
+> `scorecard.v1.md`. Không xoá file này: nó chứa vết AIE-1 bắt được doc mâu thuẫn `main` ở D7
+> (§2.7.1), và vết đó là bằng chứng — xoá đi thì mất cách kiểm rằng lỗi đã được tìm ra và sửa.
+>
+> **§3 (Q1–Q5) đã có đáp án** — câu hỏi gốc giữ nguyên nguyên văn, đáp án gắn id `DEC-*` ở dưới mỗi
+> câu. Đọc §3 để thấy *đã hỏi gì*; đọc `scorecard.v1.md` để biết *luật đang hiệu lực*.
+>
+> ---
+>
+> **Trạng thái:** v0 draft · superseded bởi v1 (D11) · `SCHEMA_VERSION = "0.2.0-draft"`
+> ⚠️ **Sửa D11:** header này trước ghi `"0.1.0-draft"` — **sai từ D5**. `contracts` đã lên
+> `0.2.0-draft` ở D-13 (`tenant: str` → `tenant_id: UUID`), tức doc tự mâu thuẫn code trong 6 ngày.
+> Sửa **trước** khi freeze: không freeze một doc tự mâu thuẫn. Cùng lớp lỗi mà AIE-1 bắt được ở D7.
 > **Bút:** AIE-2 — Lưu Tiến Duy · **Ngày:** 2026-07-21 (D2, issue #9)
 > **Cập nhật:** 2026-07-23 (D4, issue #19) — nhánh trả-lời-được chuyển sang **token-contains**; thêm `expected_section_role` (trục T6); §2.7 chốt mapping `final_state → AgentAnswer` với AIE-1. Xem §2.3, §2.5, §2.6, §2.7.
 > **Cập nhật:** 2026-07-24 (D5, issue #24) — citation-accuracy + leak-check đọc từ **TRACE** (gom `citations` **node-agnostic**; carrier thực tế là event `llm-step`, xác nhận qua thread-check), seam trả `CaseRun{answer, events}` nhận `tenant_id: UUID` (D-13); leak-check là sanity slug, fence thật = RLS-UUID; SC-04 bug đã biết. Xem §2.3, §2.7.
@@ -336,9 +350,42 @@ là lý do chứ không phải tiện: (a) bộ chấm không tạo fence nên k
 phải mang `tenant_id` per-chunk. Đó là đổi contract → mini-RFC + 4/4 chữ ký. Không làm ở D8 (`day-08.md`:
 *"chưa fence chunk-level — để Sprint 3"*), nhưng ghi ra để lúc đó không phải suy lại vì sao cần.
 
+> ### ⚠️ RÚT TIỀN ĐỀ TRÊN — D11, 2026-08-03
+>
+> **Đoạn ngay trên định giá quá cao, và rút.** Câu *"đổi contract → mini-RFC + 4/4 chữ ký"* là **sai**:
+> nó giả định per-chunk `tenant_id` chưa có trong trace nên phải thêm field. Đo lại thì **dữ liệu đã có
+> từ D5**, và **không nằm ở `citations`** — nó nằm ở `outputs` của event `kb-retrieve`:
+>
+> ```python
+> # interpreter.py:265-268
+> outputs = {"chunks": [item.model_dump(mode="json") for item in output
+>                       if isinstance(item, KbSearchResultItem)]}
+> ```
+>
+> `KbSearchResultItem` (`kb.py:23-29`) mang `tenant_id: UUID` **và** `section_role`. Và **4 consumer
+> đang đọc chỗ đó**: `scripts/smoke_eval_d6.py:247,270` · `apps/studio/scripts/e2e_smoke_eval.py:265-271`
+> · `packages/kb/tests/test_spine_live.py:135`.
+>
+> ⇒ Thiếu **không phải một field**, mà **một dòng hợp đồng**: `trace-event.v0.md:77` đang khai `outputs`
+> là *"⏸ hoãn S2"*, tức field đang chở bằng chứng của bộ chấm thì hợp đồng khai là chưa quy định.
+> **0 bump, 0 mini-RFC** — chỉ cần một clause, chủ DE, hạn D15. Xem `scorecard.v1.md` §7.
+>
+> **Vì sao ghi lại thay vì sửa im:** một tiền đề sai định giá 4 chữ ký cho một dòng doc là đúng loại
+> lỗi làm việc bị hoãn vô cớ. Giữ cả câu sai và phần rút để lần sau nhận ra dạng của nó — kiểm **dữ
+> liệu đã có chưa** trước khi kết luận **cần đổi contract**.
+
 ---
 
-## 3. Câu hỏi treo — gửi mentor D2, chốt ở D11
+## 3. Câu hỏi treo — gửi mentor D2, **đã chốt ở D11 (2026-08-03)**
+
+> **Cả 5 câu đã có đáp án.** Câu hỏi gốc bên dưới **giữ nguyên nguyên văn** (kể cả chỗ định giá sai —
+> xem Q2/Q5) để đọc được *đã hỏi gì và đã nghĩ gì*; mỗi câu có thêm một khối **✅ CHỐT D11** gắn id
+> `DEC-*`. Luật đang hiệu lực nằm ở [`docs/contracts/scorecard.v1.md`](contracts/scorecard.v1.md).
+>
+> Một điều chỉnh về **quyền**, không phải về nội dung: 4 trong 5 câu này ghi *"gửi mentor"*. Ngày
+> 2026-08-03 07:14Z mentor tuyên bố trên kit#84 rằng từ S2 **không** trả lời câu hỏi kiến trúc nữa —
+> team tự quyết + tự viết ADR. Nên các câu này được chốt bởi **người giữ bút + review đồng đội**, không
+> phải bởi mentor. Việc đó đúng cả về quyền lẫn về tốc độ.
 
 ### Q1 — `CaseResult.judge` điền gì khi case không qua judge
 
@@ -355,6 +402,18 @@ so sánh thật với nhãn tay, không phải giá trị hằng.
 Đề xuất: (a) — là thay đổi cộng thêm nên không cần bump `SCHEMA_VERSION`, và biểu diễn đúng trạng
 thái "case không qua judge".
 
+> **✅ CHỐT D11 — `DEC-02` (+ `DEC-01` cho phần bump).** Chọn **(a)**: `judge: Judge | None = None`.
+> `None` mang nghĩa *"case này chấm KHÔNG qua LLM-judge"*, là giá trị trung thực **duy nhất** trước S3.
+> Hiện thực: [contracts#1](https://github.com/AI20K-VGR/agentcore-studio-contracts/pull/1) — do
+> @Dozyboy mở theo đúng 1 trong 3 phương án ở bảng trên; AIE-2 xác nhận với tư cách giữ bút.
+>
+> **Phần bump (`DEC-01`) cần một phán quyết riêng, không suy ra được từ câu này.** Dòng *"là thay đổi
+> cộng thêm nên không cần bump"* ở trên **đọc rộng hơn quy tắc**: `contracts/__init__.py:5-12` cho phép
+> *"add new OPTIONAL fields"* — còn đây là **nới một field đã tồn tại**, không nằm trong cả 3 loại
+> breaking lẫn ca được phép. Quy tắc **im lặng**, và im lặng không phải cho phép. Chốt: **không bump**,
+> kèm điều kiện *đếm được 0 reader giả định non-null* (đo: **0 reader / 4 constructor** toàn test
+> fixture; `331 → 333 passed` đúng +2 test mới). Đầy đủ: **ADR-D11-02**. Xem `scorecard.v1.md` §1–§2.
+
 ### Q2 — `citation_accuracy` của case từ chối
 
 Case từ chối đúng thì không trích dẫn gì. Tính giá trị tuyệt đối hay loại khỏi mẫu số của
@@ -366,6 +425,27 @@ Hai cách cho ra `aggregate` khác nhau, kéo theo `gate.verdict` khác nhau. C�
 Đề xuất: loại khỏi mẫu số. Tính giá trị tuyệt đối sẽ làm `citation_accuracy` biến thiên theo tỉ lệ
 case refusal trong bộ, không theo chất lượng trích dẫn.
 
+> **✅ CHỐT D11 — `DEC-04`.** Đề xuất trên **đúng nhưng chưa đủ**: nó chỉ nói tầng aggregate, còn câu
+> hỏi *"tính giá trị tuyệt đối hay loại khỏi mẫu số"* làm như thể chỉ có một chỗ để quyết. Thật ra có
+> **ba** tầng, và chốt cả ba:
+>
+> 1. **Per-case:** giữ `1.0`, nhưng phát biểu rõ đây là **QUY ƯỚC vacuous-truth**, KHÔNG phải phép đo —
+>    và **pin bằng test** (`test_refusal_citation_accuracy_is_pinned_convention_not_measurement`,
+>    thêm ở D11; GUIDE-C §6.4.2 đòi pin này, §9 ghi nó chưa tồn tại).
+> 2. **Aggregate:** **loại** case từ-chối khỏi mẫu số. Số: bộ 10 báo `0.90` vs thật **`0.833`**
+>    (+0.067, 3 case đã đỏ vẫn góp `1.00`); và `10×1.0 + 20×0.85 = đúng 0.90` ⇒ với `>=` một bản
+>    **đáng FAIL** lại PASS ngay ngưỡng 0.9.
+> 3. **Render:** in `n/a` cho dòng từ-chối, không in `1.00`.
+>
+> **Vì sao KHÔNG đổi per-case thành `None`/`0.0`:** `SmokeResult.citation_accuracy` phải giữ `float` —
+> 3 renderer format `:.2f` (`cli.py:222` · `smoke_eval_d6.py:219` · `e2e_smoke_eval.py:294`) sẽ
+> `TypeError`. Và quy ước vacuous-truth tồn tại **cả hai nhánh**: `expected_citation == []` ở nhánh
+> trả-lời cũng trả `1.0` (`harness.py:167`) ⇒ phải phát biểu nó là quy ước, không phải sửa nó.
+>
+> **Nợ có chủ + hạn:** cách **biểu diễn** trong `Aggregate` (nullable vs thêm `n_scored_citation`) →
+> **D16**, chủ AIE-2. Ghi đúng chữ: *"`aggregate` không tính lại được từ payload `results` đã lưu."*
+> **Không đụng `harness.py:159`** (GUIDE-C `:305` — *"must NOT be changed"*). Xem `scorecard.v1.md` §3.
+
 ### Q3 — `section_roles` phân giải ở đâu
 
 `kb.search` quy định `section_roles` phân giải phía máy chủ, giá trị client khai bị bỏ qua (chống
@@ -375,6 +455,20 @@ T6 label-spoof). File case là giá trị client khai.
 quyền đó rồi chạy case, đi qua đường phân giải như request thật.
 
 Cần xác nhận chung với DE (chủ `kb.search`) và AIE-1 (chủ executor `kb-retrieve`).
+
+> **✅ CHỐT D11 — `DEC-Q3` = HOÃN CÓ CHỦ + HẠN, không phải bỏ.** Chữ trong doc này **đã đúng** và không
+> phải sửa: `golden_case.py:110-116` đã dựng phiên mang quyền rồi chạy case, thay vì truyền
+> `case.section_roles` thẳng vào `kb.search`. Phần còn thiếu là **code của người khác**, không phải
+> quyết định của bút này: lỗ nằm ở chỗ recipe tự khai roles (`executors.py:138` đọc
+> `node.params.get("section_roles")`) — và `Recipe` là bút SWE.
+>
+> Chủ: **SWE** (mentor đã gán ở D-21) **+ DE**. Hạn **D17**. Không chặn freeze `scorecard`: bộ chấm
+> **quan sát** hàng rào, không **tạo** hàng rào.
+>
+> Đi kèm — **trục INV-1 roles chưa có chủ**, và AIE-2 **không nhận**: #74 §6 ghi *"needs an owner at
+> D11 freeze. AIE-1 or SWE"*. Đề xuất **SWE**, vì #112 (D17) đã gán *"Own INV-1: session_id resolve
+> {tenant,user,roles} server-side"* cho SWE. Ghi là **CHƯA CÓ CHỦ + đề xuất + hạn gán D12** — một món
+> ghi là vô-chủ-có-hạn là **finding**; một món bị bỏ im lặng là **thất bại**.
 
 ### Q4 — Seam để harness gọi interpreter
 
@@ -387,6 +481,21 @@ seam cho interpreter hay golden-set repo.
 Đề xuất: thêm Protocol vào contracts, `studio_app` tiêm bản thật. Là thay đổi contracts, đưa vào
 chương trình nghị sự D11; đụng AIE-1 và DE.
 
+> **✅ CHỐT D11 — `DEC-Q4` = KHÔNG đưa lên contracts hôm nay.** Đây là chỗ **đề xuất gốc bị đảo**, và
+> lý do đáng ghi: thêm seam thứ 4/5 vào `contracts` là **mở rộng bề mặt freeze đúng ngày đóng băng nó**.
+> Ba căn cứ:
+>
+> - (a) `contracts` là layer đáy — mỗi seam thêm vào là một thứ nữa cần 4/4 chữ ký mỗi lần đổi shape,
+>   trong lúc seam **còn đang tiến hoá** qua D14/D16;
+> - (b) `AgentRunner` (`agent_runner.py:76`) đang chạy tốt như **Protocol nội bộ quadrant**, và
+>   `.importlinter` vẫn xanh (`1 kept, 0 broken`) — tức ràng buộc layering **không** đòi promote;
+> - (c) adapter `EngineAgentRunner` sống ở composition root `apps/studio` — chỗ **duy nhất** chạm AIE-1,
+>   đã có và đã chạy.
+>
+> **Phương án bỏ:** đưa lên contracts ⇒ 4/4 chữ ký cho **mỗi** lần đổi shape seam. Hoãn: chủ AIE-2 +
+> AIE-1, hạn **D14**. Đây là món **đầu tiên** được chọn để điền template mini-RFC, chính vì sau freeze
+> nó là con đường bắt buộc — xem `docs/mini-rfc/`.
+
 ### Q5 — Bộ case nằm ở bảng nào
 
 | Bảng | Chủ | Trạng thái |
@@ -396,6 +505,28 @@ chương trình nghị sự D11; đụng AIE-1 và DE.
 
 Cần xác định ai ghi, ai đọc, bảng nào là nguồn sự thật. Chưa chốt thì `EvalHarness.run` không xác
 định được nguồn dữ liệu.
+
+> **✅ CHỐT D11 — `DEC-Q5`.** `eval.golden_sets` (`schema.py:20-25`, bút AIE-2) là **nguồn sự thật**.
+> DE **sinh + gán nhãn** case, giao qua file YAML trong `packages/kb/golden/`; AIE-2 **nạp** vào
+> `eval.golden_sets`. `obs.golden_sets` bỏ (để nguyên như shell chết, có ghi chú).
+>
+> **Lý do là quyền, không phải sở thích** — và nó là Q-D của chính DE (`trace-event.v0.md:242`):
+> *"`obs.golden_sets` nằm trong `apps/studio/` — không phải fence-lane của DE. DE điền bằng cách nào?"*
+> Đáp: **không điền được.** Chọn `eval.golden_sets` là chọn cái bảng **có người ghi được**.
+>
+> **Ranh giới sở hữu dịch:** DE sở hữu **giá trị** (case + nhãn tay + tên bộ), AIE-2 sở hữu **nơi lưu +
+> loader**. Đúng phân vai §2.6: *"DE sở hữu giá trị `expected`; AIE-2 sở hữu luật khớp"*.
+>
+> Loader YAML→DB **hết blocker**: `pyyaml>=6.0` đã khai tường minh ở `pyproject.toml:26` từ `kit#65`.
+> Trước đó mọi `import yaml` ăn ké extra của `uvicorn[standard]` — ai đổi thành `uvicorn` trần là loader
+> chết im lặng. Đã đóng.
+>
+> **Món duy nhất không default được — ngày giao golden-30.** Đề xuất: 30 case có nhãn tay, muộn nhất
+> **hết D15 (07/08)**, tên bộ **`callisto-golden-30-v1`**, sinh **SAU** corpus KB thật (D13). Nhận
+> phương án chia lô 20 case D15 + 10 case sáng D16 nếu D15 quá chặt (D15 là Integration Friday, #104),
+> **miễn là chia lô có trong decision-log**. Không nhận được là *"sẽ có"*. **Non-blocking hôm nay ·
+> blocking D16** (#108 = *"eval harness v1 + golden 30"*). Và **không tự sinh case thay bên giữ nhãn** —
+> umbrella §6 ghi golden-set *"sinh từ doc-factory DE"*.
 
 ---
 

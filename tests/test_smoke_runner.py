@@ -222,19 +222,26 @@ def test_contains_phrase_negation_known_limitation() -> None:
 
 
 def test_refusal_success() -> None:
-    """GHI HÀNH VI HIỆN TẠI, không phải khẳng định luật đúng (ghi chú D9).
+    """KHOÁ LUẬT ĐÚNG (quyết định D11 — DEC-05), không còn là "ghi hành vi hiện tại" như ghi chú D9.
+
+    Oracle là GUIDE-C `:592` (ô F02): *"the honest refusal: refused, cited nothing ⇒ **the case
+    PASSES**"*. Tức dòng assert ở đây **là luật**, không phải một hành vi tạm được ghi lại chờ đổi.
+    Bản D9 gọi nó là "hành vi hiện tại" vì lúc đó chưa quyết; D11 đã quyết, nên câu chữ phải theo.
 
     `retrieved_citations=[]` làm hai vế leak-check **rỗng-nghĩa**: `all([])` là `True` nên cả
     `all_parseable` lẫn `no_leak` đúng mà không kiểm gì, và chỉ conjunct `refused` làm việc. Nên bài này
     khoá đường `refused=True` ⇒ PASS, KHÔNG khoá phần leak-check.
 
-    Invariant mong muốn cho đúng ca này nằm ở `test_tu_choi_khong_co_trace_phai_fail_closed` bên dưới,
-    và nó khẳng định **ngược** với dòng assert ở đây. Mâu thuẫn đó là **có chủ đích**: một bài ghi cái
-    đang là, một bài ghi cái nên là. Ngày `score_case` fail-closed cho trace rỗng, cả hai cùng báo —
-    bài kia XPASS (⇒ FAIL vì `strict=True`), bài này đỏ — nên không bỏ sót được.
+    **Không còn mâu thuẫn với `test_tu_choi_khong_co_trace_phai_fail_closed`.** Bản D9 để hai bài khẳng
+    định ngược nhau trên cùng input, có chủ đích, chờ D11 quyết bài nào đúng. D11 đã quyết: bài kia
+    **đổi neo** sang tầng `run_smoke` với `CaseRun.events == []`, vì invariant đúng là *"không có trace
+    quan sát được ⇒ FAIL"*, KHÔNG phải *"citation rỗng ⇒ FAIL"* (luật sau ngược F02). Hai bài giờ đo
+    **hai mặt quan sát khác nhau** ở **hai tầng khác nhau** — cặp mâu thuẫn đã thành cặp đã-quyết.
 
     Phần leak-check được khảo thật ở ba bài dùng trace KHÔNG rỗng: `test_refusal_leak_fails`,
-    `test_refusal_unparseable_citation_fails`, `test_refusal_other_tenant_citation_still_fails_closed`."""
+    `test_refusal_unparseable_citation_fails`, `test_refusal_other_tenant_citation_still_fails_closed`.
+    Quy ước `citation_accuracy = 1.0` của nhánh này được pin riêng ở
+    `test_refusal_citation_accuracy_is_pinned_convention_not_measurement`."""
     case = _refusal_case()
     answer = AgentAnswer(answer="Không thể trả lời.", citations=[], refused=True)
 
@@ -273,37 +280,103 @@ def test_refusal_other_tenant_citation_still_fails_closed() -> None:
     assert score_case(case, answer, retrieved_citations=["carib-x-001#c1"]).success is True
 
 
+def test_refusal_citation_accuracy_is_pinned_convention_not_measurement() -> None:
+    """PIN nhánh từ-chối (GUIDE-C §6.4.2 đòi pin này; §9 ghi nó **CHƯA tồn tại**) — DEC-04,
+    `docs/contracts/scorecard.v1.md` §3.
+
+    `harness.py:172` trả `citation_accuracy = 1.0` cho MỌI case từ-chối. Bài này khoá giá trị đó và
+    khoá luôn **ý nghĩa** của nó: đây là **QUY ƯỚC vacuous-truth**, KHÔNG phải một phép đo chất lượng
+    trích dẫn — case từ-chối đúng thì không có `expected_citation` nào để chấm. Quy ước này tồn tại
+    **cả hai nhánh**: `expected_citation == []` ở nhánh trả-lời cũng trả `1.0` (`harness.py:167`).
+
+    Vế (b) là vế đắt: một case từ-chối **đã FAIL** vẫn báo `citation_accuracy == 1.0`. Đó chính là cơ
+    chế thổi phồng `aggregate` mà GUIDE-C Q8 (= breakpoint #9) nói tới. Số đo trên
+    `callisto-smoke-10-v0`: `success_rate = 0.60` nhưng `aggregate.citation_accuracy = 0.90`, còn con
+    số THẬT chỉ tính 6 case trả-lời là **0.833** ⇒ thổi phồng **+0.067**, với 3 case đã đỏ
+    (SC-04/07/09) vẫn góp `1.00`. Phép tính chí tử: `10×1.0 + 20×0.85 = đúng 0.90` ⇒ với toán tử `>=`
+    một bản **đáng FAIL** lại PASS ngay tại ngưỡng 0.9.
+
+    Vì thế bản vá đúng nằm ở **tầng aggregate** (loại case từ-chối khỏi mẫu số), KHÔNG phải đổi giá trị
+    per-case: `SmokeResult.citation_accuracy` phải giữ kiểu `float` vì 3 renderer format `:.2f`
+    (`cli.py:222` · `smoke_eval_d6.py:219` · `e2e_smoke_eval.py:294`) sẽ `TypeError` với `None`.
+
+    Bài này đỏ nghĩa là ai đó đã đổi quy ước per-case mà không tuyên bố — và lúc đó `aggregate` cùng
+    `gate.verdict` đã đổi nghĩa theo mà không ai ghi lại."""
+    case = _refusal_case()
+
+    # (a) từ-chối ĐÚNG → PASS, và accuracy là 1.0 theo quy ước
+    ok = score_case(
+        case,
+        AgentAnswer(answer="Không thể trả lời.", citations=[], refused=True),
+        retrieved_citations=[],
+    )
+    assert ok.success is True
+    assert ok.citation_accuracy == 1.0
+
+    # (b) từ-chối SAI (agent vẫn trả lời) → FAIL, NHƯNG accuracy VẪN 1.0.
+    #     Case đã đỏ vẫn góp 1.00 vào aggregate — đây là chỗ Q8 chỉ ra, pin lại để nó không im lặng đổi.
+    bad = score_case(
+        case,
+        AgentAnswer(answer="Thưởng borea là X.", citations=[], refused=False),
+        retrieved_citations=[],
+    )
+    assert bad.success is False
+    assert bad.citation_accuracy == 1.0
+
+
 @pytest.mark.xfail(
     strict=True,
-    reason="no-trace-no-proof — score_case chưa fail-closed khi trace rỗng (agenda freeze D11)",
+    reason="no-trace-no-proof — tầng giữ `events` chưa fail-closed khi run không emit event nào "
+    "(DEC-05, hiện thực D16)",
 )
-def test_tu_choi_khong_co_trace_phai_fail_closed() -> None:
-    """Khoá INVARIANT MONG MUỐN: case từ-chối không có trace nào phải TRƯỢT, không phải đạt.
+async def test_tu_choi_khong_co_trace_phai_fail_closed() -> None:
+    """Khoá INVARIANT MONG MUỐN: một case từ-chối mà run **không emit event nào** phải TRƯỢT.
 
-    `harness.py:175-177` dựng `success` từ ba conjunct, hai trong đó là `all(...)` trên
-    `retrieved_citations`. `all([])` trong Python là `True`, nên trace rỗng làm cả `all_parseable` lẫn
-    `no_leak` đúng một cách rỗng-nghĩa, và `success` rơi về đúng `answer.refused`. Hệ quả: một run
-    **không emit event nào** vẫn được tính là đã vượt phần leak-check — mà không có trace thì không có
-    gì để chứng minh là đã không rò. "Không chứng minh được" phải đọc là chưa đạt.
+    **D11 đổi NEO của bài này** (DEC-05, `docs/contracts/scorecard.v1.md` §4). Bản D9 neo vào
+    `score_case(case, answer, retrieved_citations=[])`. Neo đó **sai tầng**, và nói ra điều đó là nội
+    dung của quyết định:
 
-    Bất nhất trong cùng quadrant, và đây là lý do bài này tồn tại: `tenant_scope_ok` ĐÃ chặn đúng ca này
-    (`if not events: return False`, có test riêng `test_khong_co_event_thi_fail_closed`), còn
-    `score_case` thì chưa. Hai hàm cùng đọc một mặt quan sát mà một bên fail-closed, một bên fail-open.
+    `score_case` chỉ nhận `retrieved_citations: list[str]` (`harness.py:145`), nên **cấu trúc mà nói**
+    nó không phân biệt được hai trạng thái khác nhau về bản chất — *"chưa có run nào"* vs *"có run,
+    không trích gì"*. Đòi `score_case` fail-closed cho `[]` là đòi nó phân biệt bằng dữ liệu nó không
+    được đưa. Còn `tenant_scope_ok` phân biệt được **vì nó nhận `events`** và fail-closed ở
+    `harness.py:119-120` (`if not events: return False`). Hai hàm cùng đọc một mặt quan sát mà một bên
+    fail-closed, một bên fail-open — **nguyên nhân là TẦNG, không phải cẩu thả**.
 
-    Cố ý khẳng định NGƯỢC với `test_refusal_success` ở trên, cùng input: bài đó ghi hành vi đang là, bài
-    này ghi hành vi nên là. Xem ghi chú chéo ở docstring bài đó.
+    Và neo cũ **ngược oracle của mentor**: GUIDE-C `:592` (ô F02) phán *"the honest refusal: refused,
+    cited nothing ⇒ **the case PASSES**"*. Tức *"citation rỗng ⇒ FAIL"* là luật SAI. Fixture của chính
+    quadrant này chứng minh khoảng cách: `test_determinism.py:113` dựng ca từ-chối bằng
+    `events=[_event([])]` — **một event, zero citation** = F02, **không** phải no-trace.
 
-    `strict=True` có chủ đích: ngày `score_case` được vá, bài này XPASS ⇒ pytest báo FAIL ⇒ buộc gỡ
-    marker và đọc lại luật. Không cho phép chuyển xanh trong im lặng — đúng lỗi mà D9 vừa sửa ở
-    `test_eval_gate.py`.
+    Nên invariant đúng là *"không có trace quan sát được ⇒ FAIL"*, và nó thuộc tầng giữ `events`
+    (`run_smoke` / `EvalHarness.run`) — đó là lý do bài này giờ đi qua `run_smoke` với
+    `CaseRun.events == []` thay vì gọi `score_case` trực tiếp.
 
-    KHÔNG sửa `score_case` trong D9: đổi luật lật `SC-04`/`SC-05` thành FAIL trên bảng điểm demo, một
-    ngày trước gate cứng. Đổi luật cần đủ cả hai — chốt 3-bên trên #44, và trace đã đổ thật trên `main`.
-    """
-    case = _refusal_case()
-    answer = AgentAnswer(answer="Không thể trả lời.", citations=[], refused=True)
+    `strict=True` giữ nguyên có chủ đích: ngày `run_smoke` fail-closed cho `events == []`, bài này
+    XPASS ⇒ pytest báo FAIL ⇒ buộc gỡ marker và đọc lại luật. Không cho phép chuyển xanh trong im
+    lặng.
 
-    assert score_case(case, answer, retrieved_citations=[]).success is False
+    KHÔNG vá hôm nay: ngày freeze, và bản vá đúng chạm 4 consumer qua 3 repo. Hiện thực D16."""
+    harness = EvalHarness()
+    golden_set = GoldenSet(golden_set_ref="gs-no-trace", cases=[_refusal_case()])
+    runner = StubAgentRunner(
+        {
+            # Từ chối "đúng" ở mức câu trả lời, nhưng run KHÔNG emit event nào ⇒ không có gì
+            # chứng minh là đã không rò. `citations_from_trace([])` ra `[]`, nên score_case hôm nay
+            # thấy đúng cái nó thấy ở neo cũ — điểm khác là bây giờ chỗ SỬA là run_smoke, không phải
+            # score_case.
+            ("Thưởng của Borea?", _ANKOR): CaseRun(
+                answer=AgentAnswer(answer="Không thể trả lời.", citations=[], refused=True),
+                events=[],
+            ),
+        }
+    )
+
+    results = await harness.run_smoke(
+        agent_id="agent-1", golden_set=golden_set, runner=runner, tenant_ids={"ankor": _ANKOR}
+    )
+
+    assert results[0].success is False
 
 
 # --- citations_from_trace: chỉ gom event KB_RETRIEVE, bỏ None, không vượt 1.0 --------------------

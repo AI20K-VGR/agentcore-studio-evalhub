@@ -50,10 +50,23 @@ Judge chỉ xuất hiện khi bộ case lên 30 câu ở S3. Trình tự dự ki
 
 ---
 
-## Điều kiện chưa gỡ
+## Điều kiện chưa gỡ — ✅ ĐÃ GỠ (D11, 2026-08-03)
 
 Nấc này vướng Q1 trong `docs/scorecard-v0.md`: `CaseResult.judge` là trường bắt buộc, case không qua
 judge chưa có giá trị hợp lệ để điền, và `judge.py` loại trừ giá trị hằng. Chưa chốt Q1 thì nấc chưa
 thực thi được.
 
 Đã đưa vào question-batch gửi mentor ngày 2026-07-21.
+
+> **✅ Gỡ ở D11 — `DEC-02`.** `CaseResult.judge` nay là `Judge | None = None`
+> ([contracts#1](https://github.com/AI20K-VGR/agentcore-studio-contracts/pull/1)), và `None` mang nghĩa
+> chính xác cái nấc này cần: *"case được chấm KHÔNG qua LLM-judge"*. Nên **nấc đã thực thi được** —
+> không còn phải chọn giữa bịa một `Judge` hằng (thứ `judge.py` cấm) và không dựng được `CaseResult`.
+>
+> Dòng `CaseResult.judge` ở bảng *"Thay đổi cụ thể"* trên đọc lại thành: **trước cắt** = điểm đồng
+> thuận thật · **sau cắt** = `None`. Không còn trỏ sang Q1 như một câu đang treo.
+>
+> **Điều kiện chưa gỡ còn lại — và nó nặng hơn Q1:** `Judge.agreement` cần **nguồn nhãn tay**, mà field
+> nguồn đó **không tồn tại** ở bất kỳ đâu trong workspace (field đích đã có: `scorecard.py:19`). Hằng số
+> bị cấm. ⇒ bật lại judge **không** chỉ là "chuyển case về nhánh judge" như mục *Đường lùi* viết; nó cần
+> một nguồn nhãn tay có thật trước. Chủ: **mentor**, hạn **D18**. Xem `docs/contracts/scorecard.v1.md` §9.
