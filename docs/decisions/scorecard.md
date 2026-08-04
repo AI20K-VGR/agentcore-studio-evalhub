@@ -54,9 +54,27 @@ freeze: FREEZE-READY   # chưa FROZEN — xem "Còn mở" bên dưới
 | F-3 | 4/4 Approve trên hai PR trên | SWE · DE · AIE-1 · AIE-2 | D11 |
 | F-4 | Clause **carrier `citations` chỉ trên `llm-step`** — hành vi engine đã đúng và **đã có test engine khoá** (`test_trace_event_emission.py:152`), nhưng clause chưa tồn tại ⇒ bảo đảm hiện tại là **hành vi**, không phải **cấu trúc** | **AIE-1** | D12 |
 | F-5 | Clause **`outputs["chunks"]`** thành invariant có tên (DEC-07) | **DE** | D15 |
-| F-6 | **Nguồn nhãn tay** cho `Judge.agreement` — field đích đã có (`scorecard.py:19`), field **nguồn không tồn tại**, hằng số bị cấm ⇒ **chặn mọi ô judge**. **Đổi chủ 04/08:** trước ghi `mentor`, nhưng mentor **không tác động** vào quá trình (chỉ nhận kết quả + chấm) ⇒ món gán cho người-không-hành-động thì không bao giờ nhích. Chủ đúng theo `DEC-Q5`/§2.6: **AIE-2** định nghĩa `agreement` đo gì + format + chỗ lưu; **DE** sinh nhãn tay cùng golden-30 (D15) | **AIE-2** (+ DE phần giá trị) | D18 |
+| F-6 | **Nguồn nhãn tay** cho `Judge.agreement` — field đích đã có (`scorecard.py:19`), field **nguồn không tồn tại**, hằng số bị cấm ⇒ **chặn mọi ô judge**. **Đổi chủ 04/08:** trước ghi `mentor`, nhưng mentor **không tác động** vào quá trình (chỉ nhận kết quả + chấm) ⇒ món gán cho người-không-hành-động thì không bao giờ nhích. Chủ đúng theo `DEC-Q5`/§2.6: **AIE-2** định nghĩa `agreement` đo gì + format + chỗ lưu; **DE** sinh nhãn tay cùng golden-30 (D15) | **AIE-2** — phần định nghĩa + chỗ lưu, **đã chốt**. Phần *sinh nhãn tay* **ĐỀ XUẤT cho DE, CHƯA xác nhận** (căn cứ là `DEC-Q5`, mà `DEC-Q5` cũng đang 🟡 chờ DE) | D18 · phần DE chờ chốt `DEC-Q5` |
 
 **Chưa lật `freeze: FROZEN`** — F-1…F-3 chưa đủ cả ba. Trạng thái báo cáo là **freeze-ready**.
+
+> ### ⚠️ Một chỗ tự-mâu-thuẫn, do @DongAnh2704 bắt khi review `evalhub#10`
+>
+> PR `evalhub#10` sửa lỗi *"gán việc cho người không hành động"* (mentor) — nhưng khi gán phần **sinh
+> nhãn tay** của `F-6` cho DE, nó dựa vào `DEC-Q5`, mà **`DEC-Q5` chính nó đang 🟡 chờ DE xác nhận**.
+>
+> DE nói đúng, và nói đúng tên hiện tượng: *"đang xây quyết định mới trên một quyết định mà chính người
+> bị gán việc chưa xác nhận — hơi giống **chiều ngược** của đúng vấn đề PR này đang sửa."*
+>
+> Hai lỗi cùng một lớp: **một ô chủ-sở-hữu không có thật**. Khác nhau ở chỗ mentor sẽ *không bao giờ*
+> hành động, còn DE thì *chưa nói có hay không* — nhưng cả hai đều làm bảng theo dõi **trông như đã được
+> quản lý** trong khi chưa.
+>
+> **Sửa:** tách `F-6` thành hai phần — phần AIE-2 **đã chốt**, phần DE ghi rõ **ĐỀ XUẤT, CHƯA xác nhận**,
+> và điều kiện lật là **DE chốt `DEC-Q5`**. Không tự coi là final.
+>
+> Ghi lại vì đây là lần thứ hai trong hai commit liền nhau tôi tạo một owner-không-thật — bằng chứng
+> rằng cái khó không phải *biết luật*, mà là **kiểm lại chính bảng vừa sửa**.
 
 ## Hoãn — mọi món có chủ + hạn (0 món vô chủ)
 

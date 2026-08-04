@@ -85,7 +85,8 @@ trên ngưỡng tròn, `11/20 = 0.55` exact trong CPython 3.14) thành `unknown`
 
 Cộng thêm ba giá độc lập: `test_gate_blocks_on_fail` là `xfail(strict=True)` ⇒ land hôm nay làm nó
 **XPASS ⇒ FAIL** trong lúc quyền đổi marker (M6, GUIDE-C §2.3: *"Do not edit that marker on your own
-authority"*) **chưa chốt**;
+authority"*) **chưa chốt**; `test_harness_judge_compute_not_implemented` đỏ ngay ngày freeze; và #50
+xếp eval-gate blocking là **gold-plating** (S3/D24), ETA của GUIDE-C là D20, #108 là D16.
 
 > **M6 giải quyết thế nào khi mentor không tác động (ghi 04/08).** GUIDE-C viết *"Do not edit that
 > marker on your own authority"* — câu đó ngụ ý có một authority bên ngoài để xin. Nhưng mentor
@@ -96,8 +97,6 @@ authority"*) **chưa chốt**;
 > Nên ở D16, khi seam land và bài đó XPASS: **gỡ marker được**, với điều kiện viết **ADR** nêu vì sao
 > `strict` đổi/gỡ + cửa sổ phản hồi cho 3 người còn lại. Chủ **AIE-2** (bút `test_eval_gate.py`), hạn
 > **D16**. Không chờ ai xác nhận, nhưng cũng không sửa im.
- `test_harness_judge_compute_not_implemented` đỏ ngay ngày freeze; và #50
-xếp eval-gate blocking là **gold-plating** (S3/D24), ETA của GUIDE-C là D20, #108 là D16.
 
 ⇒ Đúng hạn là **D16**, và claim `O3.1 = I` hôm nay là calibration, không phải khiêm tốn.
 
