@@ -347,8 +347,32 @@ chủ đề xuất SWE, hạn **D12**.
 Field **đích** đã có (`scorecard.py:19` `Judge.agreement`). Field **nguồn không tồn tại**: không có
 chỗ nào trong workspace lưu *verdict của người* cho từng `actual`. Và hằng số **bị cấm** (§1).
 
-⇒ **Mọi ô judge là `todo:` không có ETA cam kết được.** Đây là món **không tự đặt đáp án** — nêu là
-blocking, chủ **mentor**, hạn **D18**. Ghi ra để D18 không phải phát hiện lại.
+⇒ **Mọi ô judge là `todo:` không có ETA cam kết được.**
+
+**Chủ: AIE-2**, hạn **D18**, phụ thuộc **DE** cho phần giá trị.
+
+> ### ⚠️ ĐÍNH CHÍNH chủ sở hữu — 2026-08-04 (không sửa clause, sửa metadata)
+>
+> Bản freeze ghi *"món **không tự đặt đáp án** — chủ **mentor**"*. Câu đó **sai về bản chất**: mentor
+> **không tác động vào quá trình**, chỉ nhận kết quả và chạy để chấm. Một món gán cho người-không-hành-động
+> thì **không bao giờ nhích** — nó là *"món bị bỏ im lặng"* khoác áo *"hoãn có chủ"*, đúng thứ nguy hiểm
+> hơn cả việc không ghi.
+>
+> **Chủ đúng, suy ra từ chính `DEC-Q5` và §2.6 của tôi** — *"DE sở hữu **giá trị** (case + **nhãn tay** +
+> tên bộ); AIE-2 sở hữu **nơi lưu + loader** và **luật khớp**"*:
+>
+> | Phần | Chủ |
+> |---|---|
+> | Định nghĩa `agreement` đo **cái gì**, format field nhãn tay, chỗ lưu (mở rộng `eval.golden_sets`) | **AIE-2** — bút `scorecard` |
+> | **Sinh nhãn tay** cho case golden-30 | **DE** — bút golden-set (`DEC-Q5`) |
+>
+> Tôi **nhận món này**, không đẩy sang DE: phần chặn thật là *"đo cái gì và lưu ở đâu"* — đó là bút tôi.
+> Phần của DE là giá trị, và nó đi cùng golden-30 (hạn D15) chứ không phải một việc mới.
+>
+> **Vì sao sửa được một doc đã `FROZEN` mà không cần mini-RFC:** clause của §9 (*"field nguồn không tồn
+> tại ⇒ mọi ô judge là `todo:`"*) **không đổi một chữ**. Chỉ đổi **ai hành động** — metadata theo dõi,
+> không phải điều khoản hợp đồng. Luật freeze chặn *rename · removal · required-add* trên **shape**
+> (`contracts/__init__.py:5-12`), không chặn việc sửa một ô chủ-sở-hữu bị gán sai.
 
 ---
 

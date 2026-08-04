@@ -85,7 +85,18 @@ trên ngưỡng tròn, `11/20 = 0.55` exact trong CPython 3.14) thành `unknown`
 
 Cộng thêm ba giá độc lập: `test_gate_blocks_on_fail` là `xfail(strict=True)` ⇒ land hôm nay làm nó
 **XPASS ⇒ FAIL** trong lúc quyền đổi marker (M6, GUIDE-C §2.3: *"Do not edit that marker on your own
-authority"*) **chưa chốt**; `test_harness_judge_compute_not_implemented` đỏ ngay ngày freeze; và #50
+authority"*) **chưa chốt**;
+
+> **M6 giải quyết thế nào khi mentor không tác động (ghi 04/08).** GUIDE-C viết *"Do not edit that
+> marker on your own authority"* — câu đó ngụ ý có một authority bên ngoài để xin. Nhưng mentor
+> **không can thiệp vào quá trình**, chỉ nhận kết quả và chấm; và kit#84 (03/08) uỷ quyền tường minh:
+> *"bọn em có quyền đề xuất tự xây dựng giải pháp... không cần anh phê duyệt"*. ⇒ *"your own
+> authority"* ở đây không còn nghĩa là **một người**, mà là **quyết định một mình không có ADR**.
+>
+> Nên ở D16, khi seam land và bài đó XPASS: **gỡ marker được**, với điều kiện viết **ADR** nêu vì sao
+> `strict` đổi/gỡ + cửa sổ phản hồi cho 3 người còn lại. Chủ **AIE-2** (bút `test_eval_gate.py`), hạn
+> **D16**. Không chờ ai xác nhận, nhưng cũng không sửa im.
+ `test_harness_judge_compute_not_implemented` đỏ ngay ngày freeze; và #50
 xếp eval-gate blocking là **gold-plating** (S3/D24), ETA của GUIDE-C là D20, #108 là D16.
 
 ⇒ Đúng hạn là **D16**, và claim `O3.1 = I` hôm nay là calibration, không phải khiêm tốn.
@@ -115,7 +126,7 @@ dòng hợp đồng**, không phải một field. `scorecard-v0.md:335-337` từ
 
 | Rủi ro | Vì sao nó thật | Trạng thái |
 |---|---|---|
-| **Không có nguồn nhãn tay cho `Judge.agreement`** | Field **đích** đã có (`scorecard.py:19`); field **nguồn không tồn tại** ở bất kỳ đâu trong workspace; hằng số **bị cấm** (`judge.py:6-9`) ⇒ **mọi ô judge là `todo:` không có ETA cam kết được**. Đây là món **không tự đặt đáp án** | 🔴 chặn · chủ **mentor** · hạn D18 |
+| **Không có nguồn nhãn tay cho `Judge.agreement`** | Field **đích** đã có (`scorecard.py:19`); field **nguồn không tồn tại** ở bất kỳ đâu trong workspace; hằng số **bị cấm** (`judge.py:6-9`) ⇒ **mọi ô judge là `todo:` không có ETA cam kết được**. **Đổi chủ 04/08:** trước ghi `mentor` — sai, vì mentor **không tác động** vào quá trình, chỉ nhận kết quả và chạy để chấm. Món gán cho người-không-hành-động thì không bao giờ nhích | 🔴 chặn · chủ **AIE-2** (định nghĩa `agreement` đo gì + format + chỗ lưu) **+ DE** (sinh nhãn tay, cùng golden-30 D15) · hạn D18 |
 | **Mọi ngưỡng đang pin vào một stand-in** | `ExtractiveFakeLLM` chỉ đọc top-1, không có năng lực quyết định refusal. Với mặc định `0.9/0.95` (**`workbench`**, xem bảng 4 chỗ dưới đây), số đo thật là bộ 5 → `0.80`, bộ 10 → `0.60` / `citation_accuracy` `0.833` ⇒ **một recipe TỐT cũng FAIL cả hai trục**, nên demo *"sửa instructions tệ → FAIL → chặn publish"* chứng minh **số không** | 🟡 recalibrate D16, chủ AIE-2. **Không** hạ số hôm nay — hạ bây giờ là hiệu chỉnh theo stand-in |
 | **golden-30 về sau corpus D13** | Corpus-cutover D13 gần chắc làm `smoke-5`/`smoke-10` hiện tại vỡ ⇒ số ở D16 có thể bị đọc là **hồi quy của bộ chấm**. Kế hoạch: sáng D13 hỏi lịch cutover, chiều re-run và báo lệch trước | 🟡 chủ DE (giao bộ) + AIE-2 (báo lệch) · hạn D15 |
 | **Carrier `citations` là hành vi, không phải cấu trúc** | `citations_from_trace` gom **node-agnostic** (`harness.py:85-89`) nên phân biệt retrieved/grounded **chỉ vì engine hôm nay tình cờ hành xử vậy**. Bất kỳ node trả **dict** có key `"citations"` sẽ mang citations vào trace | ✅ **phía engine ĐÓNG 04/08** — AIE-1 giao clause + code + test (`engine#15` merged `04:07:30`, `interpreter.py:304` gate `node_type is NodeType.LLM_STEP`, `engine:docs/contracts/trace-citations.v0.md`). 🔴 **phía evalhub CHƯA có lưới** — chủ **AIE-2**, hạn **D16** |

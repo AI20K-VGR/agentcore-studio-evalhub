@@ -54,7 +54,7 @@ freeze: FREEZE-READY   # chưa FROZEN — xem "Còn mở" bên dưới
 | F-3 | 4/4 Approve trên hai PR trên | SWE · DE · AIE-1 · AIE-2 | D11 |
 | F-4 | Clause **carrier `citations` chỉ trên `llm-step`** — hành vi engine đã đúng và **đã có test engine khoá** (`test_trace_event_emission.py:152`), nhưng clause chưa tồn tại ⇒ bảo đảm hiện tại là **hành vi**, không phải **cấu trúc** | **AIE-1** | D12 |
 | F-5 | Clause **`outputs["chunks"]`** thành invariant có tên (DEC-07) | **DE** | D15 |
-| F-6 | **Nguồn nhãn tay** cho `Judge.agreement` — field đích đã có (`scorecard.py:19`), field **nguồn không tồn tại**, hằng số bị cấm ⇒ **chặn mọi ô judge** | **mentor** | D18 |
+| F-6 | **Nguồn nhãn tay** cho `Judge.agreement` — field đích đã có (`scorecard.py:19`), field **nguồn không tồn tại**, hằng số bị cấm ⇒ **chặn mọi ô judge**. **Đổi chủ 04/08:** trước ghi `mentor`, nhưng mentor **không tác động** vào quá trình (chỉ nhận kết quả + chấm) ⇒ món gán cho người-không-hành-động thì không bao giờ nhích. Chủ đúng theo `DEC-Q5`/§2.6: **AIE-2** định nghĩa `agreement` đo gì + format + chỗ lưu; **DE** sinh nhãn tay cùng golden-30 (D15) | **AIE-2** (+ DE phần giá trị) | D18 |
 
 **Chưa lật `freeze: FROZEN`** — F-1…F-3 chưa đủ cả ba. Trạng thái báo cáo là **freeze-ready**.
 
