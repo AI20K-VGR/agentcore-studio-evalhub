@@ -152,9 +152,9 @@ trên bộ hiện tại — và điều đó làm ngưỡng `citation_accuracy =
 ra.
 
 > **Ba chỗ giữ ngưỡng, cho người recalibrate ở D16** (đã đếm, không phải một chỗ như dễ tưởng):
-> `builder.py:48-49` — **default param** của `create_dynamic_recipe`
+> `workbench:src/studio_workbench/builder.py:48-49` — **default param** của `create_dynamic_recipe`
 > (`success_threshold: float = 0.9`, `citation_accuracy_threshold: float = 0.95`); và
-> `builder.py:114` + `builder.py:192` — hai chỗ **hardcode** `ScorecardThreshold(success=0.9,
+> `workbench:…/builder.py:114` + `workbench:…/builder.py:192` — hai chỗ **hardcode** `ScorecardThreshold(success=0.9,
 > citation_accuracy=0.95)` trong sample recipe. Đổi chỉ default mà quên hai chỗ hardcode là cách
 > recalibrate ra hai bộ số cùng tồn tại.
 
@@ -217,7 +217,7 @@ phải sửa; giá của gọn = 10 file + một bump.
 
 **Giá trị ngưỡng KHÔNG thuộc hợp đồng.** `golden_set_ref: str` +
 `scorecard_threshold: {success, citation_accuracy}` freeze **là field**. Con số là **dữ liệu recipe**,
-chủ **AIE-2**, hiệu chỉnh lại ở **D16** sau khi golden-30 chạy trên corpus thật. `builder.py:48-49`
+chủ **AIE-2**, hiệu chỉnh lại ở **D16** sau khi golden-30 chạy trên corpus thật. `workbench:…/builder.py:48-49`
 giữ `success=0.9, citation_accuracy=0.95` tới đó.
 
 Số đo thật để biết vì sao phải recalibrate: bộ 5 → `success 4/5 = 0.80`; bộ 10 →
@@ -280,9 +280,26 @@ chở bằng chứng của bộ chấm thì hợp đồng khai là chưa quy đ�
 > Một trích dẫn theo số dòng qua repo khác là một trích dẫn sẽ mục — đúng lớp lỗi vừa nêu thành finding
 > trên kb#10, nên không tự mắc lại.
 
-**Đã verify trên HEAD của kb#10 (2026-08-03):** `outputs` **vẫn** `⏸ hoãn S2`. DE đã sửa drift
-`tenant: str` → `tenant_id: UUID` trong cùng PR (hàng `d13-align`), nhưng clause `outputs` thì chưa —
-nên F-5 còn mở, không phải đã đóng.
+**Trạng thái `outputs` — đo lại 2026-08-04, và nó đã đổi từ lần đo trước:**
+
+| Nơi | kb `main` | nhánh kb#10 `day11/de-contract-freeze` |
+|---|---|---|
+| **§3** bảng field | `⏸ hoãn S2` | ✅ **DE đã sửa** → *"`outputs` \| ✅ điền thật (D11)"* |
+| **§2** schema yaml | `outputs: obj?` dưới `# ── để trống tới S2 ──` | ❌ **còn nguyên** |
+
+⇒ **F-5 còn mở, nhưng chỉ cho §2** — không phải cho cả doc. Trên nhánh kb#10 doc đang **tự mâu thuẫn
+§2 ↔ §3**.
+
+> Bản trước của mục này ghi *"đã verify trên HEAD kb#10: `outputs` **vẫn** `⏸ hoãn S2`"*. Câu đó **đúng
+> lúc đo** và **sai sau đó vài giờ** — DE sửa §3 ở giữa. @DongAnh2704 bắt được khi review evalhub#7, và
+> nêu đúng hệ quả: để nguyên thì chủ quadrant đọc sẽ tưởng **bị đòi làm lại việc đã làm**.
+>
+> Bài học đưa vào cách viết clause: **một câu trạng thái về repo khác phải đóng dấu thời điểm đo ngay
+> trong câu đó**, không chỉ ở phần verify cuối doc — vì phần verify thì người đọc lướt qua, còn câu ask
+> thì họ hành động theo. Cùng lý do §7 này trích theo **§ + tên field** thay vì số dòng.
+
+DE cũng đã sửa drift `tenant: str` → `tenant_id: UUID` trong cùng PR (hàng `d13-align`, ghi công review
+AIE-2).
 
 **Vì sao cần:** biến leak-check từ **sanity theo slug** thành **chứng minh mức UUID**. Hôm nay
 `_citation_tenant` cắt tiền tố chuỗi `chunk_id` (`harness.py:49-57`) — nhãn mềm, trùng được, sửa được.

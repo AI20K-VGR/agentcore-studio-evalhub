@@ -91,10 +91,30 @@ test bảo vệ**"* — và tôi đã viết đúng câu đó vào bản nháp r
 ⇒ **Invariant đó có 2 lớp bảo vệ, không phải 0.** Lập luận "bằng số" của tôi sẽ là một lập luận **sai
 bằng số** nếu gửi đi. Đã sửa bản nháp review trước khi gửi.
 
-**Cái vẫn còn đúng, và giờ là ask nhỏ hơn nhiều:** hợp đồng `trace-event.v0.md:77` vẫn khai `outputs`
-là *"⏸ hoãn S2"*. Nên chỗ hở **không** phải thiếu test — mà là **doc không khai một invariant mà code
-và test đều đang cưỡng chế**. Ask đổi từ *"xin freeze một thứ chưa ai bảo vệ"* thành *"xin doc ghi lại
-đúng thứ 2 lớp test đã bảo vệ"*. Ask sau dễ đồng ý hơn, và đúng hơn.
+**Cái vẫn còn đúng, và giờ là ask nhỏ hơn nhiều:** chỗ hở **không** phải thiếu test — mà là **doc
+không khai một invariant mà code và test đều đang cưỡng chế**. Ask đổi từ *"xin freeze một thứ chưa ai
+bảo vệ"* thành *"xin doc ghi lại đúng thứ 2 lớp test đã bảo vệ"*. Ask sau dễ đồng ý hơn, và đúng hơn.
+
+> ### Ask này đã THU HẸP tiếp — @DongAnh2704 làm một nửa rồi (cập nhật sau review evalhub#7)
+>
+> Bản trước viết *"`trace-event.v0.md:77` **vẫn** khai `outputs` là ⏸ hoãn S2"*. Câu đó **đúng với kb
+> `main`** nhưng **đã lạc hậu với nhánh kb#10** — DE sửa §3 sau khi tôi kiểm. Trạng thái thật, đo lại:
+>
+> | Nơi | kb `main` | nhánh `day11/de-contract-freeze` |
+> |---|---|---|
+> | **§3** bảng field | `⏸ hoãn S2` | ✅ **đã sửa** → *"`outputs` \| ✅ điền thật (D11) \| `interpreter.py:298` truyền `outputs` thật mọi event"* |
+> | **§2** schema yaml | `outputs: obj?` dưới `# ── để trống tới S2 ──` | ❌ **còn nguyên** |
+>
+> ⇒ Trên nhánh đó, doc hiện **tự mâu thuẫn §2 ↔ §3**. Ask còn hiệu lực **chỉ cho §2**, không phải cho
+> cả doc.
+>
+> **Vì sao phải sửa câu chữ chứ không để nguyên:** DE nêu đúng khi review — nếu để câu cũ, chủ quadrant
+> đọc sẽ tưởng **bị đòi làm lại việc đã làm**. Một ask lạc hậu không chỉ vô ích, nó tiêu uy tín của
+> những ask còn lại.
+>
+> Đây là dấu hiệu hai commit D11 giao nhau chưa reconcile — bảng mutation này (AIE-2) và bản pin của DE
+> viết song song, mỗi bên đọc trạng thái của bên kia ở một thời điểm khác nhau. Ghi ra để lần sau
+> **đóng dấu thời điểm đo** vào chính câu trích, không chỉ vào phần verify.
 
 **Đây là lý do phương pháp khai-trước đáng giá:** nó biến một niềm tin sai thành một finding về chính
 mình, **trước** khi niềm tin đó thành một câu nói với đồng đội.

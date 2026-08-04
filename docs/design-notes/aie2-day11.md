@@ -116,7 +116,29 @@ dòng hợp đồng**, không phải một field. `scorecard-v0.md:335-337` từ
 | Rủi ro | Vì sao nó thật | Trạng thái |
 |---|---|---|
 | **Không có nguồn nhãn tay cho `Judge.agreement`** | Field **đích** đã có (`scorecard.py:19`); field **nguồn không tồn tại** ở bất kỳ đâu trong workspace; hằng số **bị cấm** (`judge.py:6-9`) ⇒ **mọi ô judge là `todo:` không có ETA cam kết được**. Đây là món **không tự đặt đáp án** | 🔴 chặn · chủ **mentor** · hạn D18 |
-| **Mọi ngưỡng đang pin vào một stand-in** | `ExtractiveFakeLLM` chỉ đọc top-1, không có năng lực quyết định refusal. Với mặc định `0.9/0.95` (`builder.py:48-49`), số đo thật là bộ 5 → `0.80`, bộ 10 → `0.60` / `citation_accuracy` `0.833` ⇒ **một recipe TỐT cũng FAIL cả hai trục**, nên demo *"sửa instructions tệ → FAIL → chặn publish"* chứng minh **số không** | 🟡 recalibrate D16, chủ AIE-2. **Không** hạ số hôm nay — hạ bây giờ là hiệu chỉnh theo stand-in |
+| **Mọi ngưỡng đang pin vào một stand-in** | `ExtractiveFakeLLM` chỉ đọc top-1, không có năng lực quyết định refusal. Với mặc định `0.9/0.95` (**`packages/workbench`** → `src/studio_workbench/builder.py:48-49`, xem ghi chú dưới bảng), số đo thật là bộ 5 → `0.80`, bộ 10 → `0.60` / `citation_accuracy` `0.833` ⇒ **một recipe TỐT cũng FAIL cả hai trục**, nên demo *"sửa instructions tệ → FAIL → chặn publish"* chứng minh **số không** | 🟡 recalibrate D16, chủ AIE-2. **Không** hạ số hôm nay — hạ bây giờ là hiệu chỉnh theo stand-in |
+
+> **Ngưỡng `0.9/0.95` nằm ở BA chỗ, tất cả trong `packages/workbench` — không phải trong `evalhub`.**
+> Người recalibrate ở D16 cần cả ba, đổi một chỗ mà quên hai chỗ kia là tạo ra hai bộ số cùng tồn tại:
+>
+> | Chỗ | Là gì |
+> |---|---|
+> | `workbench:src/studio_workbench/builder.py:48-49` | **default param** của `create_dynamic_recipe` (`success_threshold: float = 0.9` · `citation_accuracy_threshold: float = 0.95`) |
+> | `workbench:src/studio_workbench/builder.py:114` | hardcode `ScorecardThreshold(success=0.9, citation_accuracy=0.95)` |
+> | `workbench:src/studio_workbench/builder.py:192` | hardcode, như trên |
+>
+> **Vì sao ghi rõ tên repo (phát hiện của @DongAnh2704 khi review evalhub#7):** bản trước viết trần
+> `builder.py:48-49`. Trong một design-note **nằm ở `evalhub`**, một đường dẫn không có tiền tố repo thì
+> người đọc resolve theo repo đang đứng — DE chạy `find packages/evalhub -name builder.py`, không thấy,
+> và kết luận anchor sai. **Kết luận đó sai nhưng finding thì đúng:** một trích dẫn cross-repo không
+> nêu repo là một trích dẫn mơ hồ, và người đọc cẩn thận resolve nó sai chứ không phải người đọc ẩu.
+>
+> Trong `evalhub` thì `0.9/0.95` **chỉ xuất hiện trong test fixture**, không có trong `src/` — đúng như
+> DE đo. Đó chính là lý do đọc trần `builder.py` từ evalhub ra kết quả "không tồn tại".
+>
+> Cùng lớp lỗi với hai chỗ khác đã sửa hôm nay: trích `trace-event.v0.md:77` theo **số dòng** qua repo
+> khác (dòng đã dịch sang `:113`), và finding tôi gửi kb#10 về `tenant: str`. **Trích cross-repo phải
+> nêu repo, và nên nêu § thay vì số dòng.**
 | **golden-30 về sau corpus D13** | Corpus-cutover D13 gần chắc làm `smoke-5`/`smoke-10` hiện tại vỡ ⇒ số ở D16 có thể bị đọc là **hồi quy của bộ chấm**. Kế hoạch: sáng D13 hỏi lịch cutover, chiều re-run và báo lệch trước | 🟡 chủ DE (giao bộ) + AIE-2 (báo lệch) · hạn D15 |
 | **Carrier `citations` là hành vi, không phải cấu trúc** | `citations_from_trace` gom **node-agnostic** (`harness.py:85-89`) nên phân biệt retrieved/grounded **chỉ vì engine hôm nay tình cờ hành xử vậy**. Bất kỳ node trả **dict** có key `"citations"` sẽ mang citations vào trace — `condition`/`tool-call` đều trả dict | 🟡 chờ clause AIE-1 (D12). Lưới đỡ đã có: siết theo `node_type` **phía evalhub** |
 | **`refused` cho dương-tính-giả (#14)** | `refused = not citations`: câu bịa trọn vẹn mà quên đóng ngoặc ⇒ `citations=[]` ⇒ `refused=True` ⇒ **SC-04 PASS dù agent đã bịa**. Trên bài kiểm hàng rào, **xanh-giả nguy hiểm hơn đỏ-giả** | 🟡 chủ **AIE-1** · hạn D17 |
