@@ -213,14 +213,33 @@ def _demo_runner() -> StubAgentRunner:
 
 
 def _render(results: list[SmokeResult]) -> str:
-    """Bảng `case_id | success | citation_acc` — cột 'in success' theo issue #14/#19."""
-    header = f"{'case_id':<20} {'success':<8} {'citation_acc':>12}"
+    """Bảng `case_id | nhánh | success | citation_acc` — cột 'in success' theo issue #14/#19.
+
+    **Dòng từ-chối in `n/a`, KHÔNG in `1.00`** — clause §3 phần 3 của `docs/contracts/scorecard.v1.md`
+    (DEC-04, D11) tự hẹn land đúng ngày **D12** (`kit#88`). `1.00` ở nhánh này là **quy ước
+    vacuous-truth**, không phải phép đo: in nó ra bảng người-đọc là mời người đọc cộng một con số
+    không đo được vào trung bình đầu — đúng cơ chế thổi phồng `aggregate` mà GUIDE-C Q8 chỉ ra (`0.90`
+    báo vs `0.833` thật; 3 case **đã đỏ** vẫn góp `1.00`).
+
+    `SmokeResult.citation_accuracy` **vẫn là `float` 1.0** trên object — chỉ **cách hiển thị** đổi, và
+    đó là chủ ý: đổi kiểu sang `float | None` sẽ `TypeError` ở 3 renderer format `:.2f`
+    (`smoke_eval_d6.py:219` · `e2e_smoke_eval.py:294` · chỗ này), còn pin test
+    `test_refusal_citation_accuracy_is_pinned_convention_not_measurement` khoá đúng giá trị `1.0` đó.
+    Quy ước `n/a` không mới: `e2e_smoke_eval.py:341` đã in `n/a*` từ D10 — hôm nay mang nó vào CLI.
+    """
+    header = f"{'case_id':<20} {'nhánh':<9} {'success':<8} {'citation_acc':>12}"
     lines = [header, "-" * len(header)]
     for r in results:
-        lines.append(f"{r.case_id:<20} {('PASS' if r.success else 'FAIL'):<8} {r.citation_accuracy:>12.2f}")
+        branch = "từ-chối" if r.expects_refusal else "trả-lời"
+        acc = f"{'n/a':>12}" if r.expects_refusal else f"{r.citation_accuracy:>12.2f}"
+        lines.append(f"{r.case_id:<20} {branch:<9} {('PASS' if r.success else 'FAIL'):<8} {acc}")
     passed = sum(1 for r in results if r.success)
     lines.append("-" * len(header))
     lines.append(f"{passed}/{len(results)} PASS")
+    lines.append(
+        "n/a = nhánh từ-chối: `citation_accuracy` ở nhánh này là quy ước vacuous-truth (giá trị trên "
+        "object vẫn là 1.0), KHÔNG phải phép đo ⇒ không cộng vào mẫu số aggregate (DEC-04)."
+    )
     return "\n".join(lines)
 
 

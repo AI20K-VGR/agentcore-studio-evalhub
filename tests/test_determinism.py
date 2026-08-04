@@ -239,6 +239,11 @@ def test_equality_actually_discriminates() -> None:
 
     Đi qua **mọi** field thay vì một field mẫu: `__eq__` so theo tập field, nên chỉ cần một field bị
     loại khỏi phép so là lệch ở field đó lọt qua im lặng — đúng loại lỗi mà "thử một field" bỏ sót.
+
+    **Sửa D12:** chữ *"mọi field"* trước đây là một **danh sách gõ tay** — thêm field thứ 6
+    (`expects_refusal`, DEC-D12-01) là nó hết đúng mà không bài nào đỏ. Đúng lớp lỗi bài này sinh ra
+    để chặn, chỉ ở một tầng cao hơn: một bất biến phát biểu bằng lời mà không ai cưỡng chế. Nên bây
+    giờ danh sách được **đối chiếu cơ khí** với `SmokeResult.model_fields`.
     """
     base = SmokeResult(
         case_id="c1", expected="12 ngày", actual="Được nghỉ 12 ngày.", success=True, citation_accuracy=1.0
@@ -249,7 +254,15 @@ def test_equality_actually_discriminates() -> None:
         {"actual": "câu khác"},
         {"success": False},
         {"citation_accuracy": 0.0},
+        {"expects_refusal": True},
     ]
+
+    # Cưỡng chế chữ "mọi field": thêm field mới mà quên cấy lệch cho nó ⇒ bài này đỏ NGAY.
+    perturbed_fields = {name for update in perturbations for name in update}
+    assert perturbed_fields == set(SmokeResult.model_fields), (
+        "danh sách cấy lệch không còn phủ đủ field của SmokeResult — "
+        f"thiếu {set(SmokeResult.model_fields) - perturbed_fields}"
+    )
 
     assert base == base.model_copy()  # bản sao y nguyên PHẢI bằng
     for update in perturbations:

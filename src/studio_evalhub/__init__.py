@@ -16,6 +16,7 @@ from studio_evalhub.harness import (
     tenant_scope_ok,
 )
 from studio_evalhub.judge import LLMJudge
+from studio_evalhub.render import render_scorecard
 
 __all__ = [
     "AgentAnswer",
@@ -29,6 +30,7 @@ __all__ = [
     "StubAgentRunner",
     "citations_from_trace",
     "compute_scorecard",
+    "render_scorecard",
     "score_case",
     "tenant_scope_ok",
 ]
