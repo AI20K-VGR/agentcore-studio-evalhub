@@ -42,8 +42,8 @@ freeze: FREEZE-READY   # chưa FROZEN — xem "Còn mở" bên dưới
 | **DEC-Q3** | `section_roles` resolve **server-side**, harness dựng phiên mang quyền rồi chạy case — **không** truyền `case.section_roles` thẳng vào `kb.search` | Chữ trong doc AIE-2 đã đúng (`golden_case.py:110-116`); phần còn thiếu là **code của người khác**: lỗ nằm ở recipe tự khai roles (`executors.py:138` đọc `node.params.get("section_roles")`), và `Recipe` là bút SWE | `scorecard-v0.md` §3 Q3 | 🟡 hoãn — chủ **SWE + DE**, hạn **D17** |
 | **DEC-Q4** | **KHÔNG** promote `AgentRunner` lên `studio_contracts.protocols` hôm nay | Thêm seam thứ 4/5 vào layer đáy là **mở rộng bề mặt freeze đúng ngày đóng băng nó**; `AgentRunner` (`agent_runner.py:76`) chạy tốt như Protocol nội bộ và `lint-imports` đã `1 kept, 0 broken` ⇒ layering **không** đòi promote; adapter sống ở composition root `apps/studio`. Phương án bỏ: promote ⇒ 4/4 chữ ký cho **mỗi** lần đổi shape seam, trong lúc seam còn tiến hoá qua D14/D16 | `docs/mini-rfc/MRFC-2026-08-03-agentrunner-protocol-seam.md` (**PRE-WRITTEN**, cố ý chưa nộp) | 🟡 hoãn — chủ **AIE-2 + AIE-1**, hạn **D14** |
 | **DEC-Q5** | `eval.golden_sets` (`schema.py:20-25`, bút AIE-2) là **nguồn sự thật**. DE **sinh + gán nhãn**, giao YAML ở `packages/kb/golden/`; AIE-2 **nạp**. `obs.golden_sets` bỏ | Lý do là **quyền**, không phải sở thích — và là Q-D của chính DE (`trace-event.v0.md:242`): *"`obs.golden_sets` nằm trong `apps/studio/` — không phải fence-lane của DE. DE điền bằng cách nào?"* Đáp: **không điền được**. Ranh giới: DE sở hữu **giá trị**, AIE-2 sở hữu **nơi lưu + loader** (§2.6). Loader hết blocker: `pyyaml>=6.0` khai tường minh `pyproject.toml:26` từ `kit#65` | `scorecard-v0.md` §3 Q5 · review trên [kb#10](https://github.com/AI20K-VGR/agentcore-studio-kb/pull/10) | 🟡 chờ DE xác nhận |
-| **DEC-08** | Khai vào hợp đồng (§3.1) rằng `citation_accuracy` đo **sức mạnh FENCE**, KHÔNG đo **sức mạnh TRUY XUẤT**, trên bộ golden hiện tại | Null control của **AIE-1** (`engine#15`), **AIE-2 đã tự tái lập** bằng `measure_chunk_embed.py --null`: vector hằng số **0 bit thông tin** đạt `recall@1 = 6/6` **bằng đúng** bag-of-words dim=8/256 thật; cột *"top1 không hoà"* = **0**. Nguyên nhân: fence tự quyết **4/6 case** (sau lọc `tenant_id`+`section_role` chỉ còn 1 ứng viên ⇒ ranking không quyết định gì), 2 case còn lại thắng nhờ hoà điểm + thứ tự sort. ⇒ metric **không phát hiện được hồi quy embedding**: gateway thật về mà embedding tệ hơn stub thì điểm vẫn `6/6`, tức một trục của gate `AND` **không có răng**, và ngưỡng `0.95` (`workbench:src/studio_workbench/builder.py:49` — **repo workbench, không phải evalhub**; trong evalhub `0.9/0.95` chỉ có trong test fixture) đo một thứ khác với thứ tên nó gợi ra. Ghi giới hạn vào freeze thay vì đợi sửa: một hợp đồng khai đúng thứ nó chưa chứng minh được thì **mạnh hơn** — không khai thì D16 sẽ có người đọc `0.95` là bằng chứng retrieval, đúng lớp **xanh-giả** với `refused` dương-tính-giả | [evalhub#6 comment](https://github.com/AI20K-VGR/agentcore-studio-evalhub/pull/6) (@TranBaDat2607) · [engine#15](https://github.com/AI20K-VGR/agentcore-studio-engine/pull/15) `docs/design-notes/aie1-day11.md` §3 · `scorecard.v1.md` §3.1 | ✅ đã khai vào hợp đồng |
 | **DEC-07** | Rút một tiền đề của chính AIE-2: leak-check mức UUID **KHÔNG** cần đổi contract | `scorecard-v0.md:335-337` viết *"cần `tenant_id` per-chunk → đổi contract → mini-RFC + 4/4 chữ ký"*. Đo lại: dữ liệu **đã có từ D5** ở `outputs["chunks"]` (`interpreter.py:265-268`; `KbSearchResultItem.tenant_id: UUID`), **4 consumer đang đọc**. Thiếu là **một dòng hợp đồng** (`trace-event.v0.md:77` khai `outputs` là *"⏸ hoãn S2"*), **0 bump, 0 mini-RFC**. Định giá quá cao làm việc bị hoãn vô cớ | `scorecard-v0.md` §2.8 (giữ cả câu sai + phần rút) | ✅ rút, có ghi lại |
+| **DEC-08** | Khai vào hợp đồng (§3.1) rằng `citation_accuracy` đo **sức mạnh FENCE**, KHÔNG đo **sức mạnh TRUY XUẤT**, trên bộ golden hiện tại | Null control của **AIE-1** (`engine#15`), **AIE-2 đã tự tái lập** bằng `measure_chunk_embed.py --null`: vector hằng số **0 bit thông tin** đạt `recall@1 = 6/6` **bằng đúng** bag-of-words dim=8/256 thật; cột *"top1 không hoà"* = **0**. Nguyên nhân: fence tự quyết **4/6 case** (sau lọc `tenant_id`+`section_role` chỉ còn 1 ứng viên ⇒ ranking không quyết định gì), 2 case còn lại thắng nhờ hoà điểm + thứ tự sort. ⇒ metric **không phát hiện được hồi quy embedding**: gateway thật về mà embedding tệ hơn stub thì điểm vẫn `6/6`, tức một trục của gate `AND` **không có răng**, và ngưỡng `0.95` (`workbench:src/studio_workbench/builder.py:49` — **repo workbench, không phải evalhub**; trong evalhub `0.9/0.95` chỉ có trong test fixture) đo một thứ khác với thứ tên nó gợi ra. Ghi giới hạn vào freeze thay vì đợi sửa: một hợp đồng khai đúng thứ nó chưa chứng minh được thì **mạnh hơn** — không khai thì D16 sẽ có người đọc `0.95` là bằng chứng retrieval, đúng lớp **xanh-giả** với `refused` dương-tính-giả | [evalhub#6 comment](https://github.com/AI20K-VGR/agentcore-studio-evalhub/pull/6) (@TranBaDat2607) · [engine#15](https://github.com/AI20K-VGR/agentcore-studio-engine/pull/15) `docs/design-notes/aie1-day11.md` §3 · `scorecard.v1.md` §3.1 | ✅ đã khai vào hợp đồng |
 
 ## Còn mở — chặn `FROZEN` thật sự
 
@@ -76,20 +76,36 @@ freeze: FREEZE-READY   # chưa FROZEN — xem "Còn mở" bên dưới
 
 ## Dấu vết chữ ký (ADR-D11-01 lớp 2 — KHÔNG phải chỗ ký)
 
-Chữ ký thật = **Approve trên PR**. Bảng này chỉ **chép lại** trạng thái đã có thật trên GitHub.
+Chữ ký thật = **Approve trên PR**. Bảng này chỉ **chép lại** trạng thái có thật trên GitHub.
 
-| Vai | GitHub | PR | Approve? | Ngày | `<repo>@<sha>` |
+Luật đếm (ADR-D11-01 + giới hạn cơ học ở [kit#84 §5](https://github.com/AI20K-VGR/agentcore-studio-kit/issues/84)):
+GitHub **không cho tác giả tự-approve**, nên trần là **tác giả tự ký + 3 Approve từ 3 người còn lại**.
+
+**Đồng bộ 2026-08-04 07:55Z — 4/4 PR đủ 3/3, và cả 12 chữ ký đều ở đúng head của PR (0 stale):**
+
+| PR | `<repo>@<sha>` | AIE-1 | AIE-2 | DE | SWE |
 |---|---|---|---|---|---|
-| AIE-2 (bút) | @dholmes0207 | contracts#1 | — | — | — |
-| AIE-1 | @TranBaDat2607 | contracts#1 | — | — | — |
-| DE | @DongAnh2704 | contracts#1 | — | — | — |
-| SWE | @Dozyboy | contracts#1 | *(tác giả PR)* | 2026-08-03 | `contracts@2b95ca9` |
+| `contracts#1` (`judge` → optional) | `contracts@2b95ca9` | ✅ 04-08 | ✅ 03-08 | ✅ 04-08 | ✍️ tác giả |
+| `contracts#3` (`recipe_hash`, D-24) | `contracts@dcea5b4` | ✅ 04-08 | ✍️ tác giả | ✅ 04-08 | ✅ 04-08 |
+| `evalhub#6` (hợp đồng `scorecard.v1`) | `evalhub@150d6bd` | ✅ 03-08 | ✍️ tác giả | ✅ 04-08 | ✅ 04-08 |
+| `evalhub#7` (design-note + 5 mutation) | `evalhub@c4fc9e7` | ✅ 04-08 | ✍️ tác giả | ✅ 04-08 | ✅ 04-08 |
 
-Verify không cần tin ai:
+Verify độc lập — **đừng tin bảng này**, chạy lệnh. Nó đối chiếu `commit_id` của mỗi Approve với `head`
+để lộ chữ ký **stale** (Approve bị dismiss khi tác giả push):
 
 ```bash
-gh pr view 1 --repo AI20K-VGR/agentcore-studio-contracts --json reviews \
-  --jq '.reviews[]|"\(.author.login) \(.state) \(.commit.oid[0:8])"'
+for x in "contracts 1" "contracts 3" "evalhub 6" "evalhub 7"; do
+  set -- $x
+  gh pr view $2 --repo AI20K-VGR/agentcore-studio-$1 --json reviews,headRefOid \
+    --jq '.headRefOid[0:7] as $h | .reviews[] | select(.state=="APPROVED")
+          | "'"$1"'#'"$2"'  \(.author.login)  \(.commit.oid[0:7])  \(if .commit.oid[0:7]==$h then "hợp lệ" else "STALE" end)"'
+done
 ```
 
-**Trạng thái: 0/4 chữ ký thật.** Không báo 4/4, và không tick ô DoD nào dựa trên bảng này.
+> **Bảng này SẼ mục, và đó là lý do có lệnh ở trên** — finding của @Dozyboy khi review `evalhub#6`:
+> *"ghi cứng 0/4 chữ ký thật tại thời điểm viết... ai đọc file mà không chạy lệnh sẽ thấy trạng thái
+> cũ"*. Nó đã mục thật: bản trước ghi **0/4** trong khi thực tế đã là 3/3 trên cả 4 PR.
+>
+> **Nợ:** CI job tự sync bảng này từ `gh pr view --json reviews` thay vì sửa tay — đề xuất của
+> @Dozyboy, chủ **AIE-2**, hạn **D12**. Tới lúc đó, mỗi lần sửa tay phải ghi lại mốc đồng bộ như dòng
+> **"Đồng bộ ... 07:55Z"** ở trên, để người đọc biết bảng cũ tới đâu.
