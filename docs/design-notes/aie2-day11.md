@@ -60,10 +60,11 @@ Một câu: **bộ chấm đọc TRACE, không đọc lời agent tự khai.**
   sát được ⇒ FAIL"*, **không** phải *"citation rỗng ⇒ FAIL"* — luật sau ngược oracle F02
   (GUIDE-C `:592`: *"refused, cited nothing ⇒ the case PASSES"*).
 
-**Golden-set:** DE sở hữu **giá trị** (case + nhãn tay + tên bộ), AIE-2 sở hữu **nơi lưu + loader**
-(`eval.golden_sets`). Chọn bảng đó vì nó là bảng **có người ghi được** — `obs.golden_sets` nằm trong
-`apps/studio`, ngoài fence-lane của DE, nên DE không điền được. Đó là câu hỏi của chính DE, trả bằng
-quyền chứ không bằng sở thích.
+**Golden-set (đề xuất `DEC-Q5`, 🟡 CHƯA được DE xác nhận):** DE sở hữu **giá trị** (case + nhãn tay +
+tên bộ), AIE-2 sở hữu **nơi lưu + loader** (`eval.golden_sets`). Chọn bảng đó vì nó là bảng **có người
+ghi được** — `obs.golden_sets` nằm trong `apps/studio`, ngoài fence-lane của DE, nên DE không điền được.
+Đó là câu hỏi của chính DE, trả bằng quyền chứ không bằng sở thích. **Nhưng ranh giới này là đề xuất
+một phía cho tới khi DE chốt `DEC-Q5`** — mọi chỗ trong repo này viết nó như đã chốt là viết sai.
 
 **Judge cap ≤100/ngày + cache:** cap là **điều kiện kích hoạt descope**, không phải tính năng. Khi
 chạm trần ⇒ rơi về exact-match scorer (INV-7). Cache theo `(case_id, actual)` vì `actual` tất định với
@@ -125,7 +126,7 @@ dòng hợp đồng**, không phải một field. `scorecard-v0.md:335-337` từ
 
 | Rủi ro | Vì sao nó thật | Trạng thái |
 |---|---|---|
-| **Không có nguồn nhãn tay cho `Judge.agreement`** | Field **đích** đã có (`scorecard.py:19`); field **nguồn không tồn tại** ở bất kỳ đâu trong workspace; hằng số **bị cấm** (`judge.py:6-9`) ⇒ **mọi ô judge là `todo:` không có ETA cam kết được**. **Đổi chủ 04/08:** trước ghi `mentor` — sai, vì mentor **không tác động** vào quá trình, chỉ nhận kết quả và chạy để chấm. Món gán cho người-không-hành-động thì không bao giờ nhích | 🔴 chặn · chủ **AIE-2** (định nghĩa `agreement` đo gì + format + chỗ lưu) **+ DE** (sinh nhãn tay, cùng golden-30 D15) · hạn D18 |
+| **Không có nguồn nhãn tay cho `Judge.agreement`** | Field **đích** đã có (`scorecard.py:19`); field **nguồn không tồn tại** ở bất kỳ đâu trong workspace; hằng số **bị cấm** (`judge.py:6-9`) ⇒ **mọi ô judge là `todo:` không có ETA cam kết được**. **Đổi chủ 04/08:** trước ghi `mentor` — sai, vì mentor **không tác động** vào quá trình, chỉ nhận kết quả và chạy để chấm. Món gán cho người-không-hành-động thì không bao giờ nhích | 🔴 chặn · chủ **AIE-2** (định nghĩa `agreement` đo gì + format + chỗ lưu) **+ DE** (sinh nhãn tay — 🟡 **ĐỀ XUẤT, CHƯA xác nhận**; căn cứ `DEC-Q5` cũng đang chờ DE, điều kiện lật = DE chốt `DEC-Q5`) · hạn D18 · phần DE chờ chốt `DEC-Q5` |
 | **Mọi ngưỡng đang pin vào một stand-in** | `ExtractiveFakeLLM` chỉ đọc top-1, không có năng lực quyết định refusal. Với mặc định `0.9/0.95` (**`workbench`**, xem bảng 4 chỗ dưới đây), số đo thật là bộ 5 → `0.80`, bộ 10 → `0.60` / `citation_accuracy` `0.833` ⇒ **một recipe TỐT cũng FAIL cả hai trục**, nên demo *"sửa instructions tệ → FAIL → chặn publish"* chứng minh **số không** | 🟡 recalibrate D16, chủ AIE-2. **Không** hạ số hôm nay — hạ bây giờ là hiệu chỉnh theo stand-in |
 | **golden-30 về sau corpus D13** | Corpus-cutover D13 gần chắc làm `smoke-5`/`smoke-10` hiện tại vỡ ⇒ số ở D16 có thể bị đọc là **hồi quy của bộ chấm**. Kế hoạch: sáng D13 hỏi lịch cutover, chiều re-run và báo lệch trước | 🟡 chủ DE (giao bộ) + AIE-2 (báo lệch) · hạn D15 |
 | **Carrier `citations` là hành vi, không phải cấu trúc** | `citations_from_trace` gom **node-agnostic** (`harness.py:85-89`) nên phân biệt retrieved/grounded **chỉ vì engine hôm nay tình cờ hành xử vậy**. Bất kỳ node trả **dict** có key `"citations"` sẽ mang citations vào trace | ✅ **phía engine ĐÓNG 04/08** — AIE-1 giao clause + code + test (`engine#15` merged `04:07:30`, `interpreter.py:304` gate `node_type is NodeType.LLM_STEP`, `engine:docs/contracts/trace-citations.v0.md`). 🔴 **phía evalhub CHƯA có lưới** — chủ **AIE-2**, hạn **D16** |

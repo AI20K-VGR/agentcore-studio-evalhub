@@ -75,6 +75,18 @@ freeze: FREEZE-READY   # chưa FROZEN — xem "Còn mở" bên dưới
 >
 > Ghi lại vì đây là lần thứ hai trong hai commit liền nhau tôi tạo một owner-không-thật — bằng chứng
 > rằng cái khó không phải *biết luật*, mà là **kiểm lại chính bảng vừa sửa**.
+>
+> **Vòng hai của cùng finding (@DongAnh2704 trên `evalhub#11`) — sửa một chỗ không phải là sửa.** Vòng
+> đầu tôi chỉ sửa **2 file** (`decisions/scorecard.md` + `design-notes/aie2-day11.md` risk-table) và để
+> nguyên `docs/contracts/scorecard.v1.md` §9 — tức **file FROZEN, nguồn thẩm quyền cao nhất, vẫn đọc như
+> đã chốt** trong lúc decision-log nói chưa. DE gọi đúng: đây là pattern `evalhub#10` từng làm đúng
+> (đồng bộ cả 3 file) mà `evalhub#11` làm dở dang. **Đồng bộ đủ 4 chỗ:** `scorecard.v1.md:352` · bảng
+> đính chính `scorecard.v1.md:367` · `aie2-day11.md:128` (risk-table) · `aie2-day11.md:63` (câu
+> ranh-giới golden-set — DE **không** nêu chỗ này, nhưng nó cùng lớp: phát biểu ranh giới `DEC-Q5` như
+> một sự thật đã có). Dòng Sổ chốt 04/08 trong contract **không sửa** — append dòng mới, vì sổ
+> append-only và xoá vết lỗi là xoá đúng phần đáng học.
+> **Luật rút ra:** một trạng thái *"chưa chốt"* phải đúng ở **mọi** file nêu nó; chỗ lệch duy nhất còn
+> lại là chỗ người đọc sẽ tin, và nó luôn là file có thẩm quyền cao nhất.
 
 ## Hoãn — mọi món có chủ + hạn (0 món vô chủ)
 

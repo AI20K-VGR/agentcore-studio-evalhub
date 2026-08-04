@@ -349,7 +349,8 @@ chỗ nào trong workspace lưu *verdict của người* cho từng `actual`. V�
 
 ⇒ **Mọi ô judge là `todo:` không có ETA cam kết được.**
 
-**Chủ: AIE-2**, hạn **D18**, phụ thuộc **DE** cho phần giá trị.
+**Chủ: AIE-2**, hạn **D18**. Phần **giá trị** (sinh nhãn tay) là **ĐỀ XUẤT cho DE, CHƯA được DE xác
+nhận** — căn cứ là `DEC-Q5`, mà `DEC-Q5` chính nó đang 🟡 chờ DE. Điều kiện lật = **DE chốt `DEC-Q5`**.
 
 > ### ⚠️ ĐÍNH CHÍNH chủ sở hữu — 2026-08-04 (không sửa clause, sửa metadata)
 >
@@ -364,7 +365,15 @@ chỗ nào trong workspace lưu *verdict của người* cho từng `actual`. V�
 > | Phần | Chủ |
 > |---|---|
 > | Định nghĩa `agreement` đo **cái gì**, format field nhãn tay, chỗ lưu (mở rộng `eval.golden_sets`) | **AIE-2** — bút `scorecard` |
-> | **Sinh nhãn tay** cho case golden-30 | **DE** — bút golden-set (`DEC-Q5`) |
+> | **Sinh nhãn tay** cho case golden-30 | **DE** — bút golden-set (`DEC-Q5`) · 🟡 **ĐỀ XUẤT, CHƯA xác nhận** |
+>
+> ⚠️ **Đính chính lần hai — 2026-08-04, finding @DongAnh2704 trên `evalhub#10`.** Dòng DE ở trên là
+> **đề xuất**, không phải thoả thuận: căn cứ của nó là `DEC-Q5`, mà `DEC-Q5` đang 🟡 **chờ DE xác nhận**.
+> Gán việc dựa trên một quyết định mà **chính người bị gán chưa xác nhận** là cùng một lớp lỗi với ô
+> `mentor` mà chính khối này sửa — khác ở chỗ mentor *không bao giờ* hành động, còn DE *chưa nói có hay
+> không*. Cả hai làm bảng theo dõi **trông như đã được quản lý** trong khi chưa.
+> **Điều kiện lật sang thoả thuận:** DE chốt `DEC-Q5`. Tới lúc đó hạn đọc là
+> *"D18 · phần DE chờ chốt `DEC-Q5`"*, không phải `D18` trơn.
 >
 > Tôi **nhận món này**, không đẩy sang DE: phần chặn thật là *"đo cái gì và lưu ở đâu"* — đó là bút tôi.
 > Phần của DE là giá trị, và nó đi cùng golden-30 (hạn D15) chứ không phải một việc mới.
@@ -388,3 +397,4 @@ chỗ nào trong workspace lưu *verdict của người* cho từng `actual`. V�
 | 03/08 (D11) | **`Gate.threshold` ≡ `Recipe.scorecard_threshold`** | Giữ **hai** class (`ScorecardThreshold` 8 file vs `GateThreshold` 2 file), **không hợp nhất**; thay bằng **invariant** bằng-từng-field. Test do AIE-2 viết. Giá trị ngưỡng = **dữ liệu**, chủ AIE-2, recalibrate D16 |
 | 03/08 (D11) | **Chữ ký + decision-log** | Theo **ADR-D11-01**: chữ ký thật = Approve trên PR; dấu vết ở `docs/decisions/scorecard.md` **cùng repo này**. Bỏ ý định làm bảng tự-điền trong file contract, và bỏ ý định làm `sig-<id>.md` per-người — tách theo **hợp đồng** đã giải quyết vấn đề "một người gõ hộ bốn dòng". **Đổi chỗ hai lần trong ngày, ghi lại cả hai:** ban đầu định gom vào `kit:docs/decision-log.md`; rồi theo khung kit#130 (`kit:docs/decisions/<contract>.md`); rồi kit#130 **closed** và lần lặp cuối của nó chốt *"kit stays pure index"* ⇒ nội dung về repo của bút, kit chỉ giữ `docs/decisions/README.md` làm index. DE (kb) và SWE (workbench) cũng đặt trong repo mình |
 | 04/08 (D12) | **Sửa 2 ô chủ-sở-hữu gán cho `mentor`** — món F-6 (nguồn nhãn tay cho `Judge.agreement`) và M6 (quyền đổi marker `strict`) | Mentor **không tác động** vào quá trình, chỉ nhận kết quả và chạy để chấm ⇒ món gán cho người-không-hành-động **không bao giờ nhích**; nó là *"món bị bỏ im lặng"* khoác áo *"hoãn có chủ"*. Chủ đúng suy ra từ `DEC-Q5`/§2.6: **F-6 → AIE-2** (định nghĩa `agreement` đo gì + format + chỗ lưu) **+ DE** (sinh nhãn tay, cùng golden-30 D15); **M6 → AIE-2**, gỡ marker được ở D16 với điều kiện **viết ADR** + cửa sổ phản hồi (kit#84 uỷ quyền team tự quyết ⇒ *"your own authority"* nghĩa là *quyết một mình không có ADR*, không phải *thiếu một người để xin*). **KHÔNG cần mini-RFC:** 0 thay đổi trên `studio_contracts` shape, clause §9 (*"field nguồn không tồn tại ⇒ mọi ô judge là `todo:`"*) giữ nguyên chữ. Bỏ thêm cụm *"món không tự đặt đáp án"* vì chính cụm đó là phần sai — nó TỰ đặt đáp án được, bởi tôi. PR `evalhub#10` |
+| 04/08 (D12) | **Đính chính dòng trên: phần DE của F-6 là ĐỀ XUẤT, chưa xác nhận** (finding @DongAnh2704 trên `evalhub#10`, vòng hai trên `evalhub#11`) | Dòng 04/08 phía trên gán *"sinh nhãn tay → DE"* dựa vào `DEC-Q5`, mà **`DEC-Q5` đang 🟡 chờ DE xác nhận** ⇒ **cùng lớp lỗi với ô `mentor` mà chính nó đang sửa**: một ô chủ-sở-hữu không có thật (mentor *không bao giờ* hành động; DE *chưa nói có hay không*). Tách F-6: phần **AIE-2** (định nghĩa `agreement` đo gì + format + chỗ lưu) **đã chốt**; phần **DE** (sinh nhãn tay) ghi **ĐỀ XUẤT, CHƯA xác nhận**, điều kiện lật = **DE chốt `DEC-Q5`**; hạn đọc *"D18 · phần DE chờ chốt `DEC-Q5`"*. **Vì sao append thay vì sửa dòng cũ:** sổ này append-only — sửa dòng 04/08 sẽ xoá bằng chứng rằng lỗi đã từng tồn tại, mà chính bằng chứng đó là bài học (**lần thứ hai trong hai commit liền nhau tôi tạo một owner-không-thật** ⇒ cái khó không phải *biết luật*, mà là **kiểm lại chính bảng vừa sửa**). **Đồng bộ 4 chỗ**, không chỉ 2 chỗ DE nêu: §9 (`:352`), bảng đính chính §9 (`:367`), `design-notes/aie2-day11.md` risk-table (`:128`) và câu ranh-giới golden-set (`:63`). **KHÔNG cần mini-RFC:** clause §9 giữ nguyên chữ, chỉ đổi metadata theo dõi. PR `evalhub#11` |
