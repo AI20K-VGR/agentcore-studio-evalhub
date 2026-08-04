@@ -37,7 +37,7 @@ tức những chỗ mà hai người đọc cùng một field ra hai nghĩa khá
 | ✅ | `citation_accuracy` đo **fence**, KHÔNG đo **truy xuất** — giới hạn khai vào hợp đồng (§3.1) | quyết rồi — null control đã tái lập |
 | ✅ | `no-trace-no-proof` thuộc tầng giữ `events`, không thuộc `score_case` (§4) | quyết rồi + xfail đổi neo |
 | ✅ | `Gate.threshold` ≡ `Recipe.scorecard_threshold` từng field (§5) | quyết rồi — test AIE-2 viết |
-| ⏳ | Carrier của `citations` chỉ trên `llm-step` (§6) | **chờ AIE-1** — hành vi đã đúng, clause chưa có |
+| ✅/🔴 | Carrier của `citations` chỉ trên `llm-step` (§6) | **engine ĐÓNG** (`engine#15`, gate `interpreter.py:304`) · **evalhub CHƯA có lưới** — chủ AIE-2, hạn D16 |
 | ⏳ | `outputs["chunks"]` thành invariant có tên (§7) | **chờ DE** — dữ liệu đã có từ D5 |
 | ⏳ | `recipe_hash` trên `Scorecard` (§8) | PR riêng hôm nay — giá trị chờ SWE |
 | 🔴 | Nguồn nhãn tay cho `Judge.agreement` (§9) | **chặn mọi ô judge** — chưa có nguồn |
@@ -237,10 +237,15 @@ là **số thập phân tròn, chốt và ghi ra TRƯỚC khi dựng dataset** (
 node khác `citations = None`. Chunk **đã truy xuất** nằm ở `outputs["chunks"]` của event
 `kb-retrieve`, **không** ở `citations`.
 
-**Trạng thái: ĐỀ XUẤT, chưa xác nhận bởi người giữ bút.** Hành vi engine hôm nay **đã khớp** và **đã
-được test engine khoá**: `engine/tests/test_trace_event_emission.py:152`
-`test_non_llm_events_have_zero_tokens_and_no_citations` assert `event.citations is None` cho mọi event
-≠ `n_llm`.
+**Trạng thái: ✅ ĐÃ ĐÓNG phía engine — 2026-08-04.** AIE-1 giao **cả ba lớp** trong `engine#15`
+(merged `04:07:30`): **code** — `interpreter.py:304` gate `raw_outputs.get("citations") if node_type is
+NodeType.LLM_STEP else None`; **contract** — `engine:docs/contracts/trace-citations.v0.md`; **test** —
+bài "gỡ cổng ⇒ đỏ". Trước đó đã có `test_non_llm_events_have_zero_tokens_and_no_citations` khoá **hành
+vi**; giờ có gate khoá **cấu trúc**.
+
+Ghi đúng nhân quả: clause này được giao **vì** mutation M1 của bảng sweep — AIE-1 dẫn nó làm bằng chứng
+chính, và commit mở đầu bằng *"Trả câu hỏi đang treo của AIE-2: `scorecard.v1.md` §6"*. Tức §6 không
+phải một ask được đáp; nó là một **phép đo** đổi thành một **cổng**.
 
 **Vì sao cần thành clause.** `citations_from_trace` gom **node-agnostic** (`harness.py:85-89`), nên nó
 phân biệt retrieved/grounded **chỉ vì engine hôm nay tình cờ hành xử vậy** (`interpreter.py:265-271`
@@ -248,9 +253,21 @@ rẽ theo `isinstance(output, list)`). Rủi ro dư: bất kỳ node trả **dic
 citations vào trace — `condition`/`tool-call` đều trả dict. Tức bảo đảm hiện tại là **hành vi**, không
 phải **cấu trúc**.
 
-**Lưới đỡ nếu không có clause:** siết `citations_from_trace` theo `node_type is NodeType.LLM_STEP` +
-thêm `retrieved_chunks_from_trace` đọc `outputs["chunks"]`, **phía evalhub**. Khi đó nghĩa của
-`citation_accuracy` do **luật chấm** quyết, không do hành vi engine quyết.
+**🔴 Nợ CÒN LẠI, phía evalhub — CHƯA làm, và bản trước của doc này khai sai là đã làm.**
+`citations_from_trace` vẫn **node-agnostic**: `harness.py:62` ghi thẳng *"gom `.citations` từ **mọi**
+trace event, **không phụ thuộc `node_type`**"*, `:82` ghi *"siết theo node cụ thể **nếu cần**"* — tức
+hoãn. Quét `src/`: **0 gate**.
+
+Việc phải làm: siết `citations_from_trace` theo `node_type is NodeType.LLM_STEP` + thêm
+`retrieved_chunks_from_trace` đọc `outputs["chunks"]`. Khi đó nghĩa của `citation_accuracy` do **luật
+chấm** quyết, không do hành vi engine quyết — và bộ chấm không còn phụ thuộc việc engine giữ cổng.
+**Chủ AIE-2, hạn D16.**
+
+> **Đính chính (finding @DongAnh2704, 04/08).** Bản trước viết *"Lưới đỡ **đã có**: siết theo
+> `node_type` phía evalhub"* — thì hoàn thành, cho một việc chưa làm. Nó ngược đúng `DEC-08` (§3.1) và
+> ngược luật tự đặt trong bảng mutation. Nặng hơn: câu đó **đã lan** vào
+> `kb:docs/contracts/trace-event.v0.md:237` — một hợp đồng đang xin freeze — nên đã báo DE gỡ.
+> Bài học: **thì của động từ trong một clause là một khẳng định kiểm được**, không phải văn phong.
 
 **`refused`: freeze seam, KHÔNG freeze công thức.** Hợp đồng khoá rằng output `llm-step` có key
 `refused: bool` mang nghĩa *"agent không ground được câu trả lời từ thứ được đưa"*, và rằng **đổi công

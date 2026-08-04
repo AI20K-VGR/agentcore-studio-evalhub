@@ -11,3 +11,7 @@ __pycache__/
 .env
 .env.*
 # uv.lock sống ở repo cha (agentcore-studio-kit), KHÔNG ở submodule này
+
+# Plan làm việc cá nhân — không thuộc scope chấm (App. F của plan D11).
+# Đã từng bị `git add docs/` quét vào evalhub#7 (+937 dòng) rồi phải gỡ; ignore để không lặp.
+docs/plans/

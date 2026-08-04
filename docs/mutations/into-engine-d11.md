@@ -145,8 +145,27 @@ session_id resolve {tenant,user,roles} server-side"*), hạn gán **D12**.
 
 ⇒ `citation_accuracy` của tôi phân biệt *retrieved* với *grounded* **chỉ vì engine hôm nay tình cờ hành
 xử vậy**. Bảo đảm hiện tại là **hành vi**, không phải **cấu trúc**. Đó chính là lý do clause §6 của
-`scorecard.v1.md` là **bắt buộc**, không phải nice-to-have — và cũng là lý do tôi tự dựng lưới phía
-evalhub (siết theo `node_type is NodeType.LLM_STEP`) thay vì chỉ chờ clause.
+`scorecard.v1.md` là **bắt buộc**, không phải nice-to-have.
+
+> ### ⚠️ ĐÍNH CHÍNH — bản trước của đoạn này khai một thứ CHƯA LÀM (finding @DongAnh2704, 04/08)
+>
+> Bản trước viết *"cũng là lý do tôi **tự dựng lưới** phía evalhub (siết theo
+> `node_type is NodeType.LLM_STEP`)"* — **thì hoàn thành, cho một việc chưa làm.** Quét `src/` trên head
+> PR: **không có gate nào**. Ngược lại, `harness.py:62` ghi thẳng *"gom `.citations` từ **mọi** trace
+> event, **không phụ thuộc `node_type`**"*, và `:82` ghi *"siết theo node cụ thể **nếu cần**"* — tức
+> **hoãn**, không phải đã làm.
+>
+> **Vì sao đây là lỗi nặng nhất trong bảng này, nặng hơn mọi dòng lệch declared-vs-actual:** nó ngược
+> đúng luật tự đặt ở cuối file — *"một sweep báo bắt được bằng `SyntaxError` là một sweep nói dối"* — và
+> ngược luận đề trung tâm `DEC-08`: *"khai đúng thứ chưa chứng minh được thì mạnh hơn"*. Hai đoạn phía
+> trên trong chính Finding 4 này đã nói **evalhub XANH hoàn toàn, không một bài nào của bộ chấm báo**.
+> Một file tự mâu thuẫn trong hai đoạn liền nhau.
+>
+> **Và nó đã lan ra ngoài:** câu đó được trích vào `kb:docs/contracts/trace-event.v0.md:237` (*"AIE-2 đã
+> tự dựng lưới"*) — một hợp đồng đang xin freeze. Đã báo DE gỡ.
+>
+> **Trạng thái thật:** phía engine **đã có lưới** từ `engine#15` (`interpreter.py:304`); phía **evalhub
+> chưa có** — chủ **AIE-2**, hạn **D16**, cùng lượt với bài test hồi quy embedding.
 
 ## Finding 5 (M2) · Đổi công thức `refused` lần thứ ba sẽ lệch bộ chấm im lặng
 
