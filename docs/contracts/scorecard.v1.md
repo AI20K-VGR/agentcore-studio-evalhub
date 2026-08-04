@@ -1,8 +1,8 @@
 ---
 id: studio.contract.scorecard.v1
 type: interface-freeze
-status: v1-freeze-ready
-freeze: FREEZE-READY   # chưa FROZEN — xem §0.3 điều kiện còn thiếu
+status: v1-frozen
+freeze: FROZEN   # lật 2026-08-04 — evalhub#6/#7 + contracts#1/#3 merged; xem §0.3 chi tiết chữ ký từng PR
 freeze_target: D11
 contract_ref: umbrella-contract §3.4
 pen: AIE-2 — Lưu Tiến Duy
@@ -10,10 +10,10 @@ date: 2026-08-03
 supersedes: docs/scorecard-v0.md
 schema_version_at_freeze: 0.2.0-draft
 contracts_sha_at_freeze: 3d7004b2e55d500e3706b9eac412fc809eb4e839
-signatures: []   # chữ ký thật = Approve trên PR (ADR-D11-01 lớp 1); dấu vết ở docs/decisions/scorecard.md
+signatures: ["SWE (contracts#1, contracts#3)", "AIE-1 (evalhub#6, evalhub#7, contracts#1, contracts#3)", "DE (evalhub#7, contracts#1, contracts#3)", "AIE-2 (tự ký, tác giả — evalhub#6/#7, contracts#3)"]   # chữ ký thật = Approve trên PR (ADR-D11-01 lớp 1); dấu vết đầy đủ ở docs/decisions/scorecard.md. evalhub#6 (hợp đồng v1 gốc) chỉ có AIE-1 Approve hình thức — SWE/DE chưa bấm nút, xem ghi chú dưới
 ---
 
-# 🖊️ scorecard — HỢP ĐỒNG v1 (FREEZE-READY)
+# 🖊️ scorecard — HỢP ĐỒNG v1 (FROZEN)
 
 > **Bút:** AIE-2 — Lưu Tiến Duy · **Ngày:** 2026-08-03 (D11, issue #83)
 > **Thay cho:** [`docs/scorecard-v0.md`](../scorecard-v0.md) — v0 giữ nguyên làm **log suy luận D2→D7**,
