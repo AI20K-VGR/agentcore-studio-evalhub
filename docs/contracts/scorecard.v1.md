@@ -10,7 +10,7 @@ date: 2026-08-03
 supersedes: docs/scorecard-v0.md
 schema_version_at_freeze: 0.2.0-draft
 contracts_sha_at_freeze: 3d7004b2e55d500e3706b9eac412fc809eb4e839
-signatures: ["SWE (contracts#1, contracts#3)", "AIE-1 (evalhub#6, evalhub#7, contracts#1, contracts#3)", "DE (evalhub#7, contracts#1, contracts#3)", "AIE-2 (tự ký, tác giả — evalhub#6/#7, contracts#3)"]   # chữ ký thật = Approve trên PR (ADR-D11-01 lớp 1); dấu vết đầy đủ ở docs/decisions/scorecard.md. evalhub#6 (hợp đồng v1 gốc) chỉ có AIE-1 Approve hình thức — SWE/DE chưa bấm nút, xem ghi chú dưới
+signatures: ["AIE-1 @TranBaDat2607", "AIE-2 @dholmes0207 (bút, tự ký)", "DE @DongAnh2704", "SWE @Dozyboy"]   # 4/4 PR mang nội dung scorecard đều đủ 3/3 Approve (contracts#1@2b95ca9 · contracts#3@dcea5b4 · evalhub#6@150d6bd · evalhub#7@c4fc9e7); 12/12 chữ ký ở đúng head PR, 0 stale. Đồng bộ 2026-08-04 07:55Z — dấu vết đầy đủ + lệnh verify ở docs/decisions/scorecard.md
 ---
 
 # 🖊️ scorecard — HỢP ĐỒNG v1 (FROZEN)
