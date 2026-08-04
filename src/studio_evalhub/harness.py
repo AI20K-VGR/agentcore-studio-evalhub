@@ -44,6 +44,19 @@ class SmokeResult(BaseModel):
     actual: str
     success: bool
     citation_accuracy: float
+    expects_refusal: bool = False
+    """Case này thuộc nhánh **từ-chối** hay nhánh **trả-lời** — dẫn xuất từ
+    `GoldenCase.expects_refusal` (`golden_case.py:88`), copy sang đây để **tầng render đọc được nhánh
+    mà không phải join lại với golden-set** (DEC-D12-01, D12 `kit#88`).
+
+    Vì sao cần field thay vì suy ra: `citation_accuracy == 1.0` trên nhánh từ-chối là **quy ước
+    vacuous-truth**, và `expected_citation == []` ở nhánh trả-lời **cũng** trả `1.0`
+    (`harness.py:167`) ⇒ suy nhánh từ con số là không phân biệt được, đúng lớp lỗi breakpoint `#14`
+    (suy một cờ ngữ nghĩa từ một giá trị số ⇒ **xanh-giả**).
+
+    Vì sao thêm được mà không cần mini-RFC: xem docstring class — `SmokeResult` là kiểu riêng của
+    quadrant. `citation_accuracy` **giữ `float`** nên 3 renderer format `:.2f` không đổi một dòng.
+    Default `False` để mọi constructor cũ vẫn dựng được (additive)."""
 
 
 def _citation_tenant(chunk_id: str) -> str | None:
@@ -177,6 +190,7 @@ def score_case(case: GoldenCase, answer: AgentAnswer, retrieved_citations: list[
         actual=answer.answer,
         success=success,
         citation_accuracy=citation_accuracy,
+        expects_refusal=case.expects_refusal,
     )
 
 
