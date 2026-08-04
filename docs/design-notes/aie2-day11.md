@@ -126,12 +126,18 @@ dòng hợp đồng**, không phải một field. `scorecard-v0.md:335-337` từ
 >
 > Người recalibrate ở D16 cần cả bốn; đổi một chỗ mà quên ba chỗ kia là tạo ra hai bộ số cùng tồn tại.
 >
-> | Chỗ (`workbench:src/studio_workbench/builder.py`) | Là gì |
-> |---|---|
-> | `:48-49` | **default param** của `create_dynamic_recipe` |
-> | `:114` | hardcode `ScorecardThreshold(success=0.9, citation_accuracy=0.95)` |
-> | `:192` | hardcode, như trên |
-> | `:206-207` | **default param** của `create_recipe_d6` — **đường runtime**, hàm demo D10 dùng |
+> Trích theo **tên hàm** (bền), số dòng chỉ phụ trợ — và số dòng phải nêu **ref nào**, vì
+> **3/4 anchor đã dịch** trên nhánh PR đang chờ merge:
+>
+> | Chỗ, theo tên (`workbench:src/studio_workbench/builder.py`) | `main` `aaeefa5` | `#12` `022aad5` / `#13` `583bcf9` |
+> |---|---|---|
+> | **default param** của `create_dynamic_recipe` | `:48-49` | `:48-49` (ổn định) |
+> | hardcode `ScorecardThreshold(...)` trong `create_sample_recipe_d3` | `:114` | **`:110`** |
+> | hardcode `ScorecardThreshold(...)`, lượt thứ hai | `:192` | **`:188`** |
+> | **default param** của `create_recipe_d6` — **đường runtime**, hàm demo D10 dùng | `:206-207` | **`:202-203`** |
+>
+> Cả `workbench#12` và `#13` đang **`APPROVED` + `CLEAN`**, nên cột phải sẽ **thành `main`** ngay khi ai
+> merge. Người recalibrate ở D16 hầu như chắc chắn đọc cột phải.
 >
 > **Bản trước đếm BA và tự khai "đã đếm" — @DongAnh2704 bắt được chỗ thứ tư.** Finding của họ sắc ở chỗ
 > chỉ ra *vì sao* tôi dừng sớm: cùng file, cùng lượt đọc, tôi đếm đủ `golden_set_ref` (`:47,191,205`) mà
@@ -146,9 +152,14 @@ dòng hợp đồng**, không phải một field. `scorecard-v0.md:335-337` từ
 > rồi kết luận anchor sai. Kết luận đó sai nhưng **finding thì đúng** — một trích dẫn cross-repo không
 > nêu repo là trích dẫn mơ hồ. Trong `evalhub` thì `0.9/0.95` **chỉ có trong test fixture**, đúng như DE đo.
 >
-> **Và số dòng thì cũng sẽ mục:** trên nhánh `workbench@day11/recipe-freeze-ready` các anchor đã dịch
-> `114→110`, `192→188`, `206→203` **trong vòng một ngày** (DE đo). Nên ưu tiên trích **tên hàm**
-> (`create_dynamic_recipe` · `create_recipe_d6`) — số dòng chỉ là phụ trợ.
+> **Bài học thứ hai, và nó là bài học về CÁCH ĐO chứ không về nội dung:** bảng ở trên ban đầu tôi đo
+> trên **submodule đang ghim trong kit** — tức `workbench@main`. Nhưng thứ sắp thành `main` là **nhánh
+> PR**, và ở đó 3/4 anchor đã khác. Một phép đo đúng-trên-`main` mà sai-trên-nhánh-sắp-merge thì nó
+> **đúng trong quá khứ**, không đúng ở lúc người ta đọc.
+>
+> ⇒ **Đo trên nhánh PR mới nhất, không đo trên `main`** — và nếu buộc phải nêu số dòng thì nêu kèm ref.
+> Đây là dạng thứ năm của cùng một bệnh mà @DongAnh2704 đã bắt bốn dạng đầu: khai một trạng thái mà
+> không kiểm lại **tại đúng thời điểm và đúng ref** người đọc sẽ dùng.
 
 ---
 
