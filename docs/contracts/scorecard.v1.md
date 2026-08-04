@@ -349,8 +349,10 @@ chỗ nào trong workspace lưu *verdict của người* cho từng `actual`. V�
 
 ⇒ **Mọi ô judge là `todo:` không có ETA cam kết được.**
 
-**Chủ: AIE-2**, hạn **D18**. Phần **giá trị** (sinh nhãn tay) là **ĐỀ XUẤT cho DE, CHƯA được DE xác
-nhận** — căn cứ là `DEC-Q5`, mà `DEC-Q5` chính nó đang 🟡 chờ DE. Điều kiện lật = **DE chốt `DEC-Q5`**.
+**Chủ: AIE-2**, hạn **D18**. Phần **giá trị** (sinh nhãn tay) thuộc **DE** — ✅ **DE đã xác nhận
+`DEC-Q5`** ngày `2026-08-04 09:42Z` ([evalhub#11](https://github.com/AI20K-VGR/agentcore-studio-evalhub/pull/11#issuecomment-5177279745)),
+nên đây là **thoả thuận**, không còn là đề xuất. Cơ chế xác nhận là **comment trên PR**, không phải
+Approve ⇒ nó chốt một **quyết định** (`DEC-Q5`), **không** tính là chữ ký hợp đồng theo ADR-D11-01.
 
 > ### ⚠️ ĐÍNH CHÍNH chủ sở hữu — 2026-08-04 (không sửa clause, sửa metadata)
 >
@@ -365,15 +367,27 @@ nhận** — căn cứ là `DEC-Q5`, mà `DEC-Q5` chính nó đang 🟡 chờ DE
 > | Phần | Chủ |
 > |---|---|
 > | Định nghĩa `agreement` đo **cái gì**, format field nhãn tay, chỗ lưu (mở rộng `eval.golden_sets`) | **AIE-2** — bút `scorecard` |
-> | **Sinh nhãn tay** cho case golden-30 | **DE** — bút golden-set (`DEC-Q5`) · 🟡 **ĐỀ XUẤT, CHƯA xác nhận** |
+> | **Sinh nhãn tay** cho case golden-30 | **DE** — bút golden-set (`DEC-Q5`) · ✅ **DE xác nhận 04/08 09:42Z** |
 >
 > ⚠️ **Đính chính lần hai — 2026-08-04, finding @DongAnh2704 trên `evalhub#10`.** Dòng DE ở trên là
 > **đề xuất**, không phải thoả thuận: căn cứ của nó là `DEC-Q5`, mà `DEC-Q5` đang 🟡 **chờ DE xác nhận**.
 > Gán việc dựa trên một quyết định mà **chính người bị gán chưa xác nhận** là cùng một lớp lỗi với ô
 > `mentor` mà chính khối này sửa — khác ở chỗ mentor *không bao giờ* hành động, còn DE *chưa nói có hay
 > không*. Cả hai làm bảng theo dõi **trông như đã được quản lý** trong khi chưa.
-> **Điều kiện lật sang thoả thuận:** DE chốt `DEC-Q5`. Tới lúc đó hạn đọc là
-> *"D18 · phần DE chờ chốt `DEC-Q5`"*, không phải `D18` trơn.
+> **Điều kiện lật sang thoả thuận:** DE chốt `DEC-Q5`.
+>
+> ✅ **ĐÃ LẬT cùng ngày, `09:42Z` — caveat trên sống đúng 74 phút.** DE trả lời *"nên xác nhận CÓ …
+> xác nhận `DEC-Q5` chỉ là **ghi nhận thực tế đã đang xảy ra**"*, kèm bằng chứng: file
+> `kb:golden/callisto-handbook-30-draft.yaml` (9 case skeleton, nhãn trích bằng
+> `scripts/annotate_golden.py` chạy `StaticKbSearch` thật trên corpus Handbook mới 42 doc/140 chunk,
+> tiền tố `HB-` nên **additive** với `SC-01..SC-10`). **Tự kiểm lại, hai đính chính:** (1) đường dẫn DE
+> dẫn cho comment schema sai package — thật ra ở `evalhub/src/studio_evalhub/schema.py:8`; (2) file
+> golden draft **chỉ có trên nhánh `origin/day12/de-doc-factory`**, `kb` `main` vẫn ở `93b97c6` ⇒
+> `DEC-Q5` chốt được, nhưng **không** được báo là *"golden-set đã có trong `main`"*. Chi tiết:
+> `docs/decisions/scorecard.md`.
+>
+> **Caveat sai thì phải lật, không phải để đó cho an toàn** — một caveat đã hết đúng cũng là một dòng
+> trạng thái sai, đúng lớp lỗi mà chính nó được thêm vào để sửa.
 >
 > Tôi **nhận món này**, không đẩy sang DE: phần chặn thật là *"đo cái gì và lưu ở đâu"* — đó là bút tôi.
 > Phần của DE là giá trị, và nó đi cùng golden-30 (hạn D15) chứ không phải một việc mới.
@@ -398,3 +412,4 @@ nhận** — căn cứ là `DEC-Q5`, mà `DEC-Q5` chính nó đang 🟡 chờ DE
 | 03/08 (D11) | **Chữ ký + decision-log** | Theo **ADR-D11-01**: chữ ký thật = Approve trên PR; dấu vết ở `docs/decisions/scorecard.md` **cùng repo này**. Bỏ ý định làm bảng tự-điền trong file contract, và bỏ ý định làm `sig-<id>.md` per-người — tách theo **hợp đồng** đã giải quyết vấn đề "một người gõ hộ bốn dòng". **Đổi chỗ hai lần trong ngày, ghi lại cả hai:** ban đầu định gom vào `kit:docs/decision-log.md`; rồi theo khung kit#130 (`kit:docs/decisions/<contract>.md`); rồi kit#130 **closed** và lần lặp cuối của nó chốt *"kit stays pure index"* ⇒ nội dung về repo của bút, kit chỉ giữ `docs/decisions/README.md` làm index. DE (kb) và SWE (workbench) cũng đặt trong repo mình |
 | 04/08 (D12) | **Sửa 2 ô chủ-sở-hữu gán cho `mentor`** — món F-6 (nguồn nhãn tay cho `Judge.agreement`) và M6 (quyền đổi marker `strict`) | Mentor **không tác động** vào quá trình, chỉ nhận kết quả và chạy để chấm ⇒ món gán cho người-không-hành-động **không bao giờ nhích**; nó là *"món bị bỏ im lặng"* khoác áo *"hoãn có chủ"*. Chủ đúng suy ra từ `DEC-Q5`/§2.6: **F-6 → AIE-2** (định nghĩa `agreement` đo gì + format + chỗ lưu) **+ DE** (sinh nhãn tay, cùng golden-30 D15); **M6 → AIE-2**, gỡ marker được ở D16 với điều kiện **viết ADR** + cửa sổ phản hồi (kit#84 uỷ quyền team tự quyết ⇒ *"your own authority"* nghĩa là *quyết một mình không có ADR*, không phải *thiếu một người để xin*). **KHÔNG cần mini-RFC:** 0 thay đổi trên `studio_contracts` shape, clause §9 (*"field nguồn không tồn tại ⇒ mọi ô judge là `todo:`"*) giữ nguyên chữ. Bỏ thêm cụm *"món không tự đặt đáp án"* vì chính cụm đó là phần sai — nó TỰ đặt đáp án được, bởi tôi. PR `evalhub#10` |
 | 04/08 (D12) | **Đính chính dòng trên: phần DE của F-6 là ĐỀ XUẤT, chưa xác nhận** (finding @DongAnh2704 trên `evalhub#10`, vòng hai trên `evalhub#11`) | Dòng 04/08 phía trên gán *"sinh nhãn tay → DE"* dựa vào `DEC-Q5`, mà **`DEC-Q5` đang 🟡 chờ DE xác nhận** ⇒ **cùng lớp lỗi với ô `mentor` mà chính nó đang sửa**: một ô chủ-sở-hữu không có thật (mentor *không bao giờ* hành động; DE *chưa nói có hay không*). Tách F-6: phần **AIE-2** (định nghĩa `agreement` đo gì + format + chỗ lưu) **đã chốt**; phần **DE** (sinh nhãn tay) ghi **ĐỀ XUẤT, CHƯA xác nhận**, điều kiện lật = **DE chốt `DEC-Q5`**; hạn đọc *"D18 · phần DE chờ chốt `DEC-Q5`"*. **Vì sao append thay vì sửa dòng cũ:** sổ này append-only — sửa dòng 04/08 sẽ xoá bằng chứng rằng lỗi đã từng tồn tại, mà chính bằng chứng đó là bài học (**lần thứ hai trong hai commit liền nhau tôi tạo một owner-không-thật** ⇒ cái khó không phải *biết luật*, mà là **kiểm lại chính bảng vừa sửa**). **Đồng bộ 4 chỗ**, không chỉ 2 chỗ DE nêu: §9 (`:352`), bảng đính chính §9 (`:367`), `design-notes/aie2-day11.md` risk-table (`:128`) và câu ranh-giới golden-set (`:63`). **KHÔNG cần mini-RFC:** clause §9 giữ nguyên chữ, chỉ đổi metadata theo dõi. PR `evalhub#11` |
+| 04/08 (D12) | **`DEC-Q5` — DE xác nhận CÓ ⇒ lật phần DE của F-6 từ 🟡 ĐỀ XUẤT sang ✅ thoả thuận** | @DongAnh2704 trả lời trên [evalhub#11](https://github.com/AI20K-VGR/agentcore-studio-evalhub/pull/11#issuecomment-5177279745) `09:42Z`: *"nên xác nhận CÓ … chỉ là **ghi nhận thực tế đã đang xảy ra**"* ⇒ điều kiện lật tôi tự đặt (*"DE chốt `DEC-Q5`"*) đã thoả, **74 phút** sau khi caveat được thêm. **Tự kiểm bằng chứng, không nhận nguyên văn — 2 đính chính:** (1) đường dẫn DE dẫn (`evalhub/src/studio_kb/schema.py`) **không tồn tại**; comment thật ở `evalhub/src/studio_evalhub/schema.py:8`; (2) `kb:golden/callisto-handbook-30-draft.yaml` + `scripts/annotate_golden.py` **có thật nhưng chỉ trên nhánh `origin/day12/de-doc-factory`** — `kb` `main` vẫn `93b97c6` ⇒ chốt được quyết định, **không** được báo *"golden-set đã có trong `main`"*. **Cái nhận được:** phần DE của F-6 có chủ thật; nền D18 (`kit#118`) có nguồn nhãn; tiền tố `HB-` là **additive** nên cutover D13 không vỡ `smoke-5`/`smoke-10` **qua đường golden-set** (rủi ro còn lại là `chunk_id` corpus cũ — phải re-run mới biết). **Vẫn treo:** giờ merge D13 — DE nói thẳng repo không ghi giờ và họ không bịa; ⇒ chuyển thành **mặc định của tôi**: sáng D13 re-run e2e+smoke trước khi làm việc khác. **Cơ chế xác nhận là comment, KHÔNG phải Approve** ⇒ chốt một quyết định, không tính chữ ký hợp đồng (ADR-D11-01). PR `evalhub#11` |

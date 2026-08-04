@@ -41,7 +41,7 @@ freeze: FREEZE-READY   # chưa FROZEN — xem "Còn mở" bên dưới
 | **DEC-06** | Chữ ký = **Approve trên PR** (xác thực GitHub); decision-log chỉ ghi **dấu vết**. **Bỏ** ý định làm bảng tự-điền trong file contract, và **bỏ** ý định làm `sig-<github-id>.md` per-người | Theo ADR-D11-01 + kit#130. Bảng tự-điền: ai sửa file cũng gõ được tên người khác. `sig-*.md` per-người: lập luận gốc của nó là *"một người gõ hộ 4 dòng thì `git log --format='%an'` ra một tên"* — tách theo **hợp đồng** (kit#130) đã giải quyết chính xác điều đó, nên `sig-*.md` thành **dư**. Xin thêm **một cột `<repo>@<sha>`**: chữ ký không nêu bytes nó ký thì là trang trí | ADR-D11-01 · kit#130 | ✅ theo team |
 | **DEC-Q3** | `section_roles` resolve **server-side**, harness dựng phiên mang quyền rồi chạy case — **không** truyền `case.section_roles` thẳng vào `kb.search` | Chữ trong doc AIE-2 đã đúng (`golden_case.py:110-116`); phần còn thiếu là **code của người khác**: lỗ nằm ở recipe tự khai roles (`executors.py:138` đọc `node.params.get("section_roles")`), và `Recipe` là bút SWE | `scorecard-v0.md` §3 Q3 | 🟡 hoãn — chủ **SWE + DE**, hạn **D17** |
 | **DEC-Q4** | **KHÔNG** promote `AgentRunner` lên `studio_contracts.protocols` hôm nay | Thêm seam thứ 4/5 vào layer đáy là **mở rộng bề mặt freeze đúng ngày đóng băng nó**; `AgentRunner` (`agent_runner.py:76`) chạy tốt như Protocol nội bộ và `lint-imports` đã `1 kept, 0 broken` ⇒ layering **không** đòi promote; adapter sống ở composition root `apps/studio`. Phương án bỏ: promote ⇒ 4/4 chữ ký cho **mỗi** lần đổi shape seam, trong lúc seam còn tiến hoá qua D14/D16 | `docs/mini-rfc/MRFC-2026-08-03-agentrunner-protocol-seam.md` (**PRE-WRITTEN**, cố ý chưa nộp) | 🟡 hoãn — chủ **AIE-2 + AIE-1**, hạn **D14** |
-| **DEC-Q5** | `eval.golden_sets` (`schema.py:20-25`, bút AIE-2) là **nguồn sự thật**. DE **sinh + gán nhãn**, giao YAML ở `packages/kb/golden/`; AIE-2 **nạp**. `obs.golden_sets` bỏ | Lý do là **quyền**, không phải sở thích — và là Q-D của chính DE (`trace-event.v0.md:242`): *"`obs.golden_sets` nằm trong `apps/studio/` — không phải fence-lane của DE. DE điền bằng cách nào?"* Đáp: **không điền được**. Ranh giới: DE sở hữu **giá trị**, AIE-2 sở hữu **nơi lưu + loader** (§2.6). Loader hết blocker: `pyyaml>=6.0` khai tường minh `pyproject.toml:26` từ `kit#65` | `scorecard-v0.md` §3 Q5 · review trên [kb#10](https://github.com/AI20K-VGR/agentcore-studio-kb/pull/10) | 🟡 chờ DE xác nhận |
+| **DEC-Q5** | `eval.golden_sets` (`schema.py:20-25`, bút AIE-2) là **nguồn sự thật**. DE **sinh + gán nhãn**, giao YAML ở `packages/kb/golden/`; AIE-2 **nạp**. `obs.golden_sets` bỏ | Lý do là **quyền**, không phải sở thích — và là Q-D của chính DE (`trace-event.v0.md:242`): *"`obs.golden_sets` nằm trong `apps/studio/` — không phải fence-lane của DE. DE điền bằng cách nào?"* Đáp: **không điền được**. Ranh giới: DE sở hữu **giá trị**, AIE-2 sở hữu **nơi lưu + loader** (§2.6). Loader hết blocker: `pyyaml>=6.0` khai tường minh `pyproject.toml:26` từ `kit#65` | `scorecard-v0.md` §3 Q5 · review trên [kb#10](https://github.com/AI20K-VGR/agentcore-studio-kb/pull/10) · **DE xác nhận CÓ** trên [evalhub#11](https://github.com/AI20K-VGR/agentcore-studio-evalhub/pull/11#issuecomment-5177279745) `2026-08-04 09:42Z` | ✅ **DE đã xác nhận (04/08)** — xem khối dưới bảng |
 | **DEC-07** | Rút một tiền đề của chính AIE-2: leak-check mức UUID **KHÔNG** cần đổi contract | `scorecard-v0.md:335-337` viết *"cần `tenant_id` per-chunk → đổi contract → mini-RFC + 4/4 chữ ký"*. Đo lại: dữ liệu **đã có từ D5** ở `outputs["chunks"]` (`interpreter.py:265-268`; `KbSearchResultItem.tenant_id: UUID`), **4 consumer đang đọc**. Thiếu là **một dòng hợp đồng** (`trace-event.v0.md:77` khai `outputs` là *"⏸ hoãn S2"*), **0 bump, 0 mini-RFC**. Định giá quá cao làm việc bị hoãn vô cớ | `scorecard-v0.md` §2.8 (giữ cả câu sai + phần rút) | ✅ rút, có ghi lại |
 | **DEC-08** | Khai vào hợp đồng (§3.1) rằng `citation_accuracy` đo **sức mạnh FENCE**, KHÔNG đo **sức mạnh TRUY XUẤT**, trên bộ golden hiện tại | Null control của **AIE-1** (`engine#15`), **AIE-2 đã tự tái lập** bằng `measure_chunk_embed.py --null`: vector hằng số **0 bit thông tin** đạt `recall@1 = 6/6` **bằng đúng** bag-of-words dim=8/256 thật; cột *"top1 không hoà"* = **0**. Nguyên nhân: fence tự quyết **4/6 case** (sau lọc `tenant_id`+`section_role` chỉ còn 1 ứng viên ⇒ ranking không quyết định gì), 2 case còn lại thắng nhờ hoà điểm + thứ tự sort. ⇒ metric **không phát hiện được hồi quy embedding**: gateway thật về mà embedding tệ hơn stub thì điểm vẫn `6/6`, tức một trục của gate `AND` **không có răng**, và ngưỡng `0.95` (`workbench:src/studio_workbench/builder.py:49` — **repo workbench, không phải evalhub**; trong evalhub `0.9/0.95` chỉ có trong test fixture) đo một thứ khác với thứ tên nó gợi ra. Ghi giới hạn vào freeze thay vì đợi sửa: một hợp đồng khai đúng thứ nó chưa chứng minh được thì **mạnh hơn** — không khai thì D16 sẽ có người đọc `0.95` là bằng chứng retrieval, đúng lớp **xanh-giả** với `refused` dương-tính-giả | [evalhub#6 comment](https://github.com/AI20K-VGR/agentcore-studio-evalhub/pull/6) (@TranBaDat2607) · [engine#15](https://github.com/AI20K-VGR/agentcore-studio-engine/pull/15) `docs/design-notes/aie1-day11.md` §3 · `scorecard.v1.md` §3.1 | ✅ đã khai vào hợp đồng |
 
@@ -54,7 +54,7 @@ freeze: FREEZE-READY   # chưa FROZEN — xem "Còn mở" bên dưới
 | F-3 | 4/4 Approve trên hai PR trên | SWE · DE · AIE-1 · AIE-2 | D11 |
 | F-4 | Clause **carrier `citations` chỉ trên `llm-step`** — hành vi engine đã đúng và **đã có test engine khoá** (`test_trace_event_emission.py:152`), nhưng clause chưa tồn tại ⇒ bảo đảm hiện tại là **hành vi**, không phải **cấu trúc** | **AIE-1** | D12 |
 | F-5 | Clause **`outputs["chunks"]`** thành invariant có tên (DEC-07) | **DE** | D15 |
-| F-6 | **Nguồn nhãn tay** cho `Judge.agreement` — field đích đã có (`scorecard.py:19`), field **nguồn không tồn tại**, hằng số bị cấm ⇒ **chặn mọi ô judge**. **Đổi chủ 04/08:** trước ghi `mentor`, nhưng mentor **không tác động** vào quá trình (chỉ nhận kết quả + chấm) ⇒ món gán cho người-không-hành-động thì không bao giờ nhích. Chủ đúng theo `DEC-Q5`/§2.6: **AIE-2** định nghĩa `agreement` đo gì + format + chỗ lưu; **DE** sinh nhãn tay cùng golden-30 (D15) | **AIE-2** — phần định nghĩa + chỗ lưu, **đã chốt**. Phần *sinh nhãn tay* **ĐỀ XUẤT cho DE, CHƯA xác nhận** (căn cứ là `DEC-Q5`, mà `DEC-Q5` cũng đang 🟡 chờ DE) | D18 · phần DE chờ chốt `DEC-Q5` |
+| F-6 | **Nguồn nhãn tay** cho `Judge.agreement` — field đích đã có (`scorecard.py:19`), field **nguồn không tồn tại**, hằng số bị cấm ⇒ **chặn mọi ô judge**. **Đổi chủ 04/08:** trước ghi `mentor`, nhưng mentor **không tác động** vào quá trình (chỉ nhận kết quả + chấm) ⇒ món gán cho người-không-hành-động thì không bao giờ nhích. Chủ đúng theo `DEC-Q5`/§2.6: **AIE-2** định nghĩa `agreement` đo gì + format + chỗ lưu; **DE** sinh nhãn tay cùng golden-30 (D15) | **AIE-2** — phần định nghĩa + chỗ lưu, **đã chốt**. Phần *sinh nhãn tay* → **DE**, ✅ **DE xác nhận `DEC-Q5` 04/08 09:42Z** (trước đó ghi *ĐỀ XUẤT, chưa xác nhận* — sống 74 phút, xem khối `DEC-Q5` dưới) | D18 |
 
 **Chưa lật `freeze: FROZEN`** — F-1…F-3 chưa đủ cả ba. Trạng thái báo cáo là **freeze-ready**.
 
@@ -87,6 +87,34 @@ freeze: FREEZE-READY   # chưa FROZEN — xem "Còn mở" bên dưới
 > append-only và xoá vết lỗi là xoá đúng phần đáng học.
 > **Luật rút ra:** một trạng thái *"chưa chốt"* phải đúng ở **mọi** file nêu nó; chỗ lệch duy nhất còn
 > lại là chỗ người đọc sẽ tin, và nó luôn là file có thẩm quyền cao nhất.
+
+> ### ✅ `DEC-Q5` — DE xác nhận CÓ, `2026-08-04 09:42Z` (caveat trên sống đúng **74 phút**)
+>
+> @DongAnh2704 trả lời trên [evalhub#11](https://github.com/AI20K-VGR/agentcore-studio-evalhub/pull/11#issuecomment-5177279745):
+> *"nên xác nhận CÓ … xác nhận `DEC-Q5` chỉ là **ghi nhận thực tế đã đang xảy ra**. Không xác nhận mới
+> là điểm lệch giữa doc và code."* ⇒ điều kiện lật đã ghi ở khối trên (*"DE chốt `DEC-Q5`"*) **đã thoả**.
+>
+> **Bằng chứng DE đưa, và kết quả tôi tự kiểm lại — không nhận nguyên văn:**
+>
+> | DE nói | Kiểm lại | Kết |
+> |---|---|---|
+> | comment `eval.golden_sets` đã viết *"produced by DE's doc-factory, consumed by AIE-2's harness.py"* | ✅ có thật, nhưng ở `packages/evalhub/src/studio_evalhub/schema.py:8` — **không** phải `packages/evalhub/src/studio_kb/schema.py` như DE dẫn (đường dẫn đó không tồn tại) | ✅ nội dung đúng · đường dẫn sai |
+> | `packages/kb/golden/callisto-handbook-30-draft.yaml` đã tồn tại, nhãn trích từ doc-factory, verify bằng `scripts/annotate_golden.py` chạy `StaticKbSearch` thật | ✅ có thật — nhưng **chỉ trên nhánh `origin/day12/de-doc-factory`**, `kb` `main` vẫn ở `93b97c6` (D11). 9 case skeleton, `golden_set_ref: callisto-handbook-30-draft`, tiền tố `HB-` (additive, không đụng `SC-01..SC-10`), dựng trên corpus Handbook mới (42 doc/140 chunk) | ✅ đúng · **chưa merge** |
+> | golden-30 đầy đủ là D16, sinh **sau** corpus D13 | ✅ khớp thoả thuận D11 (`kb:plans/sprint2_overview.md:123`, D16 = 10/08) và header của chính file draft tự ghi *"SKELETON, KHÔNG PHẢI BỘ ĐỦ"* | ✅ |
+>
+> ⇒ **Hai đính chính nhỏ, ghi lại vì chúng đổi cách đọc bằng chứng:** (1) đường dẫn DE dẫn sai package
+> nên ai `cat` theo sẽ không thấy gì và có thể kết luận bằng chứng không có; (2) *"đang làm rồi"* đúng
+> **trên một nhánh chưa merge** — nên `DEC-Q5` chốt được, nhưng **không** được báo là *"golden-set đã có
+> trong `main`"*.
+>
+> **Cái nhận được — cụ thể, không phải cảm giác:** phần **DE** của `F-6` từ 🟡 *ĐỀ XUẤT* thành **có chủ
+> thật**; nền D18 (`kit#118` agreement-check) có nguồn nhãn; và tiền đề `HB-` additive nghĩa là cutover
+> D13 **không** làm vỡ `smoke-5`/`smoke-10` của tôi qua đường golden-set — rủi ro còn lại chỉ là
+> `chunk_id` của corpus cũ, phải re-run mới biết.
+>
+> **Cái vẫn còn treo:** DE nói thẳng *"giờ merge cụ thể ngày mai thì repo không ghi … tôi không thể tự
+> bịa ra một giờ"* — đúng, và đó là câu tôi đặt sai người. ⇒ chuyển thành **mặc định của tôi**: sáng D13
+> re-run e2e + smoke **trước** khi làm việc khác, không chờ ai báo giờ.
 
 ## Hoãn — mọi món có chủ + hạn (0 món vô chủ)
 
