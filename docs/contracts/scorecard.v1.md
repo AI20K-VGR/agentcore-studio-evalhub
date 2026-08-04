@@ -37,7 +37,7 @@ tức những chỗ mà hai người đọc cùng một field ra hai nghĩa khá
 | ✅ | `citation_accuracy` đo **fence**, KHÔNG đo **truy xuất** — giới hạn khai vào hợp đồng (§3.1) | quyết rồi — null control đã tái lập |
 | ✅ | `no-trace-no-proof` thuộc tầng giữ `events`, không thuộc `score_case` (§4) | quyết rồi + xfail đổi neo |
 | ✅ | `Gate.threshold` ≡ `Recipe.scorecard_threshold` từng field (§5) | quyết rồi — test AIE-2 viết |
-| ⏳ | Carrier của `citations` chỉ trên `llm-step` (§6) | **chờ AIE-1** — hành vi đã đúng, clause chưa có |
+| ✅/🔴 | Carrier của `citations` chỉ trên `llm-step` (§6) | **engine ĐÓNG** (`engine#15`, gate `interpreter.py:304`) · **evalhub CHƯA có lưới** — chủ AIE-2, hạn D16 |
 | ⏳ | `outputs["chunks"]` thành invariant có tên (§7) | **chờ DE** — dữ liệu đã có từ D5 |
 | ⏳ | `recipe_hash` trên `Scorecard` (§8) | PR riêng hôm nay — giá trị chờ SWE |
 | 🔴 | Nguồn nhãn tay cho `Judge.agreement` (§9) | **chặn mọi ô judge** — chưa có nguồn |
@@ -152,9 +152,9 @@ trên bộ hiện tại — và điều đó làm ngưỡng `citation_accuracy =
 ra.
 
 > **Ba chỗ giữ ngưỡng, cho người recalibrate ở D16** (đã đếm, không phải một chỗ như dễ tưởng):
-> `builder.py:48-49` — **default param** của `create_dynamic_recipe`
+> `workbench:src/studio_workbench/builder.py:48-49` — **default param** của `create_dynamic_recipe`
 > (`success_threshold: float = 0.9`, `citation_accuracy_threshold: float = 0.95`); và
-> `builder.py:114` + `builder.py:192` — hai chỗ **hardcode** `ScorecardThreshold(success=0.9,
+> `workbench:…/builder.py:114` + `workbench:…/builder.py:192` — hai chỗ **hardcode** `ScorecardThreshold(success=0.9,
 > citation_accuracy=0.95)` trong sample recipe. Đổi chỉ default mà quên hai chỗ hardcode là cách
 > recalibrate ra hai bộ số cùng tồn tại.
 
@@ -217,7 +217,7 @@ phải sửa; giá của gọn = 10 file + một bump.
 
 **Giá trị ngưỡng KHÔNG thuộc hợp đồng.** `golden_set_ref: str` +
 `scorecard_threshold: {success, citation_accuracy}` freeze **là field**. Con số là **dữ liệu recipe**,
-chủ **AIE-2**, hiệu chỉnh lại ở **D16** sau khi golden-30 chạy trên corpus thật. `builder.py:48-49`
+chủ **AIE-2**, hiệu chỉnh lại ở **D16** sau khi golden-30 chạy trên corpus thật. `workbench:…/builder.py:48-49`
 giữ `success=0.9, citation_accuracy=0.95` tới đó.
 
 Số đo thật để biết vì sao phải recalibrate: bộ 5 → `success 4/5 = 0.80`; bộ 10 →
@@ -237,10 +237,15 @@ là **số thập phân tròn, chốt và ghi ra TRƯỚC khi dựng dataset** (
 node khác `citations = None`. Chunk **đã truy xuất** nằm ở `outputs["chunks"]` của event
 `kb-retrieve`, **không** ở `citations`.
 
-**Trạng thái: ĐỀ XUẤT, chưa xác nhận bởi người giữ bút.** Hành vi engine hôm nay **đã khớp** và **đã
-được test engine khoá**: `engine/tests/test_trace_event_emission.py:152`
-`test_non_llm_events_have_zero_tokens_and_no_citations` assert `event.citations is None` cho mọi event
-≠ `n_llm`.
+**Trạng thái: ✅ ĐÃ ĐÓNG phía engine — 2026-08-04.** AIE-1 giao **cả ba lớp** trong `engine#15`
+(merged `04:07:30`): **code** — `interpreter.py:304` gate `raw_outputs.get("citations") if node_type is
+NodeType.LLM_STEP else None`; **contract** — `engine:docs/contracts/trace-citations.v0.md`; **test** —
+bài "gỡ cổng ⇒ đỏ". Trước đó đã có `test_non_llm_events_have_zero_tokens_and_no_citations` khoá **hành
+vi**; giờ có gate khoá **cấu trúc**.
+
+Ghi đúng nhân quả: clause này được giao **vì** mutation M1 của bảng sweep — AIE-1 dẫn nó làm bằng chứng
+chính, và commit mở đầu bằng *"Trả câu hỏi đang treo của AIE-2: `scorecard.v1.md` §6"*. Tức §6 không
+phải một ask được đáp; nó là một **phép đo** đổi thành một **cổng**.
 
 **Vì sao cần thành clause.** `citations_from_trace` gom **node-agnostic** (`harness.py:85-89`), nên nó
 phân biệt retrieved/grounded **chỉ vì engine hôm nay tình cờ hành xử vậy** (`interpreter.py:265-271`
@@ -248,9 +253,21 @@ rẽ theo `isinstance(output, list)`). Rủi ro dư: bất kỳ node trả **dic
 citations vào trace — `condition`/`tool-call` đều trả dict. Tức bảo đảm hiện tại là **hành vi**, không
 phải **cấu trúc**.
 
-**Lưới đỡ nếu không có clause:** siết `citations_from_trace` theo `node_type is NodeType.LLM_STEP` +
-thêm `retrieved_chunks_from_trace` đọc `outputs["chunks"]`, **phía evalhub**. Khi đó nghĩa của
-`citation_accuracy` do **luật chấm** quyết, không do hành vi engine quyết.
+**🔴 Nợ CÒN LẠI, phía evalhub — CHƯA làm, và bản trước của doc này khai sai là đã làm.**
+`citations_from_trace` vẫn **node-agnostic**: `harness.py:62` ghi thẳng *"gom `.citations` từ **mọi**
+trace event, **không phụ thuộc `node_type`**"*, `:82` ghi *"siết theo node cụ thể **nếu cần**"* — tức
+hoãn. Quét `src/`: **0 gate**.
+
+Việc phải làm: siết `citations_from_trace` theo `node_type is NodeType.LLM_STEP` + thêm
+`retrieved_chunks_from_trace` đọc `outputs["chunks"]`. Khi đó nghĩa của `citation_accuracy` do **luật
+chấm** quyết, không do hành vi engine quyết — và bộ chấm không còn phụ thuộc việc engine giữ cổng.
+**Chủ AIE-2, hạn D16.**
+
+> **Đính chính (finding @DongAnh2704, 04/08).** Bản trước viết *"Lưới đỡ **đã có**: siết theo
+> `node_type` phía evalhub"* — thì hoàn thành, cho một việc chưa làm. Nó ngược đúng `DEC-08` (§3.1) và
+> ngược luật tự đặt trong bảng mutation. Nặng hơn: câu đó **đã lan** vào
+> `kb:docs/contracts/trace-event.v0.md:237` — một hợp đồng đang xin freeze — nên đã báo DE gỡ.
+> Bài học: **thì của động từ trong một clause là một khẳng định kiểm được**, không phải văn phong.
 
 **`refused`: freeze seam, KHÔNG freeze công thức.** Hợp đồng khoá rằng output `llm-step` có key
 `refused: bool` mang nghĩa *"agent không ground được câu trả lời từ thứ được đưa"*, và rằng **đổi công
@@ -280,9 +297,26 @@ chở bằng chứng của bộ chấm thì hợp đồng khai là chưa quy đ�
 > Một trích dẫn theo số dòng qua repo khác là một trích dẫn sẽ mục — đúng lớp lỗi vừa nêu thành finding
 > trên kb#10, nên không tự mắc lại.
 
-**Đã verify trên HEAD của kb#10 (2026-08-03):** `outputs` **vẫn** `⏸ hoãn S2`. DE đã sửa drift
-`tenant: str` → `tenant_id: UUID` trong cùng PR (hàng `d13-align`), nhưng clause `outputs` thì chưa —
-nên F-5 còn mở, không phải đã đóng.
+**Trạng thái `outputs` — đo lại 2026-08-04, và nó đã đổi từ lần đo trước:**
+
+| Nơi | kb `main` | nhánh kb#10 `day11/de-contract-freeze` |
+|---|---|---|
+| **§3** bảng field | `⏸ hoãn S2` | ✅ **DE đã sửa** → *"`outputs` \| ✅ điền thật (D11)"* |
+| **§2** schema yaml | `outputs: obj?` dưới `# ── để trống tới S2 ──` | ❌ **còn nguyên** |
+
+⇒ **F-5 còn mở, nhưng chỉ cho §2** — không phải cho cả doc. Trên nhánh kb#10 doc đang **tự mâu thuẫn
+§2 ↔ §3**.
+
+> Bản trước của mục này ghi *"đã verify trên HEAD kb#10: `outputs` **vẫn** `⏸ hoãn S2`"*. Câu đó **đúng
+> lúc đo** và **sai sau đó vài giờ** — DE sửa §3 ở giữa. @DongAnh2704 bắt được khi review evalhub#7, và
+> nêu đúng hệ quả: để nguyên thì chủ quadrant đọc sẽ tưởng **bị đòi làm lại việc đã làm**.
+>
+> Bài học đưa vào cách viết clause: **một câu trạng thái về repo khác phải đóng dấu thời điểm đo ngay
+> trong câu đó**, không chỉ ở phần verify cuối doc — vì phần verify thì người đọc lướt qua, còn câu ask
+> thì họ hành động theo. Cùng lý do §7 này trích theo **§ + tên field** thay vì số dòng.
+
+DE cũng đã sửa drift `tenant: str` → `tenant_id: UUID` trong cùng PR (hàng `d13-align`, ghi công review
+AIE-2).
 
 **Vì sao cần:** biến leak-check từ **sanity theo slug** thành **chứng minh mức UUID**. Hôm nay
 `_citation_tenant` cắt tiền tố chuỗi `chunk_id` (`harness.py:49-57`) — nhãn mềm, trùng được, sửa được.
