@@ -21,6 +21,8 @@ from __future__ import annotations
 
 from studio_contracts import Scorecard
 
+from studio_evalhub.harness import SmokeResult
+
 _TODO = "todo:"
 _LABEL_W = 22
 
@@ -37,6 +39,123 @@ _AGGREGATE_NOT_RECOMPUTABLE = (
     "vacuous-truth* hay *phép đo thật* ⇒ số in ra là số của `aggregate`, không phải số dựng lại. "
     "Cách biểu diễn (nullable vs thêm `n_scored_citation`) là nợ có chủ: AIE-2, hạn D16 (DEC-04)."
 )
+
+
+RUN_CASE_COLUMNS: tuple[str, ...] = ("case_id", "expects_refusal", "success", "citation_accuracy")
+"""Field của `SmokeResult` **có** lên bảng per-case, theo đúng thứ tự cột."""
+
+RUN_CASE_FIELDS_NOT_SHOWN: tuple[str, ...] = ("expected", "actual")
+"""Field của `SmokeResult` **cố ý không** lên bảng: hai trường văn bản dài, in ra sẽ vỡ hàng và đẩy
+các cột số ra khỏi tầm mắt. Chúng vẫn nằm nguyên trên object cho ai cần đọc chi tiết.
+
+Hai tuple trên phải **phủ kín** `SmokeResult.model_fields` — có test cưỡng chế bằng code (H5), không
+bằng lời. Thêm field thứ 7 mà quên khai vào một trong hai tuple ⇒ đỏ ngay, và người thêm buộc phải
+quyết một cách có ý thức thay vì để nó rơi im lặng. Đây là đúng cái bẫy đã dính ở D12 khi
+`expects_refusal` (field thứ 6) được thêm vào mà danh sách trong test còn gõ tay."""
+
+_NOT_ESTIMABLE = "not-estimable"
+
+_FIXED_SET_CAVEAT = (
+    "Đây là đếm thô trên một fixed-set, chưa phải population estimate: không suy ra tỷ lệ tổng, "
+    "không suy ra ngưỡng, không suy ra khoảng tin cậy từ mấy dòng trên."
+)
+
+_WHY_RAW_COUNT = (
+    "* Vì sao chỉ `k/n` mà không có tỷ lệ tổng (DEC-D15-02): mẫu số citation phải tách riêng và "
+    "loại refusal (DEC-S2-134-03), mà `Aggregate` hôm nay chưa có chỗ cho `n_scored_citation` — "
+    "nợ có chủ: AIE-2, hạn D16 (DEC-04). In một tỷ lệ tổng khi chưa tách mẫu số là đúng lỗi kit#134 "
+    "mô tả: chỗ hỏng không nằm ở probe, nằm ở bước từ `8/10` sang tám-mươi-phần-trăm."
+)
+
+_WHY_NA = (
+    "* `n/a` = nhánh từ-chối: `citation_accuracy` ở nhánh này là quy ước vacuous-truth (giá trị "
+    "trên object vẫn là 1.0), KHÔNG phải phép đo ⇒ không vào tử số cũng không vào mẫu số (DEC-04)."
+)
+
+
+def _count_or_not_estimable(k: int, n: int) -> str:
+    """`k/n` thô khi `n > 0`; `n = 0` ⇒ `not-estimable`, KHÔNG phải `0/0` và KHÔNG phải một số 0.
+
+    `0/0` vẫn mời người đọc chia — và phép chia đó không tồn tại. `kit#134`: `n = 0` không cho ra
+    ước lượng nào cả, nên thứ trung thực duy nhất in được ở đó là nói thẳng rằng chưa đo được."""
+    if n == 0:
+        return f"{_NOT_ESTIMABLE} (n = 0)"
+    return f"{k}/{n}"
+
+
+def render_run_cases(
+    results: list[SmokeResult],
+    *,
+    run_id: str,
+    golden_set_ref: str,
+    trace_source: str,
+) -> str:
+    """Bảng per-case với số **THẬT** của một run có thật — deliverable D15 (`kit#103`, dòng 🎯).
+
+    Khác `render_scorecard`: hàm kia in khung `todo:` vì chưa có golden-set và `compute_scorecard`
+    chưa hiện thực. Ở đây `results` đã là kết quả `score_case` chấm trên `citations_from_trace(...)`
+    của một run có `run_id`, nên `todo:` sẽ là nói dối theo chiều ngược lại — trình bày một ô **đã**
+    đo được như thể chưa đo.
+
+    Ba metadata đều bắt buộc, không có default:
+
+    - `run_id` — không có nó thì bảng này không truy về được run nào, và câu *"đọc trace của run
+      thật"* không kiểm chứng được;
+    - `golden_set_ref` — bộ case nào sinh ra mấy dòng này;
+    - `trace_source` — trace đọc từ đâu (Postgres bền hoá vs run live). Cùng một `run_id` đọc từ hai
+      nguồn khác nhau là hai phép đo khác nhau, và D14 đã trả giá một lần vì trộn *static fixed-set*
+      với *current PG measurement* trong cùng một câu.
+
+    **KHÔNG gọi `compute_scorecard`** (mốc D16, `kit#108` — nó còn `NotImplementedError`) và không
+    dựng `gate`. Hàm này chỉ hiển thị thứ caller đã tính; nó không tính gì và không đổi gì trên
+    `results`.
+
+    **Chỉ in `k/n` thô** (DEC-D15-02) với **hai mẫu số tách rời**:
+
+    - success: `n` = mọi case;
+    - citation: `n` = chỉ case nhánh **trả-lời** (`DEC-S2-134-03` loại refusal khỏi mẫu số), `k` =
+      số case trả-lời có `citation_accuracy == 1.0`, tức trích **đủ** chunk kỳ vọng. Case đạt một
+      phần (`0.5`) không vào tử số; số per-case của nó vẫn in ra ở bảng trên để người đọc thấy phần
+      đạt, chứ không bị một dòng đếm thô nuốt mất.
+    """
+    header = f"RUN CASES — {run_id}"
+    rule = "-" * max(len(header), 78)
+    col = f"{'case_id':<20} {'expects_refusal':<16} {'success':<8} {'citation_accuracy':>18}"
+
+    lines = [
+        header,
+        rule,
+        _row("golden_set_ref", golden_set_ref),
+        _row("trace_source", trace_source),
+        rule,
+        col,
+        "-" * len(col),
+    ]
+
+    for r in results:
+        branch = "từ-chối" if r.expects_refusal else "trả-lời"
+        acc = f"{'n/a':>18}" if r.expects_refusal else f"{r.citation_accuracy:>18.2f}"
+        lines.append(f"{r.case_id:<20} {branch:<16} {('PASS' if r.success else 'FAIL'):<8} {acc}")
+
+    answerable = [r for r in results if not r.expects_refusal]
+    n_success = len(results)
+    k_success = sum(1 for r in results if r.success)
+    n_citation = len(answerable)
+    k_citation = sum(1 for r in answerable if r.citation_accuracy == 1.0)
+
+    lines += [
+        "-" * len(col),
+        _row("success (k/n thô)", _count_or_not_estimable(k_success, n_success)),
+        _row(
+            "citation (k/n thô)",
+            _count_or_not_estimable(k_citation, n_citation) + "  — mẫu số đã loại refusal",
+        ),
+        rule,
+        _FIXED_SET_CAVEAT,
+        _WHY_RAW_COUNT,
+        _WHY_NA,
+    ]
+    return "\n".join(lines)
 
 
 def _row(label: str, value: str) -> str:
