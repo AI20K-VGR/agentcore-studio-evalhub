@@ -1,23 +1,34 @@
 # Bảng lệch — wireframe D12 ↔ bề mặt trace thật hôm nay
 
-**Ngày:** 2026-08-07 (D15) · **Người viết:** AIE-2 · **Gửi:** DE (`kit#100`), SWE (`kit#102`)
-**Tư cách: ĐỀ NGHỊ, không phải yêu cầu.** Viewer là `#100` (DE), playground là `#102` (SWE). Cùng
-tư cách đã khai cho wireframe D12 — vào code người khác giữa Integration Friday là cách nhanh nhất
-để vỡ ngày của ba người.
+**Ngày:** 2026-08-07 (D15) · **Người viết:** AIE-2
+**Gửi:** DE (`kit#100`) — §1/§2, đã giao · SWE (`kit#102`) — §3, **chưa giao tại thời điểm commit này**
+**Tư cách: ĐỀ NGHỊ, không phải yêu cầu.** Bề mặt CLI là `#100` (DE), playground + viewer web là
+`#102` (SWE). Cùng tư cách đã khai cho wireframe D12 — vào code người khác giữa Integration Friday là
+cách nhanh nhất để vỡ ngày của ba người.
 
 ## Trạng thái đối chiếu — đọc trước khi đọc bảng
 
 `DEC-D15-03` định nghĩa *"ghép vào viewer"* là **đối chiếu ra danh sách lệch**, không phải dựng UI.
-Đối chiếu cần hai phía. Phía viewer web của `#100` **chưa tồn tại tại thời điểm viết**: `apps/web/src`
-không có file nào nhắc `trace` (11 file, toàn bộ là canvas/recipe), và commit gần nhất của
-`agentcore-studio-kb` là `b57ba78` (06/08). Không suy đoán viewer sẽ hiện gì.
+Đối chiếu cần hai phía, và hôm nay có **hai** bề mặt thật để đối chiếu:
 
-Nhưng **có một bề mặt render trace của DE đã merge và chạy được**:
-`studio_kb.trace_reader.render_timeline` (D5, bút DE). Nó đọc đúng `obs.trace_events` mà bộ chấm vừa
-đọc hôm nay, nên đối chiếu với nó là đối chiếu thật chứ không phải đối chiếu với một UI tưởng tượng.
+| bề mặt | bút | trạng thái | đối chiếu ở |
+|---|---|---|---|
+| `studio_kb.trace_reader.render_timeline` (CLI) | DE | merged từ D5, `tokens` thêm ở [kb#16](https://github.com/AI20K-VGR/agentcore-studio-kb/pull/16) | **§1 · §2** |
+| `apps/web/src/playground/TraceViewer.tsx` | **SWE** | [web#3](https://github.com/AI20K-VGR/agentcore-studio-web/pull/3) @ `011b5534`, mở 07:42, **chưa merge** | **§3** |
 
-⇒ **§1 và §2 dưới đây là bảng lệch hoàn chỉnh, hai chiều, đối với bề mặt đang tồn tại.**
-⇒ **§3 là phần còn chờ `#100`** — nêu rõ cần gì, không đoán.
+> **Đính chính, ghi lộ ra thay vì sửa lặng.** Bản đầu của khối này viết *"phía viewer web của `#100`
+> **chưa tồn tại tại thời điểm viết**: `apps/web/src` không có file nào nhắc `trace`"*. **Sai hai vế.**
+> Đúng với `main`, nhưng [web#3](https://github.com/AI20K-VGR/agentcore-studio-web/pull/3) đã thêm
+> `src/playground/TraceViewer.tsx` lúc **07:42** — tức trước cả khi câu đó được gõ. Và viewer web là
+> bút **SWE (`#102`)**, không phải `#100`: `#100` giao bề mặt CLI.
+>
+> *Nên sao:* kiểm sự tồn tại của một bề mặt bằng `git ls-files` trên `main` là kiểm **một** trong hai
+> chỗ nó có thể sống. Nhánh và PR đang mở là chỗ còn lại, và ở giữa Integration Friday thì đó mới là
+> chỗ mọi thứ đang nằm. Cùng lớp lỗi với vấp #2 của runbook: *"fresh clone" không có nghĩa là "fresh
+> database"* — cả hai đều là quên mất một chỗ trạng thái vẫn tồn tại.
+
+⇒ **§1 và §2** là bảng lệch hai chiều đối với bề mặt **CLI**.
+⇒ **§3** là đối chiếu với **viewer web** — làm được thật, không còn phải chờ.
 
 Mỗi dòng trỏ **một field trace có thật hôm nay**, đã xác minh bằng `model_fields` chứ không bằng trí
 nhớ (cùng luật đã áp cho wireframe D12: không field tưởng tượng).
@@ -54,17 +65,27 @@ Chiều ngược lại. Không phải để đề nghị bỏ — timeline phụ
 
 ---
 
-## §3 · Phần còn chờ `#100` — nêu rõ, không đoán
+## §3 · Đối chiếu với viewer web — `TraceViewer.tsx` (web#3 @ `011b5534`, bút SWE)
 
-Chiều *"field viewer hiện mà bộ chấm không dùng"* mới chỉ hoàn thành **đối với `render_timeline`**.
-Với viewer web của `#100` thì chưa đối chiếu được, vì nó chưa tồn tại tại thời điểm viết.
+**Tư cách: ĐỀ NGHỊ.** `#102` là bút SWE. Ba dòng đầu dưới đây là **đúng ba khối** wireframe D12 đã
+nêu cho playground (③④⑤) — nêu ra không phải để trách, mà vì chúng chứng minh wireframe đã chỉ đúng
+chỗ và đơn giản là **chưa tới tay** trước khi SWE dựng. Lỗi giao hàng, không phải lỗi đọc.
 
-**Cần từ DE (@DongAnh2704):** danh sách field viewer `#100` render — chỉ cần tên field, không cần
-code. Có nó thì §2 mở rộng được trong một lượt, không phải làm lại từ đầu.
+Điều đáng chú ý nhất: SWE **đã tự nối vào `score_run_from_trace()`** — hàm AIE-2 land hôm nay, import
+trong `try/except ImportError` vì `evalhub#15` chưa merge (`dev_playground_server.py:178-198`). Nên
+mối nối bộ-chấm ↔ playground **đã tồn tại**, chỉ là chưa ai đối chiếu hai đầu.
 
-**Không chặn gì hôm nay.** Deliverable D15 của AIE-2 (`render_run_cases` + `run_report`) không đọc
-viewer, và §1 đã đủ để DE bắt đầu — sáu dòng đó đúng kể cả khi viewer render thêm gì đi nữa, vì
-chúng nói về thứ bộ chấm **cần**, không về thứ viewer **có**.
+| # | Chỗ | Bằng chứng | Vì sao đáng sửa |
+|---|---|---|---|
+| **W1** | UI in `1.00` ở nhánh **từ-chối**, chỗ CLI in `n/a` | `TraceViewer.tsx`: `citation_accuracy?.toFixed(2)`, không có nhánh refusal | Đây là **lỗi cấu trúc, không sửa được ở TSX**: payload của `dev_playground_server.py:194-198` gửi `citation_accuracy` thô và **không mang `expects_refusal`**, nên UI không có cách nào biết đang ở nhánh nào. Đúng thứ wireframe D12 §4.1 nêu — *"`CaseResult` không mang cờ nhánh từ-chối ⇒ ở tầng hợp đồng không phân biệt được"*. `1.0` ở nhánh này là **quy ước vacuous-truth** (`DEC-04`), không phải phép đo. Chỗ vá: thêm cờ vào payload |
+| **W2** | `Σcost=0.0000` đọc như *"đã đo, và bằng 0"* | `totalCost.toFixed(4)` + `cost.toFixed(4)` mỗi event | `interpreter.py:73` `_NO_COST = 0.0`, dùng ở `:389` — engine ghi `0.0` cho **mọi** node. Chưa có nguồn cost thật (D19, `kit#120`). Cùng dòng U1 của §2 và cùng luật `DEC-D12-02`: ô chưa đo phải hiện `todo:`/`chưa đo`, không hiện `0` |
+| **W3** | `monotonic` tính trên mảng **đã sort** ⇒ gần như luôn ✓ | `const sorted = [...events].sort(...)` rồi `sorted.every((e,i) => i===0 \|\| e.ts > sorted[i-1].ts)` | **Đúng F1 đã filed cho `kb#16`**, giờ là bề mặt thứ ba. Đo đơn điệu trên chuỗi đã xếp thì kết quả là hằng số. Thêm hai chi tiết: so bằng `>` trên **chuỗi** (`_parse_ts` của kb có docstring nói vì sao so chuỗi sai), và `sort` dùng `localeCompare` trong khi so dùng `>` — hai ngữ nghĩa khác nhau trên cùng dữ liệu. Và `>` chặt nghĩa là **`ts` trùng ⇒ KHÔNG monotonic**, ngược hẳn `check_ts_monotonic` của kb |
+| **W4** *(nhỏ)* | Dòng chi tiết in `0 event · ordering monotonic ✓` | `[].every()` trong JS là `true`, y như `all([])` trong Python | Badge tổng **đã fail-closed đúng** (`ok = … && sorted.length > 0`) — nên đây chỉ là lệch giữa badge và dòng chi tiết, không phải xanh-giả ở mức kết luận. Ghi vì nó là ④ của wireframe D12, và vì phần khó thì SWE đã làm đúng |
+| **W5** *(nhỏ)* | `citations = null` và `= []` hiện như nhau | `event.citations && event.citations.length > 0` | Cùng L6 của §1, cùng lớp với `render_timeline`. *"Không áp dụng"* (`kb-retrieve`) và *"đã trích, rỗng"* (`llm-step` không grounded) là hai chuyện khác nhau |
+
+**Không dòng nào chặn merge web#3** — đây là đề nghị gửi chủ bút, không phải review chính thức.
+**W1 là dòng đáng làm trước**, vì nó khiến hai bề mặt nói **hai số khác nhau về cùng một run**, và
+đó chính là thứ D19 (`kit#120`) sẽ phải dựng cost-lineage lên trên.
 
 ## §4 · Ba thứ xin đừng làm — lý do là số, không phải khẩu vị
 
