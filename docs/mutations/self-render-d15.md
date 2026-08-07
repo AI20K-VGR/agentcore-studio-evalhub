@@ -256,3 +256,67 @@ Không phải lỗi, nhưng ghi vì nó sửa mô hình trong đầu người vi
 hoá ra được cưỡng chế bởi **cách dựng fixture**, không phải bởi một assert cụ thể nào. Đó là lưới
 rộng hơn dự kiến — nhưng cũng nghĩa là khi nó đỏ, 5 dòng đỏ **không** chỉ ra được phía nào đã drift.
 Ai gặp nó đọc §5 này trước, đừng đi tìm 5 lỗi.
+
+---
+
+## §6 · Lượt ba — người NGOÀI gieo, và họ tìm ra thứ hai lượt trước không thấy
+
+**Đây là lượt đầu tiên không phải tự gieo.** @DongAnh2704 (DE) nhận T7 lúc `08:23Z`, giao kết quả lúc
+`08:31Z`: [kb#17](https://github.com/AI20K-VGR/agentcore-studio-kb/pull/17) ·
+`kb/docs/mutations/into-evalhub-d15.md`. **8 mutant · 7 bắt · 1 sống · 1 finding.**
+
+Vế *"the owner has to show their tests catch them"* của `kit#74` giờ đã đủ hai chiều cho quadrant
+evalhub. Phản hồi chủ quadrant append vào doc của DE bằng commit của AIE-2 — hai tác giả, hai chữ ký.
+
+### §6.1 · Finding B2 — và vì sao nó chứng minh đúng điều hai lượt tự gieo không chứng minh được
+
+DE gieo `outputs.get("refused", False)` → `True` và **toàn suite vẫn xanh**. Nhánh mặc định *"thiếu
+key `refused`"* có docstring mà **0 lớp test** — vì mọi fixture đều set `refused` tường minh, nên
+nhánh đó chưa từng chạy một lần nào.
+
+Hai lượt tự gieo (M1–M9, R1–R5) **không thể** tìm ra nó, và lý do là cấu trúc chứ không phải cẩu thả:
+người viết test *biết* mình luôn set `refused`, nên không nghĩ tới việc hỏi *"nếu nó vắng thì sao"*.
+Đó chính xác là điểm mù mà §4 đã khai là tồn tại nhưng không tự đo được.
+
+**Vá theo hướng khác đề nghị của DE, và nói rõ chỗ khác.** DE đề nghị ghim `refused is False` —
+*"code đang đúng; chỉ là răng còn thiếu"*. Không đồng ý ở vế đầu: code **không** đúng, nó lệch với
+doctrine của chính nó. `answer_from_trace` raise ở 4 nhánh không chứng minh được (rỗng · không
+`llm-step` · thiếu `answer` · nhiều `llm-step`), riêng `refused` thì đoán im lặng.
+
+Và mặc định `False` không phải lựa chọn an toàn mà là lựa chọn **đo sai**: một ca đáng là *từ-chối*
+nhưng thiếu key sẽ bị đẩy sang nhánh trả-lời rồi báo FAIL — bảng điểm nói *agent trả lời sai*, trong
+khi sự thật là *trace không đọc được*. Ghim `False` bằng test là ghim cứng đúng phép đo sai đó.
+
+⇒ Vá bằng **raise**, cho đối xứng với 4 nhánh kia. Producer thật luôn ghi key này
+(`engine:executors.py:265` — `"refused": not citations`), nên thiếu nó là trace dị dạng.
+
+### §6.2 · Kiểm lại bản vá — gieo cả HAI chiều, và một mutant tự gieo hỏng
+
+| gieo lại sau khi vá | exit | kết quả |
+|---|---|---|
+| hoàn nguyên bản cũ, `get("refused", False)` | 1 | **BẮT** — `..._thieu_key_refused_thi_raise...` |
+| B2 nguyên bản của DE, `get("refused", True)` | 1 | **BẮT** — cùng bài |
+
+Gieo **cả hai** chiều có chủ ý: nếu chỉ gieo chiều `True` thì bài mới có thể đang ghim *"phải bằng
+`False`"* thay vì *"phải raise"*, và lỗ vẫn còn nguyên dưới một cái tên khác.
+
+**Một mutant tự gieo hỏng, khai ra:** lượt đầu tôi gieo *"gỡ raise VÀ lật default sang `True`"* nhưng
+chỉ sửa dòng `.get(...)` mà **để nguyên nhánh `raise`** ⇒ default thành code chết, mutant không với
+tới được, và nó "sống sót" một cách vô nghĩa. Đúng luật §1 điều 3: **một mutant không với tới được
+thì không tính là sống sót**, phải gieo lại. Ghi ra vì đây là lần thứ hai trong ngày một mutant chết
+vì lý do sai (lần đầu: M8 cần hai chỗ sửa).
+
+### §6.3 · Hai chỗ lệch số giữa hai doc — không ai sai, nhưng phải ghi
+
+| | doc của DE | ở đây |
+|---|---|---|
+| SHA gieo | `c9af832` | head đã là `7745bd5` khi DE giao — DE nhận việc lúc `08:23`, hai commit của AIE-2 đẩy lên lúc `08:20`/`08:26` |
+| baseline | `72 passed, 2 xfailed` | `71 passed, 1 skipped, 2 xfailed` |
+
+**SHA:** hai commit đó chỉ thêm `test_row_to_event.py` và sửa **docstring** — `git diff` trên
+`harness.py`/`render.py` **rỗng**, `answer_from_trace` byte-identical. Nên cả 8 kết quả của DE chuyển
+sang head **không đổi**, và B2 đã được gieo lại trên `7745bd5` để xác nhận chứ không suy luận.
+
+**Baseline:** chênh 1 vì `test_scorecard_roundtrip.py:61` **skip** khi thiếu
+`STUDIO_DATABASE_URL_ADMIN`. DE có DSN nên chạy đủ 72 bài thật — tức sweep của DE **mạnh hơn** một
+bài so với baseline local, đúng ở nhánh DB. Ghi lại để không ai đọc chênh lệch này thành mâu thuẫn.

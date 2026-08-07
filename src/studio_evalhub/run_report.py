@@ -82,12 +82,24 @@ def answer_from_trace(events: list[TraceEvent]) -> AgentAnswer:
     | `events` rỗng | không có trace thì không có gì để chấm; trả answer rỗng là biến *chưa đo* thành *đã đo và trượt* |
     | không có `llm-step` | run không đi qua bước LLM ⇒ không có câu trả lời nào để so |
     | thiếu key `answer` | node đúng nhưng payload thiếu — lý do vỡ khác hẳn, phải phân biệt được lúc gỡ lỗi |
+    | thiếu key `refused` | **thêm D15 sau finding B2** — xem khối dưới bảng |
     | **nhiều** `llm-step` | *"câu trả lời của run"* lúc đó phải do hợp đồng nói, không do thứ tự dòng nói |
 
     Nhánh cuối là nhánh đắt nhất. `#102` cho người dùng dựng recipe tự do, nên recipe nhiều bước LLM
     là chuyện sẽ tới. Chọn im lặng cái đầu hay cái cuối sẽ cho ra một bảng điểm trông vẫn đúng trong
     khi nó đang chấm nhầm bước — đúng lớp lỗi breakpoint `#14` (suy một giá trị ngữ nghĩa im lặng rồi
     chấm như thể đã đo).
+
+    **Nhánh `refused` là finding của người ngoài, không phải của tôi.** @DongAnh2704 gieo mutation
+    chéo T7 (`kb#17`, `kit#74`) và tìm ra: bản đầu dùng `outputs.get("refused", False)`, đổi default
+    `False → True` thì **toàn suite vẫn xanh**. Một nhánh có docstring mà 0 lớp test — mọi fixture
+    đều set `refused` tường minh nên nhánh mặc định chưa từng chạy lần nào.
+
+    Vá theo hướng **raise** thay vì ghim `False`, vì mặc định `False` không phải lựa chọn an toàn mà
+    là lựa chọn **đo sai**: một ca đáng là *từ-chối* nhưng thiếu key sẽ bị đẩy sang nhánh trả-lời rồi
+    báo FAIL — bảng điểm nói *agent trả lời sai* trong khi sự thật là *trace không đọc được*. Producer
+    thật luôn ghi key này (`engine:executors.py:265` — `"refused": not citations`), nên thiếu nó là
+    trace dị dạng chứ không phải ca vận hành bình thường.
 
     **Giới hạn có ghi — `refused` chưa freeze semantic** (Breakpoint `#14`, xác nhận lại ở D14/B7).
     Ở đây nó được dùng đúng nghĩa **carrier**: đọc lại giá trị mà producer đã ghi. Nó KHÔNG phải một
@@ -120,11 +132,18 @@ def answer_from_trace(events: list[TraceEvent]) -> AgentAnswer:
             "node đúng nhưng payload thiếu"
         )
 
+    if "refused" not in outputs:
+        raise TraceAnswerError(
+            f"event `llm-step` không có key `refused` trong outputs (có: {sorted(outputs)}) — "
+            "không đoán. Mặc định `False` sẽ đẩy một ca đáng là từ-chối sang nhánh trả-lời và báo "
+            "FAIL, tức bảng điểm nói agent trả lời sai trong khi trace mới là thứ không đọc được."
+        )
+
     raw_citations = outputs.get("citations")
     return AgentAnswer(
         answer=str(outputs["answer"]),
         citations=[str(c) for c in raw_citations] if isinstance(raw_citations, list) else [],
-        refused=bool(outputs.get("refused", False)),
+        refused=bool(outputs["refused"]),
     )
 
 

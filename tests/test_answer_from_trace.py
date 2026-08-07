@@ -148,6 +148,36 @@ def test_answer_from_trace_thieu_key_answer_thi_raise() -> None:
         answer_from_trace(events)
 
 
+def test_answer_from_trace_thieu_key_refused_thi_raise_chu_khong_doan_False() -> None:
+    """`llm-step` có `answer` nhưng **không có key `refused`** ⇒ raise, KHÔNG mặc định `False`.
+
+    **Finding B2 của @DongAnh2704** (mutation chéo T7, `kb#17`): trước bài này, đổi default
+    `False → True` làm **toàn suite vẫn xanh** — một nhánh có docstring mà 0 lớp test, vì mọi fixture
+    đều set `refused` tường minh nên nhánh mặc định chưa từng chạy.
+
+    Vá theo hướng **raise** chứ không theo hướng ghim `False`, ba lý do:
+
+    1. **Đối xứng với chính hàm này.** Nó đã raise ở 4 nhánh không chứng minh được (rỗng · không
+       `llm-step` · thiếu `answer` · nhiều `llm-step`). Riêng `refused` đoán im lặng là chỗ lệch, và
+       chỗ lệch đó chính là thứ B2 chạm phải.
+    2. **`refused` chưa freeze semantic** (breakpoint `#14`). Đoán một giá trị cho field mà nghĩa của
+       nó còn đang tranh luận là đúng lớp lỗi cả file này viết ra để chống.
+    3. **Mặc định `False` không phải phương án "an toàn", nó là phương án ĐO SAI.** Một ca đáng là
+       *từ-chối* mà thiếu key sẽ bị đẩy sang nhánh trả-lời và báo FAIL — bảng điểm nói agent trả lời
+       sai, trong khi sự thật là trace không đọc được.
+
+    Producer thật luôn ghi key này (`engine:executors.py:265` — `"refused": not citations`), nên
+    thiếu nó nghĩa là trace dị dạng hoặc đến từ producer lạ, không phải một ca vận hành bình thường.
+    """
+    events = [
+        _event(node_type=NodeType.LLM_STEP, seq=0, outputs={"answer": "Nhân viên cần báo trước 3 ngày."}),
+        _event(node_type=NodeType.END, seq=1, outputs={}),
+    ]
+
+    with pytest.raises(TraceAnswerError, match="refused"):
+        answer_from_trace(events)
+
+
 def test_answer_from_trace_nhieu_llm_step_thi_raise_chu_khong_chon_bua() -> None:
     """Nhiều `llm-step` ⇒ raise, KHÔNG tự chọn cái đầu hay cái cuối.
 
