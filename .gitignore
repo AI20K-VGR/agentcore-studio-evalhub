@@ -12,7 +12,9 @@ __pycache__/
 .env.*
 # uv.lock sống ở repo cha (agentcore-studio-kit), KHÔNG ở submodule này
 
-# Plan mới vẫn là local cho tới khi được review; hai plan retrospective này được track rõ ràng.
+# Plan của AIE-2 phải track được: comment đóng issue trỏ thẳng vào file này, và kit#74 tính
+# "artifact không tìm thấy trong fresh clone" là trừ điểm chứ không phải cộng.
+# Allowlist theo PATTERN, không liệt kê từng ngày — allowlist liệt kê tay là đúng cơ chế đã nuốt
+# im lặng day-13 và day-14 (file có thật trên đĩa, 404 trên GitHub). Scratch/plan nháp khác vẫn ignore.
 docs/plans/*
-!docs/plans/day-11-aie2.md
-!docs/plans/day-12-aie2.md
+!docs/plans/day-*-aie2.md
