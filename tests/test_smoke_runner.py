@@ -133,6 +133,32 @@ def test_answerable_refused_flag_fails() -> None:
 
 
 def test_answerable_partial_citation_accuracy() -> None:
+    """`citation_accuracy` = |expected ∩ retrieved| / |expected| — tử số là **phần giao**, mẫu số là
+    **expected**.
+
+    **D15/T4 — H2: fixture bất đối xứng.** Bản trước là `|expected|=2, |retrieved|=1, |giao|=1`, tức
+    `retrieved` và `giao` **bằng nhau**. Với hình dạng đó, mutant đổi tử số sang `len(retrieved)` cho
+    ra `1/2 = 0.5` — **đúng bằng giá trị đúng** ⇒ bài xanh, mutant sống. Đo thật ở D15 xác nhận:
+    mutant đó (`M11`) chỉ chết sau khi fixture đổi.
+
+    Bản này ép ba lượng **đôi một khác nhau** — `|expected|=2 · |retrieved|=3 · |giao|=1` — nên mỗi
+    cách hỏng cho một con số riêng:
+
+    | công thức | ra | |
+    |---|---|---|
+    | `|giao| / |expected|` | `1/2 = 0.5` | ← **đúng** |
+    | `|retrieved| / |expected|` | `3/2 = 1.5` | tử số đếm cả chunk sai — **đây là mutant fixture cũ để lọt** |
+    | `|giao| / |retrieved|` | `1/3 ≈ 0.333` | mẫu số nhầm sang *đã trích* |
+    | `|giao| / |giao|` | `1/1 = 1.0` | tự chia chính mình, luôn hoàn hảo |
+
+    Hai chunk thừa (`ankor-c#c1`, `ankor-d#c1`) là chuyện **thường ngày**, không phải tình huống
+    dựng: retrieval trả top-k nên trace gần như luôn có chunk ngoài `expected_citation`. Fixture cũ
+    — `retrieved` đúng bằng một tập con sạch của `expected` — mới là cái không giống đời thật.
+
+    H2 **chỉ áp cho fixture thật sự nuôi phép tính này**. Fixture của `test_contains_phrase_*`
+    (token-matching), `test_tenant_scope.py` (nhất quán tenant) và `test_render*.py` (hiển thị) không
+    đi vào biểu thức trên, nên để nguyên — sửa chúng chỉ tạo diff rác và làm loãng đúng chỗ cần nhìn.
+    """
     case = GoldenCase(
         case_id="c-two-cites",
         query="q",
@@ -145,11 +171,21 @@ def test_answerable_partial_citation_accuracy() -> None:
     )
     answer = AgentAnswer(answer="Đáp án là A.", citations=[], refused=False)
 
-    # trace trích được 1/2 chunk kỳ vọng
-    result = score_case(case, answer, retrieved_citations=["ankor-a#c1"])
+    # |expected| = 2 · |retrieved| = 3 · |giao| = 1 — đôi một khác nhau (H2).
+    retrieved = ["ankor-a#c1", "ankor-c#c1", "ankor-d#c1"]
+    expected_set = set(case.expected_citation)
+    assert len({len(expected_set), len(retrieved), len(expected_set & set(retrieved))}) == 3, (
+        "fixture hỏng: ba lượng phải đôi một khác nhau thì bài mới phân biệt được tử/mẫu"
+    )
+
+    result = score_case(case, answer, retrieved_citations=retrieved)
 
     assert result.success is True  # success chấm theo answer, không theo citation
     assert result.citation_accuracy == 0.5
+    # Khoá thẳng ba giá trị hỏng — mỗi cái là một mutant tử/mẫu có thật.
+    assert result.citation_accuracy != 1.5, "tử số phải là |giao|, không phải |retrieved|"
+    assert result.citation_accuracy != 1 / 3, "mẫu số phải là |expected|, không phải |retrieved|"
+    assert result.citation_accuracy <= 1.0, "citation_accuracy không bao giờ vượt 1.0"
 
 
 # --- source-of-truth: chấm theo TRACE, KHÔNG theo answer.citations (D5 #24) ----------------------

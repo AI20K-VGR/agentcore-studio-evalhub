@@ -131,18 +131,46 @@ def test_render_scorecard_trong_van_in_du_TEN_moi_o_D16_phai_dien() -> None:
     output trước khi có dataset** (GUIDE-C §3.2: ngưỡng phải có trước dataset).
 
     Thiếu bài này thì "render trống" có thể được thoả bằng một chuỗi rỗng — và một chuỗi rỗng không
-    khoá gì cho D16."""
+    khoá gì cho D16.
+
+    **D15/T4 — H5: bất biến cưỡng chế bằng CODE, không bằng chữ.** Bản D12 của bài này gõ tay 6 tên
+    ô. Bài khai *"mọi ô"* mà danh sách do người viết nhớ ra thì nó chỉ khoá được đúng những ô người
+    viết nhớ — thêm ô thứ 7 vào hợp đồng là nó rơi im lặng, và không có bài nào đỏ. Đó đúng cái bẫy
+    đã dính ở D12 khi `SmokeResult` được thêm field thứ 6.
+
+    Chỗ này đắt hơn bình thường vì **ô thứ 7 đã có tên và có hạn**: `DEC-04` (D11) và
+    `DEC-S2-134-03` nợ `Aggregate.n_scored_citation`, hạn **D16 — ngày mai**. Với bản gõ tay, ngày
+    thêm field đó vào contract là ngày khung trống lặng lẽ thiếu một ô. Với bản này, nó đỏ ngay và
+    người thêm buộc phải quyết khung trống hiển thị nó thế nào.
+
+    Danh sách lấy từ `model_fields` của chính hợp đồng. `results` cố ý không nằm trong tập kiểm: nó
+    là danh sách per-case, khung trống báo nó bằng dòng đếm *"case đã chấm"* chứ không bằng tên
+    field — nên nó được khai là **ngoại lệ có lý do**, không phải bị quên."""
     out = render_scorecard(None)
 
-    for field in (
-        "agent_id",
-        "aggregate.success_rate",
-        "aggregate.citation_accuracy",
-        "gate.threshold",
-        "gate.verdict",
-        "recipe_hash",
-    ):
+    # Ô nào không in TÊN field, kèm lý do. Khai tường minh để "ngoại lệ" khác hẳn "bỏ sót":
+    # thêm field mới mà muốn miễn thì phải viết lý do vào đây, không im lặng bỏ qua được.
+    khong_in_ten_field = {
+        "golden_set_ref": "in ở dòng tiêu đề (`SCORECARD — ...`), không in dưới dạng tên ô",
+        "results": "danh sách per-case — báo bằng dòng đếm `case đã chấm`, không bằng tên field",
+    }
+
+    for field in Scorecard.model_fields:
+        if field in khong_in_ten_field:
+            continue
         assert field in out, f"khung trống thiếu tên ô {field}"
+
+    for field in Aggregate.model_fields:
+        assert f"aggregate.{field}" in out, f"khung trống thiếu tên ô aggregate.{field}"
+
+    for field in Gate.model_fields:
+        assert f"gate.{field}" in out, f"khung trống thiếu tên ô gate.{field}"
+
+    # Và tập miễn phải thật sự là field của hợp đồng — một lý do viết cho field không tồn tại nghĩa
+    # là field đã bị đổi tên và cái miễn này đang che một ô thật.
+    assert set(khong_in_ten_field) <= set(Scorecard.model_fields), (
+        f"khai miễn cho field không có trong Scorecard: {set(khong_in_ten_field) - set(Scorecard.model_fields)}"
+    )
 
 
 def test_render_scorecard_trong_noi_ro_VI_SAO_trong() -> None:
