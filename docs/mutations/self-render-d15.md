@@ -172,3 +172,31 @@ nhưng một M9 do người khác nghĩ ra sẽ nhắm vào chỗ mà người v
 AIE-2: chưa ai ngoài AIE-2 gieo vào `evalhub`. Đã xin ở T7 (`#103`), ưu tiên trước **D18** để còn kịp
 vá. Khi có người gieo, mục này append bằng commit của chính người đó — *"Both of you write down what
 happened"*.
+
+---
+
+## §5 · Lượt hai — gieo vào `_row_to_event` (tầng đọc DB)
+
+**Khai TRƯỚC khi gieo**, commit riêng, cùng luật §1. Append sau §4 vì đây là lượt sau, không phải
+sửa lại lượt trước.
+
+Lý do có lượt này: lượt đầu chỉ chạm `render_run_cases` và `answer_from_trace`. Cả hai nhận
+`TraceEvent` **đã dựng sẵn**, nên đoạn `list[tuple]` của psycopg → `list[TraceEvent]` chưa từng bị
+đo. Đó lại đúng là đoạn hỏng **im lặng** nhất của `run_report.py`: `_row_to_event` đọc theo chỉ số,
+thứ tự chỉ số do chuỗi `_READ_RUN` quyết, hai chỗ cách nhau 30 dòng và không có gì buộc chúng khớp.
+Con số `9 mutant` của lượt đầu che mất đúng câu hỏi *gieo vào đâu* — cùng bài học `M8` đã dạy về
+`caught`.
+
+Baseline trước khi gieo: `76 passed, 1 skipped, 2 xfailed, 0 XPASS`.
+
+| ID | Mutation | Failure mode thật nó mô phỏng | **Khai: bài phải ĐỎ** |
+|---|---|---|---|
+| **R1** | hoán `event_id=row[0]` ↔ `run_id=row[1]` trong `_row_to_event` | hoán hai cột **cùng kiểu `str`** — pydantic không kêu, bảng vẫn in, chỉ mọi `run_id` từ đó trỏ nhầm | `test_row_to_event_khop_thu_tu_cot_cua_READ_RUN` |
+| **R2** | hoán thứ tự hai cột **trong chuỗi `_READ_RUN`**, KHÔNG đụng hàm | drift một phía: ai sửa SQL mà quên hàm. Đây là chiều mà một bảng giá trị chép tay **không** bắt được | `test_row_to_event_khop_thu_tu_cot_cua_READ_RUN` |
+| **R3** | `citations=row[11]` → `citations=row[11] or []` | biến *"không áp dụng"* thành *"đã trích, rỗng"* ngay tầng đọc — xoá một dấu hiệu chất lượng trước khi bộ chấm kịp nhìn thấy | `test_row_to_event_citations_NULL_giu_None_chu_khong_thanh_list_rong` |
+| **R4** | dựng `Tokens(prompt=row[9]["completion"], completion=row[9]["prompt"])` | hoán vai hai số token — đúng lỗi vừa bắt được khi review `kb#16` (F3), lần này ở tầng đọc; D19 (`kit#120`) dựng cost-lineage trên chính hai số này | `test_row_to_event_tokens_khong_hoan_prompt_va_completion` |
+| **R5** | bỏ `float(...)`, để nguyên `Decimal` | — | **khai: SỐNG SÓT.** `TraceEvent.cost: float` + pydantic lax mode sẽ tự ép `Decimal → float`, nên `isinstance(cost, float)` vẫn đúng. Gieo để đo xem `float()` kia là **bất biến được cưỡng chế** hay chỉ là **lời khai trong docstring** |
+
+R5 khai ngược có chủ ý, cùng vai với `M9` ở lượt đầu: một sweep mà mọi mutant đều chết chỉ chứng
+minh *"những bất biến tôi nghĩ ra đều được cưỡng chế"*. Con được khai là sẽ sống mới nói được điều
+khác về suite.
