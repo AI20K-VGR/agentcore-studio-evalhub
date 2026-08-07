@@ -151,6 +151,7 @@ chỗ cùng lúc — dòng import và lời gọi — để mutant đúng nghĩa
 | `e.node_type is NodeType.LLM_STEP` → `== NodeType.LLM_STEP` | **equivalent** | `NodeType` là enum, `is` và `==` trùng nhau trên mọi thành viên |
 | đổi độ rộng cột (`:<20` → `:<24`) | **irrelevant** | không phải failure mode — không có cách nào một bảng lệch 4 ký tự làm ai đọc sai một con số |
 | đổi thứ tự hai dòng metadata `golden_set_ref`/`trace_source` | **irrelevant** | cùng lý do |
+| **R5** — `cost=float(row[10])` → `cost=row[10]` (lượt hai, §5) | **equivalent** — *xếp vào đây SAU khi gieo, không phải trước* | Gieo rồi mới biết: pydantic lax mode ép `Decimal → float` nên hành vi không đổi. Đây là lần duy nhất một mutant được reclassify **sau** khi chạy — ghi ra vì phân loại sau khi biết kết quả là chỗ dễ tự lừa nhất, và cách chống là nói thẳng nó xảy ra. Chi tiết + finding về docstring: §5.2 |
 
 Cùng luật đã áp ở `into-engine-d11.md`: `refused is False` → `not refused` được ghi là `equivalent`,
 không đếm là *"sống sót"* mà cũng không đếm là *"bắt được"*. Và cùng luật mà DE đã chốt cho
@@ -200,3 +201,58 @@ Baseline trước khi gieo: `76 passed, 1 skipped, 2 xfailed, 0 XPASS`.
 R5 khai ngược có chủ ý, cùng vai với `M9` ở lượt đầu: một sweep mà mọi mutant đều chết chỉ chứng
 minh *"những bất biến tôi nghĩ ra đều được cưỡng chế"*. Con được khai là sẽ sống mới nói được điều
 khác về suite.
+
+### §5.1 · Kết quả thực đo
+
+Baseline `76 passed, 1 skipped, 2 xfailed`, exit `0`. Mọi lượt `--color=no` + đọc exit code +
+`PYTHONDONTWRITEBYTECODE=1`. **0 collection error** ở cả 5 lượt. File gốc khôi phục nguyên vẹn sau
+mỗi lượt (có assert).
+
+| ID | exit | khai | thực | khớp? |
+|---|---|---|---|---|
+| R1 | 1 | `..._khop_thu_tu_cot_...` | y hệt, 1 bài | ✅ đúng y |
+| R2 | 1 | `..._khop_thu_tu_cot_...` | **5 bài** — cả nhóm | **lệch — rộng hơn khai** |
+| R3 | 1 | `..._citations_NULL_giu_None...` | y hệt, 1 bài | ✅ đúng y |
+| R4 | 1 | `..._tokens_khong_hoan_...` | y hệt, 1 bài | ✅ đúng y |
+| **R5** | **0** | **khai: SỐNG SÓT** | **sống sót** | ✅ dự đoán đúng — và dẫn tới một reclassify |
+
+**4 bắt · 1 sống sót đúng dự đoán · 0 collection error.**
+
+### §5.2 · R5 sống sót, nhưng nó là **equivalent** — không phải một lỗ
+
+Đây là chỗ con số dễ nói dối theo chiều ngược với `M9`. `M9` sống sót **và** là lỗ thật. R5 sống sót
+**và không phải lỗ** — vì bỏ `float(...)` đi thì hành vi **không đổi chút nào**:
+
+```python
+cost=float(row[10])   # gốc
+cost=row[10]          # R5 — Decimal("0.25")
+```
+
+`TraceEvent.cost: float`, `model_config` **không** bật strict ⇒ pydantic lax mode tự ép
+`Decimal → float`. Bằng chứng không phải suy luận: dưới R5, chính bài
+`test_row_to_event_cost_Decimal_thanh_float` — bài **assert `isinstance(event.cost, float)`** — vẫn
+**XANH**. Tức cái đang cưỡng chế bất biến đó là **pydantic**, không phải dòng `float()` của bộ chấm.
+
+⇒ Xếp R5 vào §3 (**equivalent**), **không** đếm là *"1 lỗ sống sót"*. Đếm nó sẽ là thổi phồng đúng
+kiểu mà `M8` đã cảnh báo theo chiều ngược: con số che mất câu hỏi *nó nói lên cái gì*.
+
+**Nhưng lượt gieo vẫn ra một finding thật, chỉ là finding về DOC chứ không về code.** Docstring
+`_row_to_event` viết *"`cost` là `NUMERIC` ⇒ psycopg trả `Decimal`, ép `float` để khớp contract"* —
+câu đó làm người đọc tưởng lời gọi `float()` là thứ **giữ** bất biến. Nó không giữ; pydantic giữ.
+Một người sau này dọn code, thấy `float()` "thừa", xoá đi — suite vẫn xanh, và họ sẽ kết luận là
+mình vừa xoá đúng. Họ đúng **hôm nay**, và sai vào ngày ai đó bật `strict=True` trên `TraceEvent`.
+
+**Xử:** giữ lời gọi `float()` (rẻ, và là lưới cho ngày strict mode), sửa docstring để nói đúng nó là
+lớp phòng hờ **trùng** với pydantic chứ không phải lớp duy nhất. Không thêm test — một bài cố khoá
+`float()` sẽ thực chất đang khoá hành vi coercion của pydantic, tức đo thư viện của người khác.
+
+### §5.3 · R2 — bắt được, nhưng rộng hơn khai
+
+Khai 1 bài, thực tế **5 bài** — cả nhóm `test_row_to_event.py`. Lý do: helper `_row()` dựng row theo
+`_columns()` đọc từ chính `_READ_RUN`, nên đảo thứ tự cột trong SQL làm **mọi** fixture xê dịch cùng
+lúc, không riêng bài đối chiếu.
+
+Không phải lỗi, nhưng ghi vì nó sửa mô hình trong đầu người viết: bất biến *"hai phía phải khớp"*
+hoá ra được cưỡng chế bởi **cách dựng fixture**, không phải bởi một assert cụ thể nào. Đó là lưới
+rộng hơn dự kiến — nhưng cũng nghĩa là khi nó đỏ, 5 dòng đỏ **không** chỉ ra được phía nào đã drift.
+Ai gặp nó đọc §5 này trước, đừng đi tìm 5 lỗi.

@@ -88,8 +88,13 @@ Giá trị `studio_app:changeme` / `studio_owner:changeme` / port `5433` không 
 `docker/postgres-init/`. Hôm nay nơi duy nhất chép được là `packages/kb/scripts/ingest_callisto.py`
 docstring và plan D11 của AIE-2 — hai chỗ mà người mới không có lý do gì để mở.
 
-**Đề nghị:** một `.env.example` ở gốc kit. **Chủ: chưa có** (gốc kit CODEOWNERS = mentor). Ghi là
-vô-chủ-có-hạn, xin chốt D16. Trong lúc chờ, trang này là chỗ chép được.
+**Đề nghị:** một `.env.example` ở gốc kit. **Chủ: AIE-1 (@TranBaDat2607)** — `.github/CODEOWNERS` của
+gốc kit là `* @TranBaDat2607 @hieubui2409`. Xin chốt D16. Trong lúc chờ, trang này là chỗ chép được.
+
+> **Đính chính (07/08, sau khi kiểm bằng API):** bản đầu của mục này ghi *"Chủ: chưa có — gốc kit
+> CODEOWNERS = mentor"*. Sai, và sai theo hướng đắt nhất: một món ghi là **vô chủ** thì không ai
+> nhặt, trong khi chủ thật đang ngồi cùng sprint. Cả 4 người còn có quyền `write` trên gốc kit, nên
+> đây không phải món phải xin phép mới đụng được.
 
 ### Vấp #2 · "Fresh clone" KHÔNG có nghĩa là "fresh database"
 
@@ -115,7 +120,10 @@ Nó chạy được, nhưng dùng một test làm bước dựng dữ liệu là
 - `conftest.py::_truncate_all` **TRUNCATE trước mỗi test**, nên chạy cả file thay vì một hàm sẽ để
   lại run của test **cuối** — và test cuối là bài negative control cố tình **bơm citation sai**. Chạy
   nhầm cả file thì bảng ra `citation 0/1` mà không sai ở đâu cả;
-- nó nằm ở `apps/studio` — CODEOWNERS **mentor**, tức AIE-2 không sửa được nếu nó vỡ.
+- nó nằm ở `apps/studio` — quadrant khác, nên nếu nó vỡ thì AIE-2 sửa được nhưng **không nên** sửa
+  một mình: CODEOWNERS ở đó là `@TranBaDat2607 @hieubui2409`, tức **AIE-1**. (Bản đầu mục này ghi
+  *"CODEOWNERS mentor, tức AIE-2 không sửa được"* — sai cả hai vế: chủ là AIE-1, và cả 4 người đều có
+  quyền `write`. Ràng buộc thật là **kỷ luật quadrant** của `kit#74`, không phải quyền trên GitHub.)
 
 Đường đúng là `#101` (AIE-1): batch thật chạy 6 executor, emit trace đúng schema. Khi có nó thì bước
 6 thay bằng lệnh của `#101` và runbook này ngắn đi một dòng. **Chủ: AIE-1 · mốc: `#101`.**

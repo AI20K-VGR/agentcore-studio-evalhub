@@ -157,9 +157,15 @@ ORDER BY min(ts)
 def _row_to_event(row: tuple[Any, ...]) -> TraceEvent:
     """Dựng `TraceEvent` từ một dòng `obs.trace_events`, đúng thứ tự cột của `_READ_RUN`.
 
-    `cost` là `NUMERIC` ⇒ psycopg trả `Decimal`, ép `float` để khớp contract. `citations` `NULL`
-    giữ nguyên `None` chứ không đổi thành `[]`: *"chưa có trích dẫn nào"* và *"không áp dụng"* là hai
-    chuyện khác nhau, và `citations_from_trace` phân biệt hai cái đó."""
+    `cost` là `NUMERIC` ⇒ psycopg trả `Decimal`. Lời gọi `float(...)` là **lớp phòng hờ, không phải
+    lớp duy nhất**: `TraceEvent.cost: float` với `model_config` không strict ⇒ pydantic lax mode đã
+    tự ép `Decimal → float` rồi. Đo được bằng mutation R5 (`docs/mutations/self-render-d15.md` §5.2):
+    bỏ `float()` đi thì **không bài nào đỏ**. Giữ lại vì nó là lưới cho ngày ai đó bật `strict=True`,
+    nhưng đừng đọc dòng này như thứ đang giữ bất biến — pydantic đang giữ.
+
+    `citations` `NULL` giữ nguyên `None` chứ không đổi thành `[]`: *"chưa có trích dẫn nào"* và
+    *"không áp dụng"* là hai chuyện khác nhau, và `citations_from_trace` phân biệt hai cái đó.
+    Cái này thì **có** lưới — mutation R3 đỏ ngay."""
     return TraceEvent(
         event_id=row[0],
         run_id=row[1],

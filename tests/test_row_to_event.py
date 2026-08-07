@@ -45,7 +45,6 @@ from uuid import UUID
 
 import pytest
 from studio_contracts import NodeType
-
 from studio_evalhub.run_report import _READ_RUN, _row_to_event
 
 _TENANT = UUID("6b1f4c7a-0d2e-4a91-9c3b-5e8f2a7d1b04")
@@ -120,11 +119,14 @@ def test_row_to_event_tokens_khong_hoan_prompt_va_completion() -> None:
 
 
 def test_row_to_event_cost_Decimal_thanh_float() -> None:
-    """`cost` là `NUMERIC` ⇒ psycopg trả `Decimal`; contract đòi `float`.
+    """`cost` là `NUMERIC` ⇒ psycopg trả `Decimal`; ra khỏi `_row_to_event` phải là `float`.
 
-    Không phải chuyện thẩm mỹ: `TraceEvent.cost: float` và pydantic sẽ ép — nhưng nếu lớp ép đó biến
-    mất thì mọi phép cộng cost sau này trộn `Decimal` với `float` và `TypeError` nổ ở chỗ khác hẳn,
-    xa nguyên nhân."""
+    **Bài này khoá bất biến ở BIÊN, không khoá lời gọi `float()`** — và sự khác nhau đó đo được:
+    mutation R5 (`docs/mutations/self-render-d15.md` §5.2) bỏ `float(...)` đi mà bài vẫn XANH, vì
+    `TraceEvent.cost: float` + pydantic lax mode đã ép sẵn. Tức thứ đang giữ bất biến là pydantic.
+
+    Giữ bài vì biên là chỗ đáng khoá: consumer chỉ cần biết *"ra khỏi đây là `float`"*, bất kể ai
+    ép. Nhưng đừng đọc nó như bằng chứng rằng dòng `float()` kia có lưới — nó không có."""
     event = _row_to_event(_row())
 
     assert isinstance(event.cost, float)
