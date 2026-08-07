@@ -28,7 +28,8 @@ from uuid import NAMESPACE_DNS, uuid5
 
 import pytest
 from studio_contracts import NodeType, Tokens, TraceEvent
-from studio_evalhub.run_report import TraceAnswerError, answer_from_trace
+from studio_evalhub.golden_case import GoldenCase
+from studio_evalhub.run_report import TraceAnswerError, answer_from_trace, score_run_from_trace
 
 _TENANT = uuid5(NAMESPACE_DNS, "ankor")
 _RUN_ID = "run-d15-answer"
@@ -168,6 +169,96 @@ def test_answer_from_trace_events_rong_thi_raise() -> None:
     rỗng là biến *"chưa đo"* thành *"đã đo và trượt"* — cùng lỗi mà `DEC-D12-02` cấm ở tầng render."""
     with pytest.raises(TraceAnswerError):
         answer_from_trace([])
+
+
+def test_score_run_from_trace_cham_bang_citation_TRACE_chu_khong_bang_agent_TU_KHAI() -> None:
+    """`score_run_from_trace` phải lấy citation từ **TRACE**, KHÔNG từ `AgentAnswer.citations`.
+
+    **Bài này được thêm sau khi mutation sweep D15 (M9) tìm ra một mutant SỐNG SÓT.** Đổi thân hàm
+    thành `score_case(case, answer, answer.citations)` — tức chấm bằng citation agent **tự khai** —
+    và toàn bộ suite vẫn xanh `69 passed`, vì `score_run_from_trace` khi đó chưa có bài nào gọi tới.
+    Đó đúng là thứ D5 (`#24`) cấm: `AgentAnswer.citations` là *cái LLM nói nó đã trích*, trace là
+    *mặt quan sát thật*. Một agent bịa citation sẽ tự chấm cho mình điểm tuyệt đối.
+
+    Fixture cố ý dựng **bất đối xứng theo nguồn**: trace mang chunk ĐÚNG, còn `outputs["citations"]`
+    (tức lời tự khai) mang chunk SAI. Hai nguồn cho hai kết quả khác nhau, nên bài này phân biệt
+    được chúng — nếu hai nguồn trùng nhau thì bài không đo được gì.
+    """
+    case = GoldenCase(
+        case_id="SC-01",
+        query="Nhân viên xin nghỉ phép cần báo trước bao lâu?",
+        tenant="ankor",
+        section_roles=["public"],
+        expected_tenant="ankor",
+        expected_section_role="public",
+        expected="3 ngày làm việc",
+        expected_citation=["ankor-leave-001#c1"],
+    )
+    events = [
+        _event(node_type=NodeType.KB_RETRIEVE, seq=0, outputs={"chunks": []}),
+        _event(
+            node_type=NodeType.LLM_STEP,
+            seq=1,
+            outputs={
+                "answer": "Nhân viên cần báo trước tối thiểu 3 ngày làm việc.",
+                "refused": False,
+                # Agent TỰ KHAI một chunk không hề nằm trong trace — đây là lời khai, không phải
+                # quan sát. Nếu bộ chấm tin nó thì `citation_accuracy` sẽ là 0.0 vì chunk sai...
+                "citations": ["ankor-BIA-DAT-999#c9"],
+            },
+            # ...còn TRACE thì mang đúng chunk kỳ vọng ⇒ chấm đúng phải ra 1.0.
+            citations=["ankor-leave-001#c1"],
+        ),
+        _event(node_type=NodeType.END, seq=2, outputs={}),
+    ]
+
+    result = score_run_from_trace(case, events)
+
+    assert result.citation_accuracy == 1.0, (
+        "chấm phải theo citation TRACE (đúng chunk) — ra 0.0 nghĩa là đang chấm theo lời agent tự khai"
+    )
+    assert result.success is True
+    assert result.case_id == "SC-01"
+
+    # Vế đối chứng: lời tự khai vẫn đọc được nguyên vẹn trên `AgentAnswer` — nó không bị xoá, chỉ là
+    # không được dùng để chấm. Giữ nó để sau này cross-check hallucination (claimed ⊆ retrieved).
+    assert answer_from_trace(events).citations == ["ankor-BIA-DAT-999#c9"]
+
+
+def test_score_run_from_trace_khong_doc_gi_ngoai_events() -> None:
+    """Vế thứ hai của M9: sửa TRACE thì điểm phải ĐỔI.
+
+    Bài trên một mình chưa đủ — nó vẫn xanh nếu hàm hardcode `1.0`. Ở đây cùng một `case`, cùng một
+    `answer`, chỉ đổi citation **trong trace**, và đòi điểm khác đi. Đây là bản thu nhỏ của negative
+    control mà `test_spine_scored_from_postgres.py` (D7) chạy trên DB thật: *sửa nguồn mà điểm không
+    đổi ⇒ điểm không đến từ nguồn đó*."""
+    case = GoldenCase(
+        case_id="SC-01",
+        query="Nhân viên xin nghỉ phép cần báo trước bao lâu?",
+        tenant="ankor",
+        section_roles=["public"],
+        expected_tenant="ankor",
+        expected_section_role="public",
+        expected="3 ngày làm việc",
+        expected_citation=["ankor-leave-001#c1"],
+    )
+    outputs: dict[str, object] = {
+        "answer": "Nhân viên cần báo trước tối thiểu 3 ngày làm việc.",
+        "refused": False,
+    }
+    grounded = [
+        _event(node_type=NodeType.LLM_STEP, seq=0, outputs=outputs, citations=["ankor-leave-001#c1"]),
+        _event(node_type=NodeType.END, seq=1, outputs={}),
+    ]
+    tampered = [
+        _event(node_type=NodeType.LLM_STEP, seq=0, outputs=outputs, citations=["chunk-khong-ton-tai#c999"]),
+        _event(node_type=NodeType.END, seq=1, outputs={}),
+    ]
+
+    assert score_run_from_trace(case, grounded).citation_accuracy == 1.0
+    assert score_run_from_trace(case, tampered).citation_accuracy == 0.0, (
+        "đổi citation trong trace mà điểm không đổi ⇒ điểm KHÔNG đến từ trace"
+    )
 
 
 def test_answer_from_trace_khong_doi_event_dau_vao() -> None:

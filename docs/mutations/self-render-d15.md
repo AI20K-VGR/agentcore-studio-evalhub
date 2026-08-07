@@ -53,10 +53,122 @@ mà gieo sạch được. Mutant từng cân nhắc rồi **bỏ**, ghi ở §3.
 
 ## §2 · Kết quả thực đo
 
-*(điền sau khi chạy — xem §2.1)*
+Baseline: `69 passed, 1 skipped, 2 xfailed, 0 XPASS`, exit `0`.
+Mọi lượt: `--color=no`, đọc exit code, `PYTHONDONTWRITEBYTECODE=1`. **0 collection error** ở cả 9 lượt.
+
+| ID | exit | khai: bài phải đỏ | thực: bài đỏ | khớp? |
+|---|---|---|---|---|
+| M1 | 1 | `..._in_k_tren_n_tho_...` | `..._in_k_tren_n_tho_...` · `..._toan_refusal_...` | **lệch — rộng hơn khai** |
+| M2 | 1 | `..._tu_choi_in_n_a_...` | `..._tu_choi_in_n_a_...` | ✅ đúng y |
+| M3 | 1 | `..._mau_so_citation_loai_refusal...` · `..._in_k_tren_n_tho_...` | thêm `..._toan_refusal_...` | **lệch — rộng hơn khai** |
+| M4 | 1 | `..._rong_la_not_estimable...` · `..._toan_refusal_...` | y hệt | ✅ đúng y |
+| M5 | 1 | `..._in_k_tren_n_tho_...` | y hệt | ✅ đúng y |
+| M6 | 1 | `..._nhieu_llm_step_thi_raise...` | y hệt | ✅ đúng y |
+| M7 | 1 | `..._thieu_llm_step_thi_raise...` | y hệt | ✅ đúng y |
+| M8 | 1 | `..._KHONG_goi_compute_scorecard` | **11 bài** | **lệch — rộng hơn khai rất nhiều** |
+| **M9** | **0** | **khai: KHÔNG bài nào đỏ (dự đoán SỐNG SÓT)** | **không bài nào đỏ** | ✅ dự đoán đúng — và đây là finding |
+
+**8 bắt · 1 sống sót đúng như dự đoán · 0 tương đương bị đếm nhầm · 0 collection error.**
+
+### §2.1 · M9 — mutant sống sót, và vì sao nó là kết quả có giá trị nhất của lượt này
+
+Một sweep 8/8 do **chính người viết test** gieo thì đo được rất ít: nó chỉ chứng minh *"những bất
+biến tôi nghĩ ra đều được cưỡng chế"*, không chứng minh *"hàm này đúng"*. Nên M9 được thêm với một
+giả thuyết ngược hẳn — **khai trước là nó sẽ SỐNG**:
+
+```python
+# gốc
+return score_case(case, answer_from_trace(events), citations_from_trace(events))
+# M9
+return score_case(case, answer_from_trace(events), answer_from_trace(events).citations)
+```
+
+Tức chấm bằng citation **agent tự khai** thay vì citation quan sát được từ trace. Kết quả: `69
+passed`, exit `0` — **không một bài nào đỏ**.
+
+Đây là một lỗ thật, không phải một mutant giả:
+
+- Nó là **đúng thứ D5 (`#24`) cấm**. `AgentAnswer.citations` là *cái LLM nói nó đã trích*; trace là
+  *mặt quan sát thật*. `harness.py:163` ghi thẳng: *"KHÔNG dùng `answer.citations` (agent tự khai)"*.
+- Hệ quả nếu land: một agent **bịa** citation sẽ tự chấm cho mình `citation_accuracy` tuyệt đối, và
+  bảng điểm không có cách nào biết.
+- Nguyên nhân lộ ra ngay khi hỏi đúng câu: `score_run_from_trace` **chưa có một bài test nào gọi
+  tới nó**. Suite T3 khoá rất kỹ hai đầu (`answer_from_trace` 7 bài · `render_run_cases` 12 bài) mà
+  bỏ trống đúng chỗ hai đầu **nối vào nhau**.
+
+**Đã vá trong cùng ngày**, hai bài mới ở `tests/test_answer_from_trace.py`:
+
+| bài | khoá gì |
+|---|---|
+| `test_score_run_from_trace_cham_bang_citation_TRACE_chu_khong_bang_agent_TU_KHAI` | fixture bất đối xứng **theo nguồn**: trace mang chunk ĐÚNG, lời tự khai mang chunk SAI ⇒ hai nguồn cho hai kết quả khác nhau, bài phân biệt được |
+| `test_score_run_from_trace_khong_doc_gi_ngoai_events` | negative control: cùng `case`, cùng `answer`, chỉ đổi citation **trong trace** ⇒ điểm phải đổi. Bản thu nhỏ của phép so mà `test_spine_scored_from_postgres.py` (D7) chạy trên DB thật |
+
+Gieo lại M9 sau khi vá: **2 bài đỏ**, exit `1`. Suite sau khi vá: `71 passed, 1 skipped, 2 xfailed`.
+
+### §2.2 · M8 — bắt được, nhưng bắt bằng một cơ chế có hạn sử dụng
+
+Khai 1 bài đỏ, thực tế **11 bài** đỏ. Lý do lệch không phải suite mạnh hơn dự kiến, mà là:
+`compute_scorecard` hiện `raise NotImplementedError`, nên mọi bài gọi `render_run_cases` đều vỡ theo
+dây chuyền. Bài được khai (`test_render_case_KHONG_goi_compute_scorecard`) **có** đỏ, nên M8 tính là
+`caught` — nhưng cơ chế bắt thật sự là *"nó raise"*, không phải *"suite phát hiện render đã gọi sang
+tầng tính"*.
+
+⇒ **Finding có hạn: D16.** Khi `kit#108` hiện thực `compute_scorecard`, nó thôi raise, và lúc đó
+**không còn bài nào** chứng minh `render_run_cases` không gọi sang tầng tính. Bất biến *"render
+không tự tính"* phải được khoá lại bằng một cơ chế không dựa vào exception — ví dụ
+`monkeypatch`/spy đếm số lần gọi. Ghi vào việc D16, chủ AIE-2.
+
+Đây đúng loại thứ mà `into-engine-d11.md` gọi là *"dòng lệch declared-vs-actual mới là finding"* —
+M3 ở lượt đó khai ĐỎ mà ra XANH 30/30 và lộ ra `clamp ts` không có lưới. Lần này lệch theo chiều
+ngược nhưng cùng bản chất: **con số `caught` che mất câu hỏi *bắt bằng cái gì***.
+
+### §2.3 · M1 và M3 — lệch nhẹ, rộng hơn khai
+
+Cả hai đỏ thêm `test_render_case_toan_refusal_thi_citation_la_not_estimable` ngoài dự kiến.
+
+- **M1** (hoán `k`/`n`): với fixture toàn-refusal, `1/2` thành `2/1` ⇒ bài đó cũng bắt được.
+- **M3** (mẫu số citation dùng `len(results)`): với fixture toàn-refusal, `n_citation` thành `2` thay
+  vì `0`, nên hàm in `0/2` thay vì `not-estimable` ⇒ bài đó cũng bắt được.
+
+Không phải lỗi, nhưng ghi lại vì nó sửa mô hình trong đầu người viết: bài `toan_refusal` hoá ra là
+một bài **đa mục đích** — nó khoá cả nhánh `n=0` từng phần lẫn tính đúng của hai mẫu số. Chỗ đó là
+chỗ mạnh nhất của suite hiện tại, không phải bài phụ như tên gọi gợi ý.
+
+### §2.4 · Ghi chú trung thực về cách gieo M8
+
+M8 **không gieo được bằng một dòng**: thêm lời gọi `compute_scorecard(...)` mà không thêm import sẽ
+cho `NameError`, tức mutant chết vì lý do sai (lỗi tên, không phải hành vi). Nên lượt này thêm **hai**
+chỗ cùng lúc — dòng import và lời gọi — để mutant đúng nghĩa *"render gọi sang tầng tính"*. Khai ra
+đây vì một mutant cần hai chỗ sửa thì không còn là mutation một-điểm, và người đọc có quyền biết.
 
 ---
 
-## §3 · Mutant đã cân nhắc rồi bỏ
+## §3 · Mutant đã cân nhắc rồi bỏ — phân loại, KHÔNG tính vào số
 
-*(điền sau khi chạy)*
+| ứng viên | phân loại | vì sao không đếm |
+|---|---|---|
+| `if not events:` → `if len(events) == 0:` trong `answer_from_trace` | **equivalent** | `events: list` ⇒ hai vế đồng nhất trên mọi giá trị dựng được. Không chứng minh gì về suite |
+| `e.node_type is NodeType.LLM_STEP` → `== NodeType.LLM_STEP` | **equivalent** | `NodeType` là enum, `is` và `==` trùng nhau trên mọi thành viên |
+| đổi độ rộng cột (`:<20` → `:<24`) | **irrelevant** | không phải failure mode — không có cách nào một bảng lệch 4 ký tự làm ai đọc sai một con số |
+| đổi thứ tự hai dòng metadata `golden_set_ref`/`trace_source` | **irrelevant** | cùng lý do |
+
+Cùng luật đã áp ở `into-engine-d11.md`: `refused is False` → `not refused` được ghi là `equivalent`,
+không đếm là *"sống sót"* mà cũng không đếm là *"bắt được"*. Và cùng luật mà DE đã chốt cho
+collection error: một sweep báo *"bắt được 13"* bằng `SyntaxError` là một sweep nói dối.
+
+**Không cố đủ một con số bằng mutation vô nghĩa.** Bốn dòng trên nếu đem gieo sẽ nâng "số mutant" lên
+13 mà không thêm một bit thông tin nào về chất lượng suite.
+
+---
+
+## §4 · Phản hồi của chủ quadrant
+
+Lượt này chủ quadrant **tự gieo vào code của chính mình**, nên mục này trùng người gieo — đó chính là
+giới hạn của phép đo và nó phải được nói ra: một sweep tự gieo chỉ đo được *"những bất biến tôi nghĩ
+ra đều được cưỡng chế"*. M9 tồn tại chính là để chống lại điểm mù đó, và nó đã tìm thấy một lỗ thật —
+nhưng một M9 do người khác nghĩ ra sẽ nhắm vào chỗ mà người viết **không** nghĩ tới được.
+
+⇒ Vế *"the owner has to show their tests catch them"* của `kit#74` vẫn **chưa xảy ra** với quadrant
+AIE-2: chưa ai ngoài AIE-2 gieo vào `evalhub`. Đã xin ở T7 (`#103`), ưu tiên trước **D18** để còn kịp
+vá. Khi có người gieo, mục này append bằng commit của chính người đó — *"Both of you write down what
+happened"*.
