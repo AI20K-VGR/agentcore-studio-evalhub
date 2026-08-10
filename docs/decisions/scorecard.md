@@ -83,6 +83,69 @@ lệnh, không phải bằng lời.
 | **DEC-D16-05** | Ngưỡng: **giữ `0.9/0.95` trong D16** → **đo** trên golden-30 → nếu cần recalibrate thì **ghi số + lý do vào sổ hoãn** → **chốt ở ngày sau**. Không chốt ngưỡng trong cùng ngày đo được số. Số đo trục `citation_accuracy` mang nhãn **`TẠM`**, gỡ nhãn khi bài hồi quy embedding (T9b) xanh | GUIDE-C §3.2 đòi *"ngưỡng literal phải có trước dataset"* — đã tuân thủ (ngưỡng có từ workbench, dataset về D14). Sổ hoãn lại ghi hạn D16 cho recalibrate với lý do đo được: **bộ 5 → `0.80`, bộ 10 → `0.60` / `0.833` ⇒ với `0.9/0.95` một recipe TỐT cũng FAIL cả hai trục**. Hai câu không mâu thuẫn nếu đọc đúng: GUIDE-C cấm **chọn ngưỡng cho vừa số vừa đo** (fitting), không cấm **sửa một ngưỡng đã chứng minh sai đơn vị**. Ranh giới mỏng nên có luật tự áp: *ngưỡng mới chỉ được chốt kèm một lý do **không nhắc tới điểm của recipe hiện tại**; nếu lý do duy nhất viết ra được là "để nó PASS" thì **ghi FAIL và để FAIL**.* Điều kiện cứng từ `DEC-08`: trục `citation_accuracy` **hiện đo sức mạnh FENCE, không đo TRUY XUẤT** (null control: vector hằng số 0 bit thông tin vẫn `recall@1 = 6/6`) ⇒ chốt ngưỡng cho trục đó khi chưa kiểm lại tiền đề là chốt một con số cho một thứ khác với tên của nó. Nhãn `TẠM` đi theo **số liệu**, không ràng buộc **thứ tự chạy**: T6 là P0 và **không chờ** T9b (P2, tiền đề ở người khác) — hướng ngược lại là tự tạo blocker giả cho một ô DoD | `test_doi_threshold_thi_verdict_doi` · `test_verdict_doi_o_dung_hai_phia_cua_nguong` · bảng số đo golden-30 (T6) | ✅ quyết — **đo trong D16, chốt ngày sau** |
 | **DEC-D16-06** | **Không** thêm `match_mode` vào `GoldenCase` ở D16. Dời **D18** (cùng mốc `F-6` agreement / `kit#118`) | Đây là rút một hạn **tự đặt** nên phải có số: đã đếm trên golden-30 — **0/30** case có field `match_mode`, và cả 30 chấm được bằng `_contains_phrase` (22 trả-lời) hoặc luật refusal (8 từ-chối). Thêm một field mà **mọi giá trị đều là `exact`** là thêm một nhánh code không có case nào đi qua — đúng lớp *"khung rỗng trông như đã xử lý"* mà `DEC-D12-02` cấm ở tầng render. **Điều kiện lật:** ngày DE giao case cần judge (yêu cầu *"≥3 case cần judge"*, hạn D15 — **chưa thoả**), `match_mode` land cùng bài test đầu tiên dùng nó | `python -c "any('match_mode' in c ...)"` → `False` (đo 10/08) · ask DE ③ | ✅ quyết — hoãn **D18**, có lý do đo được |
 
+### ADR-D16-04 · Gỡ hai marker `xfail(strict=True)` — bản ghi của lần gỡ
+
+> Đây là **ADR mà `DEC-D16-04` yêu cầu**, không phải một id thứ bảy. `render.py:9` đã khai nợ này từ
+> D12: *"quyền đổi marker (M6) mới chỉ có ADR **dự kiến** viết ở D16"*. Trả ở đây.
+
+**Gỡ cái gì.** Hai marker, cùng một cơ chế, hai hợp đồng khác nhau:
+
+| Bài | Marker canh gì | Land ở |
+|---|---|---|
+| `test_gate_blocks_on_fail` (`test_eval_gate.py`) | *"`EvalHarness.run` chưa có verdict"* | T7 |
+| `test_tu_choi_khong_co_trace_phai_fail_closed` (`test_smoke_runner.py`) | *"tầng giữ `events` chưa fail-closed"* (`DEC-05`) | T4 |
+
+Cái thứ hai **không** nằm trong câu chữ gốc của `DEC-D16-04` — plan D16 chỉ gọi tên bài thứ nhất.
+Nó được xử **cùng id** vì đúng một lý do: nó là **cùng một quyết định** (*"ngày cơ chế bắn thì gỡ
+marker và đọc lại luật"*), chỉ khác bài. Mở `DEC-D16-07` cho nó là tách một quyết định làm hai id mà
+nội dung không khác gì nhau — đúng thứ §2 cấm.
+
+**Vì sao gỡ, chứ không phải vì sao được phép gỡ.** `strict=True` được dựng ở D9 với mục đích ghi
+trong chính docstring của nó: *"lúc seam xong, nó lặng lẽ thành `XPASS` và không ai buộc phải quay
+lại xem assert bên trong có còn đúng hợp đồng hay không"*. D16 là ngày cơ chế đó **bắn thật** — pytest
+in `[XPASS(strict)]` cho cả hai bài, ở hai thời điểm khác nhau (T4 và T7). Cách duy nhất làm cơ chế
+đó vô nghĩa là gỡ marker cho suite xanh rồi đi tiếp. Nên phần thật của việc này là vế sau:
+
+**Assert đã đọc lại chưa — và cả hai bài đều PHẢI SỬA, không bài nào chỉ mất một dòng marker:**
+
+- `test_gate_blocks_on_fail`: `agent_id="agent-bad-instructions"` và `golden_set_ref="golden-set-eval-1"`
+  **chưa bao giờ tồn tại**. Giữ nguyên thân bài sẽ ra `LookupError`, không ra `FAIL` — bài sẽ đỏ vì
+  lý do chẳng liên quan gì tới gate. Viết lại trên golden-30 thật + `_bad_runner` tất định (không
+  LLM: `judge.py` còn là spec đến D18, và một money-shot phụ thuộc LLM là bài không tái lập được).
+  Assert từ **1 dòng lên 5**: ba dòng giữa phân biệt *"gate chặn vì recipe tệ"* với *"gate chặn vì
+  harness hỏng"* — chỉ giữ dòng đầu thì một `EvalHarness.run` vỡ hoàn toàn cũng cho bài xanh.
+- `test_tu_choi_khong_co_trace_phai_fail_closed`: assert cũ chỉ có `success is False`. Nó xanh **cả
+  khi** bộ chấm hỏng theo hướng ngược — luật sai kiểu *"citation rỗng ⇒ FAIL"* cũng cho case này
+  `False`, và khi đó cả 8 case refusal trung thực của golden-30 đỏ oan mà bài vẫn xanh. Một assert
+  không phân biệt được hai nguyên nhân thì không khoá được nguyên nhân nào.
+
+**Cái gì thay lưới cũ.** Lưới cũ (`strict=True`) canh **trạng thái của seam** — một thứ có hạn sử
+dụng theo định nghĩa. Lưới mới canh **hợp đồng**, nên không hết hạn:
+
+| Bài | Lưới mới | Mutant chứng minh có răng |
+|---|---|---|
+| money-shot | bài đối trọng `test_gate_passes_on_good_recipe` — cùng 30 case, cùng ngưỡng, biến duy nhất là chất lượng answer | `verdict` hằng số `"FAIL"` ⇒ đối trọng đỏ |
+| no-trace | cặp đối chứng khác nhau **đúng một event**: `events=[]` ⇒ FAIL, thêm 1 event zero-citation ⇒ PASS (F02) | đổi luật thành *"citation rỗng ⇒ FAIL"* ⇒ 4 bài đỏ |
+
+**Một bài bị thu hẹp, không bị xoá.** `test_harness_judge_compute_not_implemented` khẳng định **cả
+ba** seam còn raise; T2+T4 điền hai, nên nó phải đỏ — đúng thiết kế. Thu hẹp về seam duy nhất còn là
+spec và **đổi tên theo phạm vi mới** (`test_judge_seam_van_con_notimplemented`; giữ tên cũ là để lại
+một cái tên nói dối về thứ nó kiểm). Xoá bài là mất lưới bắt *"stub một giá trị giả"* — đã kiểm bằng
+mutation: cho `judge` trả `Judge(label="pass", agreement=1.0)` hằng số ⇒ bài đỏ.
+
+**Hai lưới hết hạn cùng ngày, thay bằng spy.** `test_render_scorecard_KHONG_goi_compute_scorecard` và
+`test_render_case_KHONG_goi_compute_scorecard` khoá *"render không tự tính"* bằng một bằng chứng
+**gián tiếp**: `compute_scorecard` đang `raise`, nên *"render gọi nó"* và *"bài đỏ"* trùng nhau.
+`DEC-D15-01` đã khai trước rằng lưới này mất hiệu lực ngày T2 land. Thay bằng spy **hai vế**, vì một
+vế không đủ: **tĩnh** (`compute_scorecard` không có trong `vars(render)`) bắt `from … import …` —
+kiểu vi phạm mà `monkeypatch` **không** với tới vì tên đã bind lúc import; **động** (sentinel + assert
+0 lời gọi) bắt tra cứu trễ qua module — kiểu mà vế tĩnh không thấy. Cả hai vế đã kiểm bằng mutation
+riêng.
+
+**Vì sao ADR này đáng tồn tại:** ba trong năm bài trên là lưới **có hạn sử dụng được khai trước** và
+đến hạn đúng D16. Một dự án ghi được ngày lưới hết hạn nhưng không ghi lại lúc thay nó thì lần sau
+không ai tin cái hạn nữa.
+
 **Vì sao đúng sáu id và không có id thứ bảy:** một id sinh ra giữa ngày là một id **chưa có ai đọc**.
 D15 vừa cho thấy giá của nó (3 id treo, 8 chỗ trích, cả ngày không truy được). Quyết định nào không
 gắn được vào sáu id trên thì **không thuộc D16** — nó đi vào bảng *Hoãn* kèm chủ + hạn, không nhét

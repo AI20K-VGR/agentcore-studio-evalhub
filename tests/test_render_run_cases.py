@@ -26,7 +26,8 @@ không có gì để bất đối xứng.
 from __future__ import annotations
 
 import pytest
-from studio_evalhub.compute import compute_scorecard
+import studio_evalhub.compute as compute_mod
+import studio_evalhub.render as render_mod
 from studio_evalhub.harness import SmokeResult
 from studio_evalhub.render import render_run_cases, render_scorecard
 
@@ -234,28 +235,36 @@ def test_render_case_mau_so_citation_loai_refusal_chu_khong_dung_tong_case() -> 
 # ---------------------------------------------------------------------------
 
 
-def test_render_case_KHONG_goi_compute_scorecard() -> None:
-    """Render **không** tự tính — nối `DEC-D12-03` và `DEC-D15-01` (bỏ 1).
+def test_render_case_KHONG_goi_compute_scorecard(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`DEC-D15-01`: `render_run_cases` **hiển thị**, không **tính** — khoá bằng **spy**.
 
-    `compute_scorecard` là mốc D16 (`kit#108`). Khoá bằng chứng cứng: nó vẫn raise. Nếu một bản vá
-    cho `render_run_cases` gọi nó, thì hoặc bài này đỏ (vì raise lọt lên), hoặc `compute_scorecard`
-    đã được hiện thực sớm — cả hai đều là thứ phải nhìn thấy, không được trôi. Land sớm còn làm
-    `test_gate_blocks_on_fail` (`xfail(strict=True)`) XPASS ⇒ FAIL."""
-    with pytest.raises(NotImplementedError):
-        compute_scorecard(
-            agent_id="a",
-            golden_set_ref="g",
-            results=[],
-            threshold_success=0.9,
-            threshold_citation_accuracy=0.95,
-            # D16: tham số mới của `compute_scorecard` (DEC-D16-03 đường (b)) — caller nói nhánh nào
-            # được chấm citation. `results=[]` nên tập rỗng là giá trị đúng; bài này không đổi mục
-            # đích, vẫn chỉ khoá "renderer KHÔNG gọi sang tầng tính".
-            scored_case_ids=set(),
-        )
+    **D16 — lưới cũ hết hạn đúng hôm nay, và nó đã được khai trước.** `DEC-D15-01` ghi nguyên văn:
+    *"`M8` hiện bị bắt vì `compute_scorecard` đang `raise`, không phải vì suite phát hiện lời gọi.
+    Khi `kit#108` hiện thực nó, bất biến này mất lưới ⇒ khoá lại bằng spy. Chủ AIE-2, hạn D16."* T2
+    điền seam ⇒ lưới cũ biến mất; đây là bản trả nợ đó.
 
-    # Gọi được và không raise ⇒ đường đi của renderer không chạm `compute_scorecard`.
+    Hai vế như bài cùng họ ở `test_render.py`, mỗi vế bắt một kiểu vi phạm mà vế kia không thấy:
+    **tĩnh** bắt `from ... import compute_scorecard` (tên bind lúc import, `monkeypatch` không với
+    tới), **động** bắt tra cứu trễ qua module.
+
+    Hai assert cuối giữ nguyên nội dung cũ: renderer chạy được, và **không** in `verdict` — verdict
+    là output của gate (`compute_scorecard`), không phải của renderer. Chúng vẫn là phần của
+    `DEC-D15-01`, không phải phần bị lưới cũ giữ hộ."""
+    goi: list[str] = []
+
+    def _sentinel(*args: object, **kwargs: object) -> None:
+        goi.append("compute_scorecard")
+
+    monkeypatch.setattr(compute_mod, "compute_scorecard", _sentinel)
+
+    assert "compute_scorecard" not in vars(render_mod), (
+        "DEC-D15-01: render_run_cases sống cùng module với render_scorecard — module này không được "
+        "import compute_scorecard vào namespace của nó"
+    )
+
     out = render_run_cases(_run_results(), run_id=_RUN_ID, golden_set_ref=_GOLDEN_SET_REF, trace_source=_TRACE_SOURCE)
+
+    assert goi == [], f"render_run_cases đã gọi sang tầng tính: {goi}"
     assert "PASS" in out
 
     # Và không có verdict: verdict là output của gate (D16), không phải của renderer.

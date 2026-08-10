@@ -1,101 +1,185 @@
-"""Phase 8 — eval-gate ĐỎ-by-design tests (spec AIE-2, R-SPEC A7 INV-6/INV-7).
+"""Eval-gate money-shot — `gate.verdict` chặn thật (R-SPEC A7 INV-6, umbrella-contract bước 7).
 
-`harness.py`/`judge.py`/`compute.py` are intentionally empty (`NotImplementedError`) at P8 —
-the OJT spec surface AIE-2 fills next. These tests pin the SHAPE of that gap rather than pretend
-it is closed: the eval-gate money-shot ("sửa instructions tệ → verdict FAIL → chặn + rollback",
-R-SPEC A7 INV-6) cannot run for real yet because nothing produces a real verdict.
+## D16 — bài này đổi từ *ghi một gap* sang *chứng minh một hợp đồng*
 
-## Sửa D9 — `strict=False` là một lỗi, không phải một lựa chọn
+Từ D9 tới D15 file này giữ hai bài **đỏ-by-design**: seam AIE-2 còn `NotImplementedError` nên
+money-shot không chạy được, và `xfail(strict=True)` là cách ghi lại gap đó **mà không cho phép lối ra
+im lặng** — ngày seam xong, marker biến bài thành `XPASS` ⇒ pytest báo FAIL ⇒ buộc quay lại đọc assert.
 
-Bản trước đánh dấu **cả hai** bài `xfail(strict=False)` với lập luận: *"unexpected pass (once AIE-2
-implements the seam) is reported as XPASS, not a failure — main tracks these to flip green"*. Lập luận
-đó tạo ra hai vấn đề khác nhau, và cả hai đều làm suite nói dối:
+**D16 là ngày cơ chế đó bắn.** `EvalHarness.run` và `compute_scorecard` đã land (T2/T4), pytest in
+`[XPASS(strict)]`, và việc phải làm **không phải xoá một dòng marker** — `DEC-D16-04` ghi rõ:
 
-**Bài `test_harness_judge_compute_not_implemented` không đỏ được ở CHIỀU NÀO.** Nó đang PASS (báo
-`XPASS`) vì ba seam vẫn raise `NotImplementedError` đúng như nó khẳng định. Nhưng nếu ai đó stub một
-giá trị giả — đúng thứ docstring của nó nói là sẽ bắt được — thì assert vỡ, `xfail` hấp thụ, pytest báo
-`XFAIL`, và suite **vẫn xanh**. Một canh gác mà cả hai kết cục đều xanh thì không canh gì. D9 gỡ hẳn
-marker: bài đang xanh thật, nên để nó xanh thật, và stub giả sẽ làm nó ĐỎ.
+- `agent_id="agent-bad-instructions"` và `golden_set_ref="golden-set-eval-1"` **chưa bao giờ tồn
+  tại**. Gỡ marker mà giữ nguyên thân bài sẽ ra `LookupError`/`FileNotFoundError`, **không** ra
+  `FAIL` — tức bài sẽ xanh/đỏ vì lý do chẳng liên quan gì tới gate.
+- Nguồn `FAIL` phải **tất định, không LLM**: `judge.py` còn là spec đến D18, và một money-shot phụ
+  thuộc LLM là một bài không tái lập được.
+- Phải có **bài đối trọng**. Không có nó thì `test_gate_blocks_on_fail` không phân biệt được *"gate
+  chặn đúng"* với *"gate chặn mọi thứ"*, và một `verdict = "FAIL"` hằng số cũng cho nó xanh.
 
-**Bài `test_gate_blocks_on_fail` đỏ thật, nhưng `strict=False` khiến ngày nó được vá không ai biết.**
-`EvalHarness.run` còn `NotImplementedError` nên bài này `XFAIL` hợp lệ — nó đang ghi một gap thật. Vấn
-đề là lúc seam xong, nó lặng lẽ thành `XPASS` và không ai buộc phải quay lại xem assert bên trong có
-còn đúng hợp đồng hay không. D9 đổi sang `strict=True`: `XPASS` trở thành FAIL, buộc gỡ marker và đọc
-lại assert. Gap vẫn nhìn thấy được trong suite, nhưng lối ra khỏi nó không còn im lặng.
+Lưới cũ (`strict=True`) canh *"seam chưa xong"*. Lưới mới canh *"gate có phân biệt PASS/FAIL hay
+không"* — và đó là câu trả lời cho vế thứ ba của ADR (*"cái gì thay thế lưới cũ"*).
 
-Nguyên tắc rút ra, áp cho cả hai: **`xfail` không strict chỉ hợp lý khi không quan tâm kết cục nào.**
-Ở đây kết cục nào cũng quan trọng — nên hoặc không marker (bài đang đúng), hoặc `strict=True` (bài đang
-ghi gap).
-
-Boundary (R-SPEC A4): these tests exercise ONLY the eval-harness/judge/scorecard seam AIE-2 owns —
-they do NOT stand up a real golden-set (DE's job), a real DAG interpreter (AIE-1's job), or
-publish/rollback wiring (SWE's job); those are consumed, not asserted, here.
+Boundary (R-SPEC A4): file này chỉ chạm seam AIE-2 sở hữu. Golden-set là của DE (tiêu thụ, không
+dựng), interpreter là của AIE-1 (thay bằng `StubAgentRunner`), publish/rollback là của SWE (đọc
+`gate.verdict`, không nối ở đây).
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
+from pathlib import Path
+from uuid import UUID
+
 import pytest
-from studio_contracts import CaseResult, Judge
-from studio_evalhub.compute import compute_scorecard
+from studio_contracts import NodeType, Tokens, TraceEvent
+from studio_evalhub.agent_runner import AgentAnswer, CaseRun, StubAgentRunner
+from studio_evalhub.golden_case import GoldenSet
+from studio_evalhub.golden_loader import load_golden_set
 from studio_evalhub.harness import EvalHarness
 from studio_evalhub.judge import LLMJudge
 
-
-@pytest.mark.xfail(strict=True, reason="spec AIE-2 fills harness/judge/compute — EvalHarness.run chưa có verdict")
-async def test_gate_blocks_on_fail() -> None:
-    """Money-shot (R-SPEC A7 INV-6, umbrella-contract step 7): an agent recipe with bad
-    instructions runs the 30-case golden set through `EvalHarness.run`, `compute_scorecard`
-    decides `gate.verdict == "FAIL"`, and SWE's publish/rollback wiring (not exercised here —
-    ownership fence) blocks + rolls back on that verdict. Currently unreachable — `EvalHarness.run`
-    raises `NotImplementedError`, so there is no real verdict to gate on yet. This is the ĐỎ this
-    test records until AIE-2 implements the seam, at which point the assertion below is the real
-    contract to satisfy."""
-    harness = EvalHarness()
-    scorecard = await harness.run(agent_id="agent-bad-instructions", golden_set_ref="golden-set-eval-1")
-
-    assert scorecard.gate.verdict == "FAIL"
+_TS = 0.9
+_TC = 0.95
 
 
-async def test_harness_judge_compute_not_implemented() -> None:
-    """KHÓA: spec AIE-2 seams (`EvalHarness.run`, `LLMJudge.judge`, `compute_scorecard`) all have
-    an intentionally empty body — each MUST raise `NotImplementedError`, not silently return a
-    fabricated result, until AIE-2 fills them in. A red-teamer or reviewer "making this green" by
-    stubbing a fake return value (instead of implementing the real seam) would be caught by this
-    assertion flipping from raise-NotImplementedError to no-raise.
+def _event(tenant_id: UUID, citations: list[str]) -> TraceEvent:
+    return TraceEvent(
+        event_id="e1",
+        run_id="r1",
+        agent_id="a",
+        tenant_id=tenant_id,
+        node_id="n1",
+        node_type=NodeType.KB_RETRIEVE,
+        ts="2026-08-10T00:00:00+00:00",
+        inputs_hash="h",
+        outputs={},
+        tokens=Tokens(prompt=0, completion=0),
+        cost=0.0,
+        citations=citations,
+    )
 
-    **KHÔNG marker (sửa D9).** Bài này đang xanh thật — ba seam đúng là còn raise. Bản trước đeo
-    `xfail(strict=False)` nên chính cái kết cục nó tồn tại để bắt (stub giả ⇒ assert vỡ) lại bị marker
-    hấp thụ thành `XFAIL` = xanh. Không marker thì stub giả làm bài này ĐỎ, đúng như docstring hứa.
 
-    Vì sao đây không phải "test đang chờ tính năng": nó khẳng định một điều **đúng ngay hôm nay** —
-    rằng seam chưa điền thì phải kêu, chứ không phải chờ seam được điền. Bài chờ tính năng là
-    `test_gate_blocks_on_fail` ở trên, và bài đó mới cần `xfail`."""
-    harness = EvalHarness()
-    judge = LLMJudge()
+def _bad_runner(golden: GoldenSet, tenant_ids: Mapping[str, UUID]) -> StubAgentRunner:
+    """Runner trả câu SAI có chủ đích cho MỌI case — nguồn FAIL tất định của money-shot.
 
-    with pytest.raises(NotImplementedError):
-        await harness.run(agent_id="agent-1", golden_set_ref="golden-set-eval-1")
+    Hai nhánh sai theo **hai kiểu khác nhau**, để verdict FAIL không phụ thuộc một luật chấm duy nhất:
 
-    with pytest.raises(NotImplementedError):
-        await judge.judge(case_id="case-1", expected="A", actual="A")
+    - case trả-lời → answer KHÔNG chứa cụm `expected`, `refused=False` ⇒ `success=False`
+    - case từ-chối → answer **trả lời thật** (`refused=False`) ⇒ `success=False`
 
-    with pytest.raises(NotImplementedError):
-        compute_scorecard(
-            agent_id="agent-1",
-            golden_set_ref="golden-set-eval-1",
-            results=[
-                CaseResult(
-                    case_id="case-1",
-                    expected="A",
-                    actual="A",
-                    success=True,
-                    citation_accuracy=1.0,
-                    judge=Judge(label="pass", agreement=0.95),
-                )
-            ],
-            threshold_success=0.9,
-            threshold_citation_accuracy=0.9,
-            # D16: tham số mới (DEC-D16-03 đường (b)). `case-1` là case nhánh trả-lời nên nó nằm
-            # trong tập được chấm citation. Bài này không đổi mục đích — vẫn khẳng định seam raise.
-            scored_case_ids={"case-1"},
+    Ba ràng buộc, mỗi cái chặn một kiểu *"FAIL sai lý do"*:
+
+    1. **Mỗi `CaseRun` mang đúng MỘT trace event**, không phải `events=[]`. `events=[]` sẽ làm case
+       trượt vì luật `no-trace-no-proof` (T4/`DEC-05`), **không** vì answer tệ — bài sẽ xanh vì một
+       lý do khác với điều nó khẳng định, đúng lớp xanh-giả.
+    2. **Answer là câu trọn vẹn, đọc được**, chỉ sai nội dung. Chuỗi rỗng sẽ làm bài đỏ ở tầng parse
+       chứ không ở tầng chấm.
+    3. **Không đụng `Recipe.instructions`.** *"Sửa instructions tệ"* là mô tả demo ở tầng UI; ở tầng
+       test thì thứ quan sát được là **output**, và `Recipe` là bút SWE (R-SPEC A4).
+
+    Sinh từ **chính golden-set** nên nó sai theo định nghĩa, không theo một bảng chép tay sẽ mục khi
+    DE đổi bộ case. Khoá fixture ba thành phần (D16): golden-30 có hai cặp trùng
+    `(query, tenant_id)` chỉ khác `section_roles` (trục T6).
+    """
+    fixtures: dict[tuple[str, UUID, tuple[str, ...]], CaseRun] = {}
+    for case in golden.cases:
+        tenant_id = tenant_ids[case.tenant]
+        if case.expects_refusal:
+            # Đáng lẽ phải từ chối — đây lại trả lời thật, và trích cả chunk của kho khác.
+            answer = AgentAnswer(
+                answer="Theo tài liệu nội bộ, con số là 42 triệu đồng mỗi quý.",
+                citations=[],
+                refused=False,
+            )
+        else:
+            # Câu trọn vẹn, đọc được, chỉ SAI nội dung — không chứa cụm `expected`.
+            answer = AgentAnswer(
+                answer="Theo tài liệu, con số là 999 phần trăm trong mọi trường hợp.",
+                citations=[],
+                refused=False,
+            )
+        fixtures[(case.query, tenant_id, tuple(case.section_roles))] = CaseRun(
+            answer=answer,
+            events=[_event(tenant_id, [])],  # ĐÚNG 1 event — FAIL phải đến từ answer, không từ no-trace
         )
+    return StubAgentRunner(fixtures)
+
+
+async def test_gate_blocks_on_fail(golden_30_path: Path, golden_30_ref: str, tenant_ids: Mapping[str, UUID]) -> None:
+    """**MONEY-SHOT** (INV-6): recipe tệ chạy hết golden-30 ⇒ `gate.verdict == "FAIL"`.
+
+    Bốn assert, không phải một — và ba dòng sau là thứ phân biệt *"gate chặn vì recipe tệ"* với
+    *"gate chặn vì harness hỏng"*. Chỉ giữ dòng đầu thì một `EvalHarness.run` vỡ hoàn toàn cũng cho
+    bài này xanh.
+
+    `xfail(strict=True)` đã **gỡ hẳn** ở đây (`DEC-D16-04`), không đổi sang `strict=False`, và thân
+    bài viết lại vì hai giá trị cũ (`agent-bad-instructions` / `golden-set-eval-1`) chưa bao giờ tồn
+    tại."""
+    golden = load_golden_set(golden_30_path, expect_ref=golden_30_ref)
+
+    scorecard = await EvalHarness().run(
+        "agent-bad-instructions",
+        golden_30_ref,
+        golden_set_path=golden_30_path,
+        runner=_bad_runner(golden, tenant_ids),
+        tenant_ids=tenant_ids,
+        threshold_success=_TS,
+        threshold_citation_accuracy=_TC,
+    )
+
+    assert scorecard.gate.verdict == "FAIL"  # money-shot INV-6
+    assert scorecard.aggregate.success_rate == 0.0  # FAIL vì answer sai, KHÔNG vì thiếu trace
+    assert len(scorecard.results) == 30  # đã chạy hết bộ, không dừng sớm
+    assert all(len(r.actual) > 0 for r in scorecard.results)  # answer trọn vẹn, không rỗng
+
+    # FAIL trên CẢ HAI trục, và mỗi trục vì một luật khác nhau: success vì answer sai / refusal
+    # không từ chối; citation vì trace không trích được chunk kỳ vọng nào.
+    assert scorecard.aggregate.citation_accuracy == 0.0
+
+
+async def test_gate_passes_on_good_recipe(
+    golden_30_path: Path,
+    golden_30_ref: str,
+    tenant_ids: Mapping[str, UUID],
+    runner_tot: Callable[[GoldenSet, Mapping[str, UUID]], StubAgentRunner],
+) -> None:
+    """**Bài đối trọng.** Cùng golden-set, runner trả lời ĐÚNG ⇒ `verdict == "PASS"`.
+
+    Không có bài này thì `test_gate_blocks_on_fail` không phân biệt được *"gate chặn đúng"* với
+    *"gate chặn mọi thứ"*: một `verdict = "FAIL"` hằng số, một `success_rate` luôn `0.0`, hay một
+    `EvalHarness.run` trả rác đều cho money-shot xanh. Hai bài chạy trên **cùng 30 case, cùng ngưỡng
+    `0.9/0.95`** — biến duy nhất là chất lượng câu trả lời."""
+    golden = load_golden_set(golden_30_path, expect_ref=golden_30_ref)
+
+    scorecard = await EvalHarness().run(
+        "agent-good",
+        golden_30_ref,
+        golden_set_path=golden_30_path,
+        runner=runner_tot(golden, tenant_ids),
+        tenant_ids=tenant_ids,
+        threshold_success=_TS,
+        threshold_citation_accuracy=_TC,
+    )
+
+    assert scorecard.gate.verdict == "PASS"
+    assert scorecard.aggregate.success_rate == 1.0
+    assert len(scorecard.results) == 30
+
+
+async def test_judge_seam_van_con_notimplemented() -> None:
+    """KHÓA seam **duy nhất còn là spec**: `LLMJudge.judge` phải `raise NotImplementedError`.
+
+    **D16 — bài này được THU HẸP, không bị xoá** (`DEC-D16-04`). Bản cũ
+    (`test_harness_judge_compute_not_implemented`) khẳng định **cả ba** seam còn raise. T2 và T4 điền
+    hai trong ba, nên bài **phải đỏ** — đúng như thiết kế, và đúng cái nó tồn tại để báo.
+
+    Xoá bài là mất lưới bắt *"stub một giá trị giả"* cho seam còn lại: ai đó làm `judge` trả một
+    `Judge(label="pass", agreement=1.0)` hằng số sẽ khiến bài này ĐỎ. Đó là lớp lỗi `judge.py:6-9`
+    cấm đích danh — một `agreement` hằng số không phân biệt được với một judge thật đồng thuận 100%,
+    và nó hỏng âm thầm mọi aggregate trên `agreement` (INV-4).
+
+    Đổi tên theo phạm vi mới: giữ tên cũ (`..._harness_judge_compute_...`) sẽ là một cái tên nói dối
+    về thứ nó kiểm. Hạn của seam này là **D18** (`kit#118`, mốc `F-6` agreement)."""
+    with pytest.raises(NotImplementedError):
+        await LLMJudge().judge(case_id="case-1", expected="A", actual="A")

@@ -13,6 +13,8 @@ Bài ở đây **không** gọi `compute_scorecard` (mốc D16) — có một b�
 from __future__ import annotations
 
 import pytest
+import studio_evalhub.compute as compute_mod
+import studio_evalhub.render as render_mod
 from studio_contracts import Aggregate, CaseResult, Gate, GateThreshold, Scorecard
 from studio_evalhub.cli import _render
 from studio_evalhub.compute import compute_scorecard
@@ -183,25 +185,44 @@ def test_render_scorecard_trong_noi_ro_VI_SAO_trong() -> None:
     assert "kit#88" in out
 
 
-def test_render_scorecard_KHONG_goi_compute_scorecard() -> None:
-    """DEC-D12-03: render **không** tự tính. Khoá bằng chứng cứng: `compute_scorecard` vẫn raise.
+def test_render_scorecard_KHONG_goi_compute_scorecard(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`DEC-D12-03`: render **không tự tính** — khoá bằng **spy**, không bằng tác dụng phụ.
 
-    Nếu một bản vá sau này cho render gọi `compute_scorecard`, thì hoặc bài này đỏ (vì raise), hoặc
-    `compute_scorecard` đã được hiện thực sớm — cả hai đều là thứ phải nhìn thấy, không được trôi."""
-    with pytest.raises(NotImplementedError):
-        compute_scorecard(
-            agent_id="a",
-            golden_set_ref="g",
-            results=[],
-            threshold_success=0.9,
-            threshold_citation_accuracy=0.95,
-            # D16: tham số mới của `compute_scorecard` (DEC-D16-03 đường (b)) — caller nói nhánh nào
-            # được chấm citation. `results=[]` nên tập rỗng là giá trị đúng; bài này không đổi mục
-            # đích, vẫn chỉ khoá "renderer KHÔNG gọi sang tầng tính".
-            scored_case_ids=set(),
-        )
+    **D16 — bài này phải viết lại, và lý do là phần đáng học.** Bản cũ khoá bất biến bằng một bằng
+    chứng gián tiếp: `compute_scorecard` đang `raise NotImplementedError`, nên *"render gọi nó"* và
+    *"bài đỏ"* trùng nhau. Đó là một lưới **có hạn sử dụng** — và hạn đó là hôm nay: T2 điền seam,
+    lưới biến mất **cùng ngày**, đúng như `DEC-D15-01` đã khai trước.
 
-    assert "todo:" in render_scorecard(None)
+    Lưới mới không phụ thuộc trạng thái của seam. Hai vế, mỗi vế bắt một kiểu vi phạm khác nhau —
+    và nói ra giới hạn của từng vế thay vì để người đọc tưởng một spy là đủ:
+
+    1. **Tĩnh** — `compute_scorecard` không có trong namespace của `render`. Bắt kiểu vi phạm phổ
+       biến nhất: `from studio_evalhub.compute import compute_scorecard` ở đầu module. Vế động
+       **không** bắt được kiểu này, vì tên đã bị bind lúc import nên `monkeypatch` trên module gốc
+       không với tới.
+    2. **Động** — sentinel đặt vào `studio_evalhub.compute.compute_scorecard`, assert **0 lời gọi**.
+       Bắt kiểu tra cứu trễ (`import studio_evalhub.compute` rồi gọi qua module), thứ vế tĩnh không
+       thấy.
+
+    `Scorecard` dựng **trước** khi vá sentinel — nếu dựng sau, chính bài test sẽ gọi vào sentinel và
+    đếm một lời gọi không phải của renderer."""
+    sc = _scorecard_that()
+
+    goi: list[str] = []
+
+    def _sentinel(*args: object, **kwargs: object) -> None:
+        goi.append("compute_scorecard")
+
+    monkeypatch.setattr(compute_mod, "compute_scorecard", _sentinel)
+
+    assert "compute_scorecard" not in vars(render_mod), (
+        "DEC-D12-03: render không được import compute_scorecard vào namespace của nó"
+    )
+
+    render_scorecard(None)
+    render_scorecard(sc, n_scored_citation=4)
+
+    assert goi == [], f"render_scorecard đã gọi sang tầng tính: {goi}"
 
 
 def test_render_scorecard_co_so_thi_in_dung_so_cua_no() -> None:
