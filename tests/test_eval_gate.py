@@ -95,4 +95,7 @@ async def test_harness_judge_compute_not_implemented() -> None:
             ],
             threshold_success=0.9,
             threshold_citation_accuracy=0.9,
+            # D16: tham số mới (DEC-D16-03 đường (b)). `case-1` là case nhánh trả-lời nên nó nằm
+            # trong tập được chấm citation. Bài này không đổi mục đích — vẫn khẳng định seam raise.
+            scored_case_ids={"case-1"},
         )

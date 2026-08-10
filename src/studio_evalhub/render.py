@@ -198,7 +198,18 @@ def render_scorecard(scorecard: Scorecard | None, *, golden_set_ref: str | None 
         _row("case đã chấm", str(len(scorecard.results))),
         rule,
         _row("aggregate.success_rate", f"{scorecard.aggregate.success_rate:.2f}"),
-        _row("aggregate.citation_accuracy", f"{scorecard.aggregate.citation_accuracy:.2f}*"),
+        _row(
+            "aggregate.citation_accuracy",
+            # `None` ⇒ mẫu số citation không tồn tại (golden toàn refusal). In qua chính
+            # `_count_or_not_estimable` để dùng đúng một câu chữ với bảng per-case: `not-estimable
+            # (n = 0)`, KHÔNG phải `0.00` — một `0.00` đã format không phân biệt được với một phép
+            # đo thật bằng không. Đây là vế "vá reader" mà DEC-D16-03 đòi land CÙNG lần nới
+            # `Aggregate.citation_accuracy` sang `float | None`; không có nó thì đúng dòng này
+            # `TypeError`, và điều kiện "0 reader giả định non-null" của DEC-01 không được thoả.
+            f"{scorecard.aggregate.citation_accuracy:.2f}*"
+            if scorecard.aggregate.citation_accuracy is not None
+            else _count_or_not_estimable(0, 0),
+        ),
         _row(
             "gate.threshold",
             f"success >= {scorecard.gate.threshold.success:.2f} AND "

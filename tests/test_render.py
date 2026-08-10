@@ -195,6 +195,10 @@ def test_render_scorecard_KHONG_goi_compute_scorecard() -> None:
             results=[],
             threshold_success=0.9,
             threshold_citation_accuracy=0.95,
+            # D16: tham số mới của `compute_scorecard` (DEC-D16-03 đường (b)) — caller nói nhánh nào
+            # được chấm citation. `results=[]` nên tập rỗng là giá trị đúng; bài này không đổi mục
+            # đích, vẫn chỉ khoá "renderer KHÔNG gọi sang tầng tính".
+            scored_case_ids=set(),
         )
 
     assert "todo:" in render_scorecard(None)
