@@ -262,6 +262,69 @@ vào ngày.
 | **Chủ trục INV-1 roles** — #74 §6: *"needs an owner at D11 freeze. AIE-1 or SWE"*. AIE-2 **không nhận**: bộ chấm **quan sát** hàng rào, không **tạo** hàng rào. Đề xuất **SWE** (#112/D17 đã gán *"Own INV-1: session_id resolve {tenant,user,roles} server-side"*) | **chưa có chủ** — đề xuất SWE | gán **D12** |
 | Job CI so con trỏ kit với `main` từng submodule (đã lệch mất điểm 2 lần: `kit#73`, `kit#76`/`#77`) | AIE-2 (issue follow-up) | S2 |
 
+### ADR-D16-05 · Thay đổi contract nào thật sự cần mini-RFC — hai luật đang mâu thuẫn
+
+> **Không phải id thứ tám cho một quyết định cũ.** `DEC-D16-01…06` nói *"thay đổi này làm hay không"*;
+> dòng này nói *"luật nào quyết định điều đó"* — một tầng khác, và nó áp cho **cả bốn** hợp đồng chứ
+> không riêng scorecard. Ghi ở đây vì `mini-rfc/TEMPLATE.md` sống trong repo này và là vật bị sửa.
+
+**Hai câu, cùng chủ đề, không khớp nhau:**
+
+| Nguồn | Trigger mini-RFC |
+|---|---|
+| `umbrella-contract.md:92-93` + `INV-5` (dòng 220) | *"Đổi **bất kỳ** contract nào = mini-RFC + 4/4 chữ ký + decision-log"* |
+| `mini-rfc/TEMPLATE.md:11-13` (AIE-2 viết, D11) | chỉ **rename · removal · required-add** trên hợp đồng đã `FROZEN`; kèm bảng 4 ca **miễn** tường minh |
+
+Template dẫn chính umbrella §3 làm nguồn nhưng **hẹp hơn** nó. Hai năm cách đọc, chưa ai đối chiếu.
+
+**Việc làm lộ ra mâu thuẫn.** `contracts#5` (D16) mang hai thay đổi: nới `Aggregate.citation_accuracy`
+sang `float | None`, và thêm `Aggregate.n_scored_citation` optional. Đọc theo umbrella §3 ⇒ cần
+mini-RFC. Đọc theo template ⇒ rơi **đúng hai dòng đầu** của bảng miễn (*"thêm field optional mới"* ·
+*"nới required → optional"*). Một mini-RFC đã suýt được viết theo cách đọc rộng.
+
+**Quyết định: áp cách đọc của `TEMPLATE.md`.** Trigger là ba dạng breaking, không phải mọi thay đổi.
+
+**Vì sao, theo thứ tự sức nặng:**
+
+1. **Cách đọc rộng tự mâu thuẫn.** *"Bất kỳ thay đổi nào"* đọc chặt gồm cả sửa một docstring trong
+   `scorecard.py` — không ai định nghĩa như vậy. §3 nằm dưới tiêu đề *"4 SCHEMA FREEZE"*: thứ bị đóng
+   băng là **shape**, không phải bytes của file.
+2. **Cái §3 bảo vệ là consumer không vỡ.** Theo `contracts/__init__.py:5-12`, có đúng ba cách consumer
+   vỡ. Ca thứ tư (*tương thích trên dây, không tương thích với reader*) đã có luật riêng —
+   `DEC-01`/`ADR-D11-02` — với **điều kiện đo được**: đếm 0 reader giả định non-null. Additive-optional
+   thì theo định nghĩa không reader nào vỡ được. Không còn ca nào để mini-RFC bắt.
+3. **Giá của cách đọc rộng đã trả một lần rồi.** `scorecard-v0.md:335-337` từng định giá một thay đổi
+   **chỉ-doc** thành *"đổi contract → mini-RFC + 4/4 chữ ký"*, rồi phải **rút** công khai. Chính
+   `TEMPLATE.md:21` ghi lại ca đó làm dòng thứ tư của bảng miễn. Lặp lại là bỏ qua bài học đã ghi.
+4. **Bất đối xứng chi phí.** Mini-RFC tốn 4 người đọc; điều kiện an toàn nó xác lập thì một lệnh `grep`
+   đo được trong 5 giây, và lệnh đó **đã bắt buộc phải dán vào PR** theo `DEC-01`.
+
+**Ranh giới — ADR này KHÔNG nói "khỏi cần gì":**
+
+- **Decision-log vẫn bắt buộc cho mọi thay đổi contract.** Vế đó của §3 không bị thu hẹp một chữ.
+- **Lệnh đếm reader vẫn bắt buộc dán vào PR.** Nó là *hình thức* của `DEC-01`, không phải kết luận —
+  và nó chính là thứ thay chỗ mini-RFC. Bỏ nó là bỏ luôn cơ sở của ADR này.
+- **Nới `required` → `optional` mà đếm ra > 0 reader ⇒ quay lại đường mini-RFC**, không có ngoại lệ.
+- **Ba dạng breaking vẫn cần mini-RFC + 4/4 chữ ký.** Không đổi một chữ.
+- **4/4 chữ ký vẫn nên xin** cho thay đổi contract kể cả khi được miễn mini-RFC — precedent
+  `contracts#1`/`#3` đều làm vậy. Đó là **bảo hiểm rẻ**, không phải điều kiện merge (gate thật đo được
+  là **1 approval**: `contracts#5` chuyển `APPROVED`/`CLEAN` với một approval từ người **không** phải
+  CODEOWNER).
+
+**Trạng thái — đây là cách đọc một luật CHUNG, nên chưa phải luật cho tới khi team không phản đối.**
+AIE-2 tự quyết và tự ghi (mentor S2 không trả lời câu hỏi quy trình), kèm cửa sổ phản hồi tới **D18**.
+Ai phản đối thì quay về nguyên văn umbrella §3 và ADR này bị rút — ghi rõ để không ai đọc nó thành
+việc đã rồi.
+
+**Hai việc kèm:**
+
+1. `mini-rfc/TEMPLATE.md` thêm một dòng trỏ về ADR này, để người mở template thấy ngay cách đọc đã
+   chốt thay vì suy lại.
+2. Câu *"bất kỳ"* ở `umbrella-contract.md:92-93` nên sửa cho khớp — nhưng umbrella nằm ở
+   `docs/requirements` (submodule chung, **không** thuộc write-scope quadrant này), nên **đề xuất qua
+   issue kit**, không tự sửa. Tới khi nó được sửa, mâu thuẫn vẫn tồn tại trên giấy và ADR này là chỗ
+   ghi cách xử.
+
 ### Số đo T6 — độ nhạy ngưỡng trên golden-30 (10/08), `DEC-D16-05`
 
 **Đọc bảng này với một câu cảnh báo đặt trước, không đặt sau:** cả ba runner đều là
