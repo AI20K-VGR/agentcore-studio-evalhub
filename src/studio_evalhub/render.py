@@ -172,7 +172,6 @@ def render_scorecard(
     scorecard: Scorecard | None,
     *,
     golden_set_ref: str | None = None,
-    n_scored_citation: int | None = None,
 ) -> str:
     """Bảng `Scorecard` cho người đọc; `None` ⇒ **khung trống có `todo:`**, không phải bảng số 0.
 
@@ -183,18 +182,19 @@ def render_scorecard(
 
     `golden_set_ref` chỉ dùng cho nhánh trống (khi có `scorecard` thì lấy từ chính nó).
 
-    **`n_scored_citation` — mẫu số của trục citation, do CALLER truyền (D16).** `citation_accuracy`
-    chỉ chia cho các case **nhánh trả-lời** (`DEC-04` loại refusal khỏi mẫu số), nên in con số mà
-    không nói mẫu số là để người đọc tự đoán giữa `22` và `30` — đúng chỗ `kit#134` gọi tên: *chỗ
-    hỏng không nằm ở probe, nằm ở bước từ `8/10` sang tám-mươi-phần-trăm*.
+    **Mẫu số trục citation đọc thẳng từ `Aggregate.n_scored_citation`** (`DEC-D16-03` đã land).
+    `citation_accuracy` chỉ chia cho các case **nhánh trả-lời** (`DEC-04` loại refusal khỏi mẫu số),
+    nên in con số mà không nói mẫu số là để người đọc tự đoán giữa `22` và `30` — đúng chỗ `kit#134`
+    gọi tên: *chỗ hỏng không nằm ở probe, nằm ở bước từ `8/10` sang tám-mươi-phần-trăm*.
 
     Vì sao renderer **không tự đếm**: `CaseResult` không mang cờ nhánh (`contracts/scorecard.py:22-30`)
     nên cấu trúc mà nói nó đếm không được; và `DEC-D15-01` cấm renderer tự tính — một renderer tự
-    tính là nguồn số **thứ hai** cho cùng một run. Không truyền ⇒ in `todo:`, **không** đoán
+    tính là nguồn số **thứ hai** cho cùng một run. Field `None` ⇒ in `todo:`, **không** đoán
     `len(results)`: con số đó sai một cách đọc-được-thành-đúng, đúng thứ `DEC-04` sinh ra để chặn.
 
-    Tham số này là **tạm** và có điều kiện gỡ đọc được: khi `Aggregate.n_scored_citation` land
-    (`DEC-D16-03`, PR sang `contracts`) thì số đọc thẳng từ field và tham số biến mất.
+    Tham số `n_scored_citation` cũ (D16, caller truyền) đã **gỡ** theo đúng điều kiện docstring cũ
+    tự đặt: số nay nằm trên chính `Scorecard`, nên một tham số song song là nguồn thứ hai cho cùng
+    một con số — chỗ hai nguồn lệch nhau mà không ai biết.
     """
     header = "SCORECARD — " + (
         scorecard.golden_set_ref if scorecard is not None else (golden_set_ref or "(chưa có golden-set)")
@@ -209,6 +209,10 @@ def render_scorecard(
             rule,
             _row("aggregate.success_rate", _TODO),
             _row("aggregate.citation_accuracy", _TODO),
+            # Mẫu số có ô riêng ngay cả khi trống — cùng lý do với `citation_accuracy`: hình dạng
+            # output phải khoá TRƯỚC khi có dataset, nếu không thì ngày có số là ngày người ta quyết
+            # vội xem có in mẫu số hay không.
+            _row("aggregate.n_scored_citation", _TODO + " (mẫu số trục citation)"),
             _row("gate.threshold", _TODO),
             _row("gate.verdict", _TODO),
             _row("recipe_hash", _TODO + " (publish coi None là 'không verify được ⇒ từ chối')"),
@@ -216,6 +220,10 @@ def render_scorecard(
             _WHY_EMPTY,
         ]
         return "\n".join(lines)
+
+    # Mẫu số đọc từ chính `Scorecard` — cùng object đã mang `citation_accuracy`, nên tỷ lệ và mẫu số
+    # của nó không thể đến từ hai run khác nhau.
+    n_scored_citation = scorecard.aggregate.n_scored_citation
 
     lines += [
         _row("agent_id", scorecard.agent_id),
@@ -235,11 +243,14 @@ def render_scorecard(
             else _count_or_not_estimable(0, 0),
         ),
         _row(
-            "mẫu số citation",
+            "aggregate.n_scored_citation",
+            # `None` ⇒ producer KHÔNG mang mẫu số (payload viết trước `DEC-D16-03`), khác hẳn `0`
+            # ⇒ đã đếm và đếm ra rỗng. Gộp hai thứ này lại là làm mất đúng thông tin khiến
+            # `citation_accuracy` đọc được thành có căn cứ.
             f"{n_scored_citation}/{len(scorecard.results)} "
             f"(đã loại {len(scorecard.results) - n_scored_citation} refusal — DEC-04)"
             if n_scored_citation is not None
-            else _TODO + " (caller chưa truyền; Aggregate.n_scored_citation là DEC-D16-03, chờ PR contracts)",
+            else _TODO + " (producer không mang Aggregate.n_scored_citation — tỷ lệ trên KHÔNG có mẫu số)",
         ),
         _row(
             "gate.threshold",

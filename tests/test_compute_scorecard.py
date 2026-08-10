@@ -245,3 +245,53 @@ def test_compute_scored_id_khong_co_trong_results_thi_raise() -> None:
         )
 
     assert "KHONG-CO-THAT" in str(excinfo.value)
+
+
+def test_mau_so_citation_duoc_mang_theo_khong_de_nguoi_doc_doan() -> None:
+    """`n_scored_citation` phải mang **đúng** mẫu số đã dùng để chia — không phải `len(results)`.
+
+    Bộ `_bo_10_case()` bất đối xứng đúng chỗ này: **10 case, mẫu số 8**. Hai số khác nhau, nên một
+    mutant lấy `len(results)` làm mẫu số (hoặc quên nối dây và để `None`) đều ĐỎ ở đây. Nếu bộ là
+    10/10 thì cả ba cách viết cho cùng một số và bài này vô dụng.
+
+    Vì sao đáng một field: `citation_accuracy = 0.85` đọc một kiểu trên 8 case, kiểu khác trên 30,
+    và **không gì khác trên `Scorecard` khôi phục lại được** — `len(results)` đếm cả refusal, còn
+    case bị `DEC-04` loại thì `Aggregate` không nhìn thấy. Một tỷ lệ không có `n` đi kèm là thứ
+    `kit#134` xếp vào evidence malformed."""
+    results, scored = _bo_10_case()
+
+    scorecard = compute_scorecard(
+        agent_id="a",
+        golden_set_ref="g",
+        results=results,
+        threshold_success=_TS,
+        threshold_citation_accuracy=_TC,
+        scored_case_ids=scored,
+    )
+
+    assert scorecard.aggregate.n_scored_citation == 8
+    assert len(scorecard.results) == 10, "bộ phải bất đối xứng, nếu không bài này không phân biệt được gì"
+
+
+def test_mau_so_rong_la_0_chu_khong_phai_None() -> None:
+    """Mẫu số rỗng ⇒ `n_scored_citation == 0`, **không** `None`.
+
+    Hai giá trị này nói hai chuyện khác nhau và không được nhập một: `0` là *"đã đếm, và đếm ra
+    rỗng"*; `None` là *"producer này không mang mẫu số"* (payload viết trước khi có field). Trả
+    `None` ở ca rỗng làm consumer không phân biệt được **bộ toàn refusal** với **producer cũ**, và
+    mất đúng thông tin khiến `citation_accuracy = None` đọc được thành có căn cứ."""
+    results = [_case(f"REF-{i}", success=True, acc=1.0) for i in range(4)]
+
+    scorecard = compute_scorecard(
+        agent_id="a",
+        golden_set_ref="g",
+        results=results,
+        threshold_success=_TS,
+        threshold_citation_accuracy=_TC,
+        scored_case_ids=set(),
+    )
+
+    assert scorecard.aggregate.n_scored_citation == 0
+    assert scorecard.aggregate.n_scored_citation is not None, "0 và None là hai chuyện khác nhau"
+    assert scorecard.aggregate.citation_accuracy is None
+    assert scorecard.gate.verdict == "FAIL"

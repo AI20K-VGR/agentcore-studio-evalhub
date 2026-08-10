@@ -220,7 +220,7 @@ def test_render_scorecard_KHONG_goi_compute_scorecard(monkeypatch: pytest.Monkey
     )
 
     render_scorecard(None)
-    render_scorecard(sc, n_scored_citation=4)
+    render_scorecard(sc)
 
     assert goi == [], f"render_scorecard đã gọi sang tầng tính: {goi}"
 
@@ -298,7 +298,7 @@ def test_render_scorecard_that_khong_con_todo() -> None:
 
     Nói cách khác: `todo:` không phải thứ để đếm về 0. Nó là nhãn của *"chưa đo được"*, và hôm nay
     đúng một ô còn xứng với nhãn đó."""
-    out = render_scorecard(_scorecard_that(), n_scored_citation=4)
+    out = render_scorecard(_scorecard_that())
 
     def dong(nhan: str) -> str:
         return next(d for d in out.splitlines() if d.startswith(nhan))
@@ -326,7 +326,7 @@ def test_render_scorecard_that_noi_ro_mau_so_citation_da_loai_refusal() -> None:
     renderer cấu trúc mà nói không đếm được, và `DEC-D15-01` cấm nó tự tính. Khi
     `Aggregate.n_scored_citation` land (`DEC-D16-03`, PR contracts) thì tham số này biến mất và số
     đọc thẳng từ field."""
-    out = render_scorecard(_scorecard_that(), n_scored_citation=4)
+    out = render_scorecard(_scorecard_that())
 
     assert "4/5" in out
     assert "refusal" in out
@@ -346,13 +346,31 @@ def test_render_khung_trong_van_giu_todo() -> None:
 
 
 def test_render_mau_so_chua_biet_thi_todo_chu_khong_bia() -> None:
-    """Caller **không** truyền mẫu số ⇒ in `todo:`, không im lặng bỏ dòng và không đoán `len(results)`.
+    """Producer **không mang** mẫu số (`n_scored_citation is None`) ⇒ in `todo:`, không im lặng bỏ
+    dòng và không đoán `len(results)`.
 
     Đoán `len(results)` là đúng con số sai mà cả `DEC-04` lẫn `DEC-D16-03` được viết ra để chặn —
     và nó sai một cách **đọc được thành đúng**. Bỏ dòng thì còn tệ hơn: người đọc không biết là có
-    một câu hỏi chưa được trả lời."""
-    out = render_scorecard(_scorecard_that())
+    một câu hỏi chưa được trả lời.
 
-    dong = next(d for d in out.splitlines() if "mẫu số citation" in d)
+    Ca này **vẫn thật sau `DEC-D16-03`**, không phải tàn dư: field là additive-optional, nên một
+    `Scorecard` ghi bởi producer cũ (hoặc đọc lại từ DB, viết trước khi field tồn tại) mang đúng
+    `None`. Đó là lý do bài này dựng `Aggregate` **tay** với `n_scored_citation=None` thay vì gọi
+    `compute_scorecard` — `compute_scorecard` giờ luôn điền, nên không dựng được trạng thái này qua
+    nó nữa. Phân biệt `None` (không mang) với `0` (đã đếm, rỗng) là chỗ bài `..._la_0_chu_khong_phai_None`
+    ở `test_compute_scorecard.py` canh vế còn lại."""
+    sc = Scorecard(
+        agent_id="agent-cu",
+        golden_set_ref="callisto-smoke-5-v0",
+        results=[
+            CaseResult(case_id="SC-01", expected="12 ngày", actual="12 ngày", success=True, citation_accuracy=1.0)
+        ],
+        aggregate=Aggregate(success_rate=0.8, citation_accuracy=0.833, n_scored_citation=None),
+        gate=Gate(threshold=GateThreshold(success=0.9, citation_accuracy=0.95), verdict="FAIL"),
+    )
+
+    out = render_scorecard(sc)
+
+    dong = next(d for d in out.splitlines() if d.startswith("aggregate.n_scored_citation"))
     assert _TODO in dong
-    assert "4/5" not in dong and "5/5" not in dong
+    assert "1/1" not in dong, "không được đoán mẫu số từ len(results)"

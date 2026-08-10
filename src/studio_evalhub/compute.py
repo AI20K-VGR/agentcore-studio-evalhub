@@ -102,7 +102,14 @@ def compute_scorecard(
         agent_id=agent_id,
         golden_set_ref=golden_set_ref,
         results=list(results),
-        aggregate=Aggregate(success_rate=success_rate, citation_accuracy=citation_accuracy),
+        # `n_scored` đi kèm `citation_accuracy` từ CÙNG một biến — mẫu số đã dùng để chia, không
+        # phải một phép đếm thứ hai. Tách nguồn ở đây là đúng chỗ một mutant sống được: một tỷ lệ
+        # đi với `n` của người khác còn tệ hơn không có `n`.
+        aggregate=Aggregate(
+            success_rate=success_rate,
+            citation_accuracy=citation_accuracy,
+            n_scored_citation=n_scored,
+        ),
         gate=Gate(
             threshold=GateThreshold(success=threshold_success, citation_accuracy=threshold_citation_accuracy),
             verdict="PASS" if (dat_success and dat_citation) else "FAIL",
