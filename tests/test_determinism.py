@@ -103,11 +103,11 @@ def _golden_set() -> GoldenSet:
 def _runner() -> StubAgentRunner:
     return StubAgentRunner(
         {
-            ("Ankor nghỉ phép mấy ngày?", _ANKOR): CaseRun(
+            ("Ankor nghỉ phép mấy ngày?", _ANKOR, ("employee",)): CaseRun(
                 answer=AgentAnswer(answer="Được nghỉ 12 ngày.", citations=[], refused=False),
                 events=[_event(["ankor-leave-001#c1"])],
             ),
-            ("Thưởng của Borea?", _ANKOR): CaseRun(
+            ("Thưởng của Borea?", _ANKOR, ("employee",)): CaseRun(
                 answer=AgentAnswer(answer="Không có thông tin.", citations=[], refused=True),
                 events=[_event([])],
             ),
@@ -312,11 +312,11 @@ golden = GoldenSet(golden_set_ref="gs-xproc", cases=[
 ])
 
 runner = StubAgentRunner({
-    ("q-answerable", ANKOR): CaseRun(
+    ("q-answerable", ANKOR, ("employee", "public", "finance")): CaseRun(
         answer=AgentAnswer(answer="Duoc nghi 12 ngay.", citations=[], refused=False),
         events=[event(CITES)],
     ),
-    ("q-refusal", ANKOR): CaseRun(
+    ("q-refusal", ANKOR, ("employee",)): CaseRun(
         answer=AgentAnswer(answer="Khong co thong tin.", citations=[], refused=True),
         events=[event(["carib-x-001#c1"])],
     ),

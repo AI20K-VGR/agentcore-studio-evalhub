@@ -18,13 +18,16 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
+from pathlib import Path
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
-from studio_contracts import Scorecard, TraceEvent
+from studio_contracts import CaseResult, Scorecard, TraceEvent
 
-from studio_evalhub.agent_runner import AgentAnswer, AgentRunner
+from studio_evalhub.agent_runner import AgentAnswer, AgentRunner, CaseRun
+from studio_evalhub.compute import compute_scorecard
 from studio_evalhub.golden_case import GoldenCase, GoldenSet
+from studio_evalhub.golden_loader import load_golden_set
 
 
 class SmokeResult(BaseModel):
@@ -194,6 +197,31 @@ def score_case(case: GoldenCase, answer: AgentAnswer, retrieved_citations: list[
     )
 
 
+def _score_case_run(case: GoldenCase, case_run: CaseRun) -> SmokeResult:
+    """Chấm một `CaseRun` — `score_case` cộng bất biến **`no-trace-no-proof`** (`DEC-05`).
+
+    > **`CaseRun.events == []` ⇒ case FAIL**, bất kể `answer` nói gì. Không có trace quan sát được
+    > thì không chứng minh được gì.
+
+    **Vì sao cưỡng chế ở đây chứ không trong `score_case`** — nguyên nhân là **TẦNG**, không phải
+    cẩu thả: `score_case` chỉ nhận `retrieved_citations: list[str]` (`harness.py:158`), nên cấu trúc
+    mà nói nó **không phân biệt được** *"chưa có run nào"* với *"có run, không trích gì"*. Cả hai
+    đều tới nó dưới dạng `[]`. Đòi `score_case` fail-closed cho `[]` là đòi nó phân biệt bằng dữ
+    liệu nó không được đưa — và sẽ làm mọi refusal trung thực đỏ oan. `tenant_scope_ok` phân biệt
+    được **vì nó nhận `events`** (`harness.py:130`); hàm này ở đúng tầng đó.
+
+    Chữ ký `score_case` **không đổi** (`DEC-05`): 3 consumer ngoài quadrant đang gọi nó.
+
+    Chỉ hạ `success`, **không** đụng `citation_accuracy`: trục citation là metric riêng, không gate
+    `success` (`score_case` docstring). Một case no-trace ở nhánh trả-lời đằng nào cũng ra `0.0` vì
+    không trích được gì; ở nhánh từ-chối nó giữ `1.0` quy ước và bị loại khỏi mẫu số — cả hai đều là
+    hành vi đã chốt, không phải hệ quả tình cờ của bản vá này."""
+    result = score_case(case, case_run.answer, citations_from_trace(case_run.events))
+    if not case_run.events:
+        return result.model_copy(update={"success": False})
+    return result
+
+
 class EvalHarness:
     """Runs the golden-set eval loop for one agent recipe.
 
@@ -208,13 +236,69 @@ class EvalHarness:
       `Scorecard`, including `gate.verdict` (PASS|FAIL) against the recipe's `ScorecardThreshold`.
     """
 
-    async def run(self, agent_id: str, golden_set_ref: str) -> Scorecard:
-        """Run every case in `golden_set_ref` against `agent_id`'s recipe and return the
-        resulting `Scorecard`. Spec AIE-2 — not yet implemented.
+    async def run(
+        self,
+        agent_id: str,
+        golden_set_ref: str,
+        *,
+        golden_set_path: Path,
+        runner: AgentRunner,
+        tenant_ids: Mapping[str, UUID],
+        threshold_success: float,
+        threshold_citation_accuracy: float,
+    ) -> Scorecard:
+        """Chạy **mọi** case của `golden_set_ref` qua `agent_id` rồi trả `Scorecard` có verdict thật.
 
-        Skeleton D3 nằm ở `run_smoke()`: bản `-> Scorecard` này còn chờ `compute_scorecard`
-        (Day 4–5) và nguồn golden-set thật (Q5), nên vẫn raise `NotImplementedError`."""
-        raise NotImplementedError("EvalHarness.run — spec AIE-2, not yet implemented")
+        **`golden_set_path` bắt buộc, keyword-only, KHÔNG default** (`DEC-D16-01`). `golden_set_ref`
+        vừa là khoá tra cứu vừa là **assert nội dung file**: thân hàm gọi
+        `load_golden_set(golden_set_path, expect_ref=golden_set_ref)`, nên không có chỗ nào để hai
+        thứ lệch nhau âm thầm. Một default `None` ở đây là chỗ để ai đó điền đường dẫn kb *"cho
+        tiện"* ở lần sửa sau, và khi đó `DEC-D16-01` chỉ còn là một câu chữ.
+
+        **Ngưỡng cũng bắt buộc, cũng không default.** `EvalHarness` **không sở hữu** `0.9/0.95` —
+        ngưỡng thuộc recipe (`workbench/builder.py:169`), và một default ở đây là nguồn sự thật thứ
+        hai cạnh nó. `DEC-D16-05` giữ ngưỡng ở recipe đúng vì lý do đó.
+
+        Ghép ba thứ đã có, không phát minh gì mới: `load_golden_set` (`DEC-D16-01`) → vòng lặp giống
+        `run_smoke` → `compute_scorecard`. `scored_case_ids` đếm từ `case.expects_refusal` — caller
+        **biết** nhánh vì nó cầm `GoldenCase`, còn `CaseResult` thì không mang cờ nhánh
+        (`DEC-D16-03`).
+        """
+        golden = load_golden_set(golden_set_path, expect_ref=golden_set_ref)
+
+        results: list[CaseResult] = []
+        scored_case_ids: set[str] = set()
+        for case in golden.cases:
+            case_run = await runner.run_case(
+                agent_id=agent_id,
+                query=case.query,
+                tenant_id=tenant_ids[case.tenant],
+                section_roles=case.section_roles,
+            )
+            scored = _score_case_run(case, case_run)
+            results.append(
+                CaseResult(
+                    case_id=scored.case_id,
+                    expected=scored.expected,
+                    actual=scored.actual,
+                    success=scored.success,
+                    citation_accuracy=scored.citation_accuracy,
+                    # `judge=None` = *"case này chấm KHÔNG qua LLM-judge"* — giá trị trung thực duy
+                    # nhất trước S3 (`DEC-02`). Một `Judge(...)` hằng số ở đây không phân biệt được
+                    # với một judge thật đồng thuận 100%.
+                )
+            )
+            if not case.expects_refusal:
+                scored_case_ids.add(case.case_id)
+
+        return compute_scorecard(
+            agent_id,
+            golden_set_ref,
+            results,
+            threshold_success,
+            threshold_citation_accuracy,
+            scored_case_ids=scored_case_ids,
+        )
 
     async def run_smoke(
         self,
@@ -243,8 +327,9 @@ class EvalHarness:
                 tenant_id=tenant_id,
                 section_roles=case.section_roles,
             )
-            retrieved = citations_from_trace(case_run.events)
-            results.append(score_case(case, case_run.answer, retrieved))
+            # `no-trace-no-proof` cưỡng chế ở ĐÂY, tầng giữ `events` (DEC-05) — cùng một helper với
+            # `run`, để hai đường không trôi ra hai luật chấm khác nhau.
+            results.append(_score_case_run(case, case_run))
         return results
 
 
