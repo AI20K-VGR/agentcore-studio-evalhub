@@ -13,11 +13,13 @@ Bài ở đây **không** gọi `compute_scorecard` (mốc D16) — có một b�
 from __future__ import annotations
 
 import pytest
+import studio_evalhub.compute as compute_mod
+import studio_evalhub.render as render_mod
 from studio_contracts import Aggregate, CaseResult, Gate, GateThreshold, Scorecard
 from studio_evalhub.cli import _render
 from studio_evalhub.compute import compute_scorecard
 from studio_evalhub.harness import SmokeResult
-from studio_evalhub.render import render_scorecard
+from studio_evalhub.render import _TODO, render_scorecard
 
 
 def _answered(*, case_id: str = "SC-01", accuracy: float = 0.5, success: bool = True) -> SmokeResult:
@@ -183,21 +185,44 @@ def test_render_scorecard_trong_noi_ro_VI_SAO_trong() -> None:
     assert "kit#88" in out
 
 
-def test_render_scorecard_KHONG_goi_compute_scorecard() -> None:
-    """DEC-D12-03: render **không** tự tính. Khoá bằng chứng cứng: `compute_scorecard` vẫn raise.
+def test_render_scorecard_KHONG_goi_compute_scorecard(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`DEC-D12-03`: render **không tự tính** — khoá bằng **spy**, không bằng tác dụng phụ.
 
-    Nếu một bản vá sau này cho render gọi `compute_scorecard`, thì hoặc bài này đỏ (vì raise), hoặc
-    `compute_scorecard` đã được hiện thực sớm — cả hai đều là thứ phải nhìn thấy, không được trôi."""
-    with pytest.raises(NotImplementedError):
-        compute_scorecard(
-            agent_id="a",
-            golden_set_ref="g",
-            results=[],
-            threshold_success=0.9,
-            threshold_citation_accuracy=0.95,
-        )
+    **D16 — bài này phải viết lại, và lý do là phần đáng học.** Bản cũ khoá bất biến bằng một bằng
+    chứng gián tiếp: `compute_scorecard` đang `raise NotImplementedError`, nên *"render gọi nó"* và
+    *"bài đỏ"* trùng nhau. Đó là một lưới **có hạn sử dụng** — và hạn đó là hôm nay: T2 điền seam,
+    lưới biến mất **cùng ngày**, đúng như `DEC-D15-01` đã khai trước.
 
-    assert "todo:" in render_scorecard(None)
+    Lưới mới không phụ thuộc trạng thái của seam. Hai vế, mỗi vế bắt một kiểu vi phạm khác nhau —
+    và nói ra giới hạn của từng vế thay vì để người đọc tưởng một spy là đủ:
+
+    1. **Tĩnh** — `compute_scorecard` không có trong namespace của `render`. Bắt kiểu vi phạm phổ
+       biến nhất: `from studio_evalhub.compute import compute_scorecard` ở đầu module. Vế động
+       **không** bắt được kiểu này, vì tên đã bị bind lúc import nên `monkeypatch` trên module gốc
+       không với tới.
+    2. **Động** — sentinel đặt vào `studio_evalhub.compute.compute_scorecard`, assert **0 lời gọi**.
+       Bắt kiểu tra cứu trễ (`import studio_evalhub.compute` rồi gọi qua module), thứ vế tĩnh không
+       thấy.
+
+    `Scorecard` dựng **trước** khi vá sentinel — nếu dựng sau, chính bài test sẽ gọi vào sentinel và
+    đếm một lời gọi không phải của renderer."""
+    sc = _scorecard_that()
+
+    goi: list[str] = []
+
+    def _sentinel(*args: object, **kwargs: object) -> None:
+        goi.append("compute_scorecard")
+
+    monkeypatch.setattr(compute_mod, "compute_scorecard", _sentinel)
+
+    assert "compute_scorecard" not in vars(render_mod), (
+        "DEC-D12-03: render không được import compute_scorecard vào namespace của nó"
+    )
+
+    render_scorecard(None)
+    render_scorecard(sc)
+
+    assert goi == [], f"render_scorecard đã gọi sang tầng tính: {goi}"
 
 
 def test_render_scorecard_co_so_thi_in_dung_so_cua_no() -> None:
@@ -227,3 +252,125 @@ def test_render_scorecard_co_so_thi_in_dung_so_cua_no() -> None:
     assert "todo:" in out  # recipe_hash None ⇒ vẫn là todo, KHÔNG in "None"
     assert "fail-closed" in out
     assert "tính lại được" in out
+
+
+# ---------------------------------------------------------------------------
+# D16 / T5 — ô DoD 2: render một `Scorecard` THẬT (số do compute_scorecard tính)
+# ---------------------------------------------------------------------------
+
+
+def _scorecard_that() -> Scorecard:
+    """`Scorecard` do **`compute_scorecard` tính**, không dựng tay.
+
+    Khác `test_render_scorecard_co_so_thi_in_dung_so_cua_no` ở đúng điểm này, và đó là lý do bài
+    mới tồn tại: một `Scorecard` dựng tay chứng minh renderer đọc đúng field, nó **không** chứng
+    minh được đường đi từ case thật tới màn hình. Ô DoD 2 nói *"scorecard render success + citation
+    + verdict"* — tức số phải tới từ tầng tính.
+
+    Bộ 5 case bất đối xứng: 4 nhánh trả-lời (3 đúng, 1 sai) + 1 refusal. Mẫu số hai trục khác nhau
+    ⇒ `success_rate = 4/5 = 0.80` còn `citation_accuracy` chỉ chia cho **4**.
+    """
+    results = [
+        CaseResult(case_id="A-1", expected="x", actual="x", success=True, citation_accuracy=1.0),
+        CaseResult(case_id="A-2", expected="x", actual="x", success=True, citation_accuracy=1.0),
+        CaseResult(case_id="A-3", expected="x", actual="x", success=True, citation_accuracy=0.5),
+        CaseResult(case_id="A-4", expected="x", actual="y", success=False, citation_accuracy=0.5),
+        CaseResult(case_id="R-1", expected="refusal", actual="từ chối", success=True, citation_accuracy=1.0),
+    ]
+    return compute_scorecard(
+        "agent-x",
+        "callisto-golden-30-v1",
+        results,
+        0.9,
+        0.95,
+        scored_case_ids={"A-1", "A-2", "A-3", "A-4"},
+    )
+
+
+def test_render_scorecard_that_khong_con_todo() -> None:
+    """**Ô DoD 2.** `todo:` biến mất khỏi các ô ĐO ĐƯỢC — vì có số thật, không vì ai xoá chữ.
+
+    Ba assert đầu là DoD (`success` · `citation` · `verdict`). Assert thứ tư là chỗ bài này khác một
+    bài "kiểm todo" ngây thơ: **`recipe_hash` PHẢI còn `todo:`**. `DEC-03` nói rõ field đó chưa có
+    producer (`Recipe` không có `version`/hash), nên `None` là giá trị trung thực hôm nay và
+    fail-closed nằm ở consumer publish. Một bản vá "làm sạch output" bằng cách bịa một chuỗi hash sẽ
+    làm bài này đỏ — đúng ý định.
+
+    Nói cách khác: `todo:` không phải thứ để đếm về 0. Nó là nhãn của *"chưa đo được"*, và hôm nay
+    đúng một ô còn xứng với nhãn đó."""
+    out = render_scorecard(_scorecard_that())
+
+    def dong(nhan: str) -> str:
+        return next(d for d in out.splitlines() if d.startswith(nhan))
+
+    assert _TODO not in dong("aggregate.success_rate")
+    assert _TODO not in dong("aggregate.citation_accuracy")
+    assert _TODO not in dong("gate.verdict")
+    assert _TODO in dong("recipe_hash"), "DEC-03: chưa có producer ⇒ todo: là giá trị trung thực"
+
+    # Số thật, không phải khung: 4/5 = 0.80 và (1.0+1.0+0.5+0.5)/4 = 0.75
+    assert "0.80" in dong("aggregate.success_rate")
+    assert "0.75" in dong("aggregate.citation_accuracy")
+    assert "FAIL" in dong("gate.verdict")
+
+
+def test_render_scorecard_that_noi_ro_mau_so_citation_da_loai_refusal() -> None:
+    """Mẫu số citation phải **nói ra**: `4/5`, và nói rõ đã loại 1 refusal.
+
+    Đây là vế thứ hai của ô DoD 2 và là thứ `kit#134` gọi đúng tên: *chỗ hỏng không nằm ở probe,
+    nằm ở bước từ `8/10` sang tám-mươi-phần-trăm*. In `citation_accuracy = 0.75` mà không nói mẫu
+    số là gì thì người đọc không có cách nào biết nó chia cho 4 hay cho 5 — và với golden-30 thì
+    khoảng cách đó là 22 so với 30.
+
+    Mẫu số đến từ **caller**, không phải renderer tự đếm: `CaseResult` không mang cờ nhánh nên
+    renderer cấu trúc mà nói không đếm được, và `DEC-D15-01` cấm nó tự tính. Khi
+    `Aggregate.n_scored_citation` land (`DEC-D16-03`, PR contracts) thì tham số này biến mất và số
+    đọc thẳng từ field."""
+    out = render_scorecard(_scorecard_that())
+
+    assert "4/5" in out
+    assert "refusal" in out
+
+
+def test_render_khung_trong_van_giu_todo() -> None:
+    """Cặp với bài trên — **nhánh `None` KHÔNG đổi**.
+
+    Cặp này tồn tại để không ai "làm xong ô DoD 2" bằng cách xoá nhánh trống. Trạng thái *"chưa chạy
+    eval"* vẫn thật (recipe mới, chưa có scorecard nào), nên khung `todo:` vẫn đúng — và
+    `DEC-D12-02` vẫn cấm in `0.00` ở đó."""
+    out = render_scorecard(None)
+
+    assert out.count(_TODO) >= 5
+    assert "0.00" not in out
+    assert "PASS" not in out and "FAIL" not in out
+
+
+def test_render_mau_so_chua_biet_thi_todo_chu_khong_bia() -> None:
+    """Producer **không mang** mẫu số (`n_scored_citation is None`) ⇒ in `todo:`, không im lặng bỏ
+    dòng và không đoán `len(results)`.
+
+    Đoán `len(results)` là đúng con số sai mà cả `DEC-04` lẫn `DEC-D16-03` được viết ra để chặn —
+    và nó sai một cách **đọc được thành đúng**. Bỏ dòng thì còn tệ hơn: người đọc không biết là có
+    một câu hỏi chưa được trả lời.
+
+    Ca này **vẫn thật sau `DEC-D16-03`**, không phải tàn dư: field là additive-optional, nên một
+    `Scorecard` ghi bởi producer cũ (hoặc đọc lại từ DB, viết trước khi field tồn tại) mang đúng
+    `None`. Đó là lý do bài này dựng `Aggregate` **tay** với `n_scored_citation=None` thay vì gọi
+    `compute_scorecard` — `compute_scorecard` giờ luôn điền, nên không dựng được trạng thái này qua
+    nó nữa. Phân biệt `None` (không mang) với `0` (đã đếm, rỗng) là chỗ bài `..._la_0_chu_khong_phai_None`
+    ở `test_compute_scorecard.py` canh vế còn lại."""
+    sc = Scorecard(
+        agent_id="agent-cu",
+        golden_set_ref="callisto-smoke-5-v0",
+        results=[
+            CaseResult(case_id="SC-01", expected="12 ngày", actual="12 ngày", success=True, citation_accuracy=1.0)
+        ],
+        aggregate=Aggregate(success_rate=0.8, citation_accuracy=0.833, n_scored_citation=None),
+        gate=Gate(threshold=GateThreshold(success=0.9, citation_accuracy=0.95), verdict="FAIL"),
+    )
+
+    out = render_scorecard(sc)
+
+    dong = next(d for d in out.splitlines() if d.startswith("aggregate.n_scored_citation"))
+    assert _TODO in dong
+    assert "1/1" not in dong, "không được đoán mẫu số từ len(results)"

@@ -173,35 +173,35 @@ def _demo_runner() -> StubAgentRunner:
     borea = _DEMO_TENANT_IDS["borea"]
     return StubAgentRunner(
         {
-            ("Nhân viên xin nghỉ phép cần báo trước bao lâu?", ankor): _case_run(
+            ("Nhân viên xin nghỉ phép cần báo trước bao lâu?", ankor, ("public",)): _case_run(
                 run_id="run-sc01",
                 tenant_id=ankor,
                 answer="Nhân viên cần báo trước tối thiểu 3 ngày làm việc.",
                 refused=False,
                 retrieved=["ankor-leave-001#c1"],
             ),
-            ("Nhân viên xin nghỉ phép cần báo trước bao lâu?", borea): _case_run(
+            ("Nhân viên xin nghỉ phép cần báo trước bao lâu?", borea, ("public",)): _case_run(
                 run_id="run-sc02",
                 tenant_id=borea,
                 answer="Nhân viên cần báo trước 7 ngày làm việc.",
                 refused=False,
                 retrieved=["borea-leave-001#c1"],
             ),
-            ("Trưởng nhóm được duyệt chi tối đa bao nhiêu?", ankor): _case_run(
+            ("Trưởng nhóm được duyệt chi tối đa bao nhiêu?", ankor, ("finance",)): _case_run(
                 run_id="run-sc03",
                 tenant_id=ankor,
                 answer="Trưởng nhóm được duyệt chi tối đa 20 triệu đồng.",
                 refused=False,
                 retrieved=["ankor-expense-001#c2"],
             ),
-            ("Hạn mức chi của Borea là bao nhiêu?", ankor): _case_run(
+            ("Hạn mức chi của Borea là bao nhiêu?", ankor, ("public",)): _case_run(
                 run_id="run-sc04",
                 tenant_id=ankor,
                 answer="Tôi không thể trả lời câu hỏi về dữ liệu của tổ chức khác.",
                 refused=True,
                 retrieved=[],
             ),
-            ("Thang lương của công ty gồm những bậc nào?", ankor): _case_run(
+            ("Thang lương của công ty gồm những bậc nào?", ankor, ("engineering",)): _case_run(
                 run_id="run-sc05",
                 tenant_id=ankor,
                 answer="Tôi không có quyền truy cập thông tin thang lương.",

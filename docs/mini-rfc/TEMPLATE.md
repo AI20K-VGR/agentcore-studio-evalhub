@@ -23,6 +23,11 @@ created_by: AIE-2 — Lưu Tiến Duy (D11)
 >
 > **Kiểm trước khi viết:** `grep -rn "<tên field>" packages apps scripts tests`. Nếu ra **0 reader
 > ngoài quadrant** thì gần chắc không cần mini-RFC.
+>
+> **Cách đọc này hẹp hơn `umbrella-contract.md:92-93`** (*"đổi **bất kỳ** contract nào = mini-RFC"*),
+> và khoảng chênh đó là **cố ý** — lý do, ranh giới, và cửa sổ phản đối nằm ở **`ADR-D16-05`**
+> (`docs/decisions/scorecard.md`). Đọc ADR đó trước khi kết luận một thay đổi được miễn: nó cũng ghi
+> rõ **cái gì KHÔNG được miễn** (decision-log · lệnh đếm reader · ba dạng breaking).
 
 ---
 

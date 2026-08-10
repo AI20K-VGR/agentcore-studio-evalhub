@@ -8,6 +8,7 @@ next — see harness.py/judge.py/compute.py docstrings for each seam's contract.
 from studio_evalhub.agent_runner import AgentAnswer, AgentRunner, CaseRun, StubAgentRunner
 from studio_evalhub.compute import compute_scorecard
 from studio_evalhub.golden_case import GoldenCase, GoldenSet
+from studio_evalhub.golden_loader import load_golden_set
 from studio_evalhub.harness import (
     EvalHarness,
     SmokeResult,
@@ -30,6 +31,7 @@ __all__ = [
     "StubAgentRunner",
     "citations_from_trace",
     "compute_scorecard",
+    "load_golden_set",
     "render_scorecard",
     "score_case",
     "tenant_scope_ok",

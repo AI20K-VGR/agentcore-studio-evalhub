@@ -98,15 +98,31 @@ class AgentRunner(Protocol):
 
 
 class StubAgentRunner:
-    """Stand-in cho interpreter AIE-1: trả `CaseRun` fixture theo `(query, tenant_id)`.
+    """Stand-in cho interpreter AIE-1: trả `CaseRun` fixture theo `(query, tenant_id, section_roles)`.
 
-    Khoá theo **`(query, tenant_id)`** (không chỉ `query`) vì cùng một câu hỏi ở hai tenant phải trả
-    kết quả khác nhau (vd SC-01/SC-02 dùng chung `query`, khác tenant → đáp án 3 vs 7 ngày); khoá chỉ
-    theo `query` sẽ đụng key. Không nhận `case_id` — seam không biết tới golden-set. Thiếu fixture →
-    raise `LookupError` (fail-closed), không trả rỗng âm thầm (một case im lặng ra rỗng sẽ chấm sai
-    mà không lỗi nào nổi lên). **KHÔNG** tự resolve slug→UUID: nhận `tenant_id` đã resolve sẵn."""
+    Khoá là **toàn bộ ngữ cảnh `run_case` nhận**, không phải một tập con tiện tay. Ba thành phần, mỗi
+    thành phần vào khoá vì một ca thật đã đo được:
 
-    def __init__(self, answers: dict[tuple[str, UUID], CaseRun]) -> None:
+    - `query` — hiển nhiên.
+    - `tenant_id` (D5) — cùng câu hỏi ở hai kho phải ra kết quả khác nhau (SC-01/SC-02 chung `query`,
+      khác tenant → đáp án 3 vs 7 ngày).
+    - `section_roles` (**D16**) — cùng câu hỏi, cùng kho, khác **quyền bên hỏi** thì một case phải
+      trả lời còn case kia phải từ chối. Golden-30 có đúng hai cặp như vậy (`HB-08`/`HB-26` ankor và
+      `HB-09`/`HB-30` borea, trục T6 label-spoof). Bỏ trục này khỏi khoá làm map co từ 30 xuống 28
+      fixture, và vì cặp nằm ở hai nhánh ngược nhau nên case thua **chắc chắn** bị chấm bằng câu trả
+      lời soạn cho nhánh kia — một `success = False` không nói gì về agent.
+
+    Khoá dùng `tuple(section_roles)` vì `list` không hash được. Thứ tự trong tuple **có nghĩa**: đây
+    là khoá tra cứu fixture, không phải một phép so tập hợp — fixture khai `("hr", "finance")` không
+    khớp lời gọi `["finance", "hr"]`. Chọn vậy có chủ đích: một khoá chuẩn hoá (sort/frozenset) sẽ
+    làm hai fixture khác nhau âm thầm gộp làm một, đúng lớp lỗi mà chính D16 vừa phải sửa.
+
+    Không nhận `case_id` — seam là ranh giới *"chạy agent"*, không biết tới golden-set. Thiếu fixture
+    → raise `LookupError` (fail-closed), **không** lùi về một khoá lỏng hơn và **không** trả rỗng âm
+    thầm: một case im lặng ra rỗng sẽ chấm sai mà không lỗi nào nổi lên. **KHÔNG** tự resolve
+    slug→UUID: nhận `tenant_id` đã resolve sẵn."""
+
+    def __init__(self, answers: dict[tuple[str, UUID, tuple[str, ...]], CaseRun]) -> None:
         self._answers = dict(answers)
 
     async def run_case(
@@ -117,11 +133,13 @@ class StubAgentRunner:
         tenant_id: UUID,
         section_roles: list[str],
     ) -> CaseRun:
-        """Trả `CaseRun` fixture khớp `(query, tenant_id)`; raise `LookupError` nếu không có
-        (fail-closed)."""
+        """Trả `CaseRun` fixture khớp `(query, tenant_id, tuple(section_roles))`; raise `LookupError`
+        nếu không có (fail-closed, không có đường lùi về khoá lỏng hơn)."""
+        key = (query, tenant_id, tuple(section_roles))
         try:
-            return self._answers[(query, tenant_id)]
+            return self._answers[key]
         except KeyError:
             raise LookupError(
-                f"StubAgentRunner: chưa có fixture cho (query={query!r}, tenant_id={tenant_id})"
+                f"StubAgentRunner: chưa có fixture cho (query={query!r}, tenant_id={tenant_id}, "
+                f"section_roles={list(section_roles)!r})"
             ) from None

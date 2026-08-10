@@ -7,6 +7,12 @@ dependencies = [
     "agentcore-studio-contracts",
     "psycopg[binary,pool]>=3.2",
     "httpx>=0.28",
+    # DEC-D16-02 — `golden_loader` là RUNTIME code của package này, không phải script ở kit. Bản vá
+    # D8 khai `pyyaml` vào `[dependency-groups] dev` của kit gốc: đúng cho script, sai cho đây. Để
+    # nguyên là ăn ké đúng lần thứ hai (chạy được trong workspace venv vì dev-group kéo `pyyaml` vào
+    # lock, chết ngay khi `studio_evalhub` được cài độc lập) — đúng lớp lỗi `kit:pyproject.toml:22-25`
+    # đã ghi tên. `uv pip show pyyaml` chạy được KHÔNG chứng minh gì; dòng này mới là bằng chứng.
+    "pyyaml>=6.0",
 ]
 
 [build-system]
