@@ -27,7 +27,17 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import yaml
+# Hai error-code có chủ đích, và nó là bản vá TƯƠNG THÍCH HAI CHIỀU:
+#   - `import-untyped`  — khi workspace CHƯA có `types-PyYAML` (trạng thái của kit main hôm nay)
+#   - `unused-ignore`   — khi đã có stub, lúc đó dòng ignore thành thừa và mypy báo lỗi ngược lại
+# Thiếu code thứ hai thì dòng này chỉ hợp lệ ở đúng MỘT trong hai trạng thái, và ngày kit thêm stub
+# là ngày nó đỏ — đúng lớp lỗi `embed_harness.py:66` bên engine đang mắc.
+#
+# Vì sao KHÔNG chờ `types-PyYAML` (DEC-D16-02): stub không mua thêm gì ở đây — `yaml.safe_load` trả
+# `Any` dù có stub hay không, và giá trị đó đã được khai `raw: Any` ngay dưới. Đổi lại, chờ nó kéo
+# theo hai vòng merge (kit thêm stub ⇒ engine đỏ `unused-ignore` ⇒ phải vá engine trước). Khai stub
+# ở kit vẫn là việc nên làm, nhưng là việc của D17 cùng bản vá engine — không phải điều kiện của #108.
+import yaml  # type: ignore[import-untyped, unused-ignore]
 
 from studio_evalhub.golden_case import GoldenSet
 

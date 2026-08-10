@@ -177,8 +177,9 @@ def render_scorecard(
 
     `scorecard is None` là trạng thái **thật của hôm nay**, không phải trạng thái lỗi: chưa có
     golden-set thật và `compute_scorecard` chưa hiện thực. Khung vẫn in đủ **tên** mọi ô mà D16 phải
-    điền — `success_rate` · `citation_accuracy` · `gate.threshold` · `gate.verdict` · `recipe_hash` —
-    để hình dạng output được khoá bằng test **trước** khi có dataset (GUIDE-C §3.2).
+    điền — `success_rate` · `citation_accuracy` · `n_scored_citation` · `gate.threshold` ·
+    `gate.verdict` · `recipe_hash` — để hình dạng output được khoá bằng test **trước** khi có dataset
+    (GUIDE-C §3.2).
 
     `golden_set_ref` chỉ dùng cho nhánh trống (khi có `scorecard` thì lấy từ chính nó).
 
@@ -209,9 +210,10 @@ def render_scorecard(
             rule,
             _row("aggregate.success_rate", _TODO),
             _row("aggregate.citation_accuracy", _TODO),
-            # Mẫu số có ô riêng ngay cả khi trống — cùng lý do với `citation_accuracy`: hình dạng
-            # output phải khoá TRƯỚC khi có dataset, nếu không thì ngày có số là ngày người ta quyết
-            # vội xem có in mẫu số hay không.
+            # Mẫu số của trục citation. Ô này có tên ở khung trống TRƯỚC khi có số, đúng lý do khung
+            # trống tồn tại: hình dạng output khoá bằng test trước khi có dataset. `citation_accuracy`
+            # mà không kèm mẫu số là thứ `kit#134` xếp vào evidence malformed — hai ô phải đọc cùng
+            # nhau, nên chúng phải cùng xuất hiện, kể cả khi cả hai còn `todo:`.
             _row("aggregate.n_scored_citation", _TODO + " (mẫu số trục citation)"),
             _row("gate.threshold", _TODO),
             _row("gate.verdict", _TODO),
