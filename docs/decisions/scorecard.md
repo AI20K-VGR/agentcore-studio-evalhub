@@ -146,6 +146,30 @@ riêng.
 đến hạn đúng D16. Một dự án ghi được ngày lưới hết hạn nhưng không ghi lại lúc thay nó thì lần sau
 không ai tin cái hạn nữa.
 
+### Vá sau review `kb#18` (N1) — luật `no_leak` rẽ theo trục, KHÔNG mở id mới
+
+Đây là **sửa một lỗi**, không phải một quyết định mới — nên nó không cần id, và `DEC-05` (nhánh
+từ-chối fail-closed) **không đổi một chữ**. Ghi ở đây vì nó đổi hành vi chấm điểm và vì con số nó
+sửa đã suýt được báo cáo ra ngoài.
+
+`score_case` dùng **một** biểu thức `_citation_tenant(c) != expected_tenant` cho **cả hai** trục
+hàng rào. Đúng cho T1; sai cho T6, nơi `expected_tenant == tenant` khiến biểu thức đọc thành *"cấm
+trích mọi chunk của chính kho người hỏi"*. Hỏng **hai chiều**: agent từ chối đúng mà có retrieval
+hợp lệ bị FAIL oan; và ngược lại, agent **rò chunk kho khác** rồi từ chối lại lọt PASS.
+
+Đo trên golden-30 (4/8 case từ-chối là T6 thuần — `HB-24/26/27/30`): trần `success_rate` của một
+agent hoàn hảo kẹt ở **`26/30 = 0.8667`**, `verdict = FAIL`. Sau vá: `30/30`, `PASS`. Nếu `#108`
+chốt số trước khi vá thì `0.867` sẽ được đọc là *"agent tệ"* chứ không phải *"bộ chấm sai"*.
+
+**Giới hạn còn lại, không vá được ở tầng này:** `chunk_id` không mã hoá vai (`golden_case.py:69-71`)
+và case từ-chối có `expected_citation = []` ⇒ T6 **vẫn không kiểm được đúng thứ nó nói về**. Thứ
+kiểm được chỉ là sanity theo slug tenant. Đóng thật cần vai đi kèm citation ở tầng contract — chưa
+có producer, và đó là một quyết định của ngày khác.
+
+Phát hiện bởi **review chéo** (`kb#18`), không phải bởi 21 mutant tự gieo. Lý do 21 mutant không
+thấy: cả bài unit T6 lẫn fixture integration đều truyền citation **rỗng**, mà `all([])` là `True`
+vô điều kiện. Chi tiết + luật rút ra ở `docs/mutations/eval-harness-d16.md` §6.
+
 **Vì sao đúng sáu id và không có id thứ bảy:** một id sinh ra giữa ngày là một id **chưa có ai đọc**.
 D15 vừa cho thấy giá của nó (3 id treo, 8 chỗ trích, cả ngày không truy được). Quyết định nào không
 gắn được vào sáu id trên thì **không thuộc D16** — nó đi vào bảng *Hoãn* kèm chủ + hạn, không nhét

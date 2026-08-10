@@ -38,9 +38,17 @@ def load_golden_set(path: Path, *, expect_ref: str) -> GoldenSet:
 
     **`expect_ref` bắt buộc, không default** (`DEC-D16-01`). Nó trả lời một câu hỏi khác với `path`:
     `path` là *"đọc file nào"*, `expect_ref` là *"file đó có đúng là bộ case tôi định chấm không"*.
-    Bộ 30 của DE là bằng chứng sống cho việc hai câu đó tách rời: file tên
-    `callisto-handbook-30-**draft**.yaml` mang ref `callisto-golden-30-**v1**` — suy ref từ tên file
-    sẽ ra một chuỗi không tồn tại, và ngày DE bỏ chữ `draft` thì mọi thứ đổi mà không ai chạm vào code.
+
+    **Bằng chứng cho việc hai câu đó tách rời — và cho việc tên file KHÔNG ổn định:** bộ 30 của DE
+    land ở `callisto-handbook-30-draft.yaml` trong khi `golden_set_ref` bên trong đã là
+    `callisto-golden-30-v1`; `kb#18` sau đó đổi tên file thành `callisto-golden-30-v1.yaml`. Tức
+    **cùng một bộ case, hai tên file, ref không đổi một ký tự** — đúng thứ bất biến này bảo vệ.
+    Một loader suy ref từ tên file sẽ chạy đúng ở một trong hai thời điểm và sai ở thời điểm kia,
+    mà không dòng code nào phải đổi để lỗi xuất hiện.
+
+    Ghi lại lịch sử thay vì chỉ mô tả trạng thái hôm nay: tên hiện tại **trùng** với ref, nên một ví
+    dụ lấy trạng thái hôm nay làm minh hoạ sẽ đọc thành *"ref suy được từ tên file"* — ngược hẳn
+    điều cần nói.
 
     **Không nuốt lỗi.** `ValidationError` của pydantic bay thẳng lên caller: một loader trả
     `cases=[]` khi file hỏng là loader biến *"dữ liệu sai"* thành *"bộ rỗng"*, và một bộ rỗng thì

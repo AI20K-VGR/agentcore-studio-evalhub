@@ -23,11 +23,30 @@ from studio_evalhub.golden_case import GoldenSet
 
 _WORKSPACE_ROOT = Path(__file__).resolve().parents[3]
 
-# Tên file còn chữ `draft` trong khi `golden_set_ref` bên trong đã là `...-v1` — lệch có thật, và
-# **KHÔNG đổi tên trong D16**: rename chỉ được quyết khi xác nhận caller dùng `golden_set_ref` chứ
-# không hardcode tên file. Loader không suy ref từ tên file nên lệch này vô hại; hằng số ở đây là
-# đường dẫn, không phải khoá.
-_GOLDEN_30 = _WORKSPACE_ROOT / "packages" / "kb" / "golden" / "callisto-handbook-30-draft.yaml"
+_GOLDEN_DIR = _WORKSPACE_ROOT / "packages" / "kb" / "golden"
+
+# HAI tên, thử theo thứ tự — vì bộ 30 đang đổi tên giữa chừng và fixture này phải sống qua cả hai
+# phía của lần đổi đó:
+#
+#   - `callisto-golden-30-v1.yaml`      ← tên MỚI, sau `kb#18`
+#   - `callisto-handbook-30-draft.yaml` ← tên CŨ, vẫn là thứ con trỏ kb của kit đang trỏ tới
+#
+# Vì sao phải xử lý thay vì đợi: `golden_30_path` **skip** khi không thấy file, và skip là trạng
+# thái IM LẶNG. Ngày con trỏ kb được bump qua `kb#18`, một hằng số tên-cũ sẽ làm toàn bộ bài
+# integration của quadrant lặng lẽ biến mất khỏi suite — trong đó có bài duy nhất giữ lưới cho
+# mutant `M-L3` và cho bug T6 (`kb#18` N1). Suite vẫn "xanh", chỉ là nó không còn đo gì.
+#
+# Đây KHÔNG phải một fallback kiểu "khoá lỏng hơn": ref vẫn được `load_golden_set` assert từ **nội
+# dung** file, nên trỏ nhầm sang file khác vẫn raise. Chỗ này chỉ là đường dẫn.
+#
+# ĐIỀU KIỆN GỠ, đọc được: khi con trỏ `packages/kb` của kit đã bump qua `kb#18`, xoá tên cũ khỏi
+# tuple và để một tên duy nhất.
+_TEN_FILE_GOLDEN_30 = ("callisto-golden-30-v1.yaml", "callisto-handbook-30-draft.yaml")
+
+_GOLDEN_30 = next(
+    (p for p in (_GOLDEN_DIR / ten for ten in _TEN_FILE_GOLDEN_30) if p.is_file()),
+    _GOLDEN_DIR / _TEN_FILE_GOLDEN_30[0],
+)
 
 
 @pytest.fixture
@@ -111,7 +130,18 @@ def runner_tot() -> Callable[[GoldenSet, Mapping[str, UUID]], StubAgentRunner]:
             tenant_id = tenant_map[case.tenant]
             if case.expects_refusal:
                 answer = AgentAnswer(answer="Tôi không thể trả lời câu hỏi này.", citations=[], refused=True)
-                events = [_trace_event(tenant_id, [])]
+                # Trace mang MỘT chunk hợp lệ của CHÍNH kho người hỏi — không phải rỗng.
+                #
+                # Bản trước để `[]`, và đó là **fixture thuận lợi**: `all(...)` trên tập rỗng luôn
+                # `True`, nên luật `no_leak` sai kiểu gì cũng không lộ ra. Đúng chỗ bug `kb#18` N1
+                # trốn được suốt: 4 case T6 của golden-30 (`expected_tenant == tenant`) bị luật cũ
+                # chấm FAIL oan ngay khi trace có bất kỳ chunk nào của kho mình, mà không bài
+                # integration nào thấy vì trace toàn rỗng.
+                #
+                # Một agent thật gần như luôn có retrieval trước khi quyết định từ chối, nên rỗng
+                # mới là ca không giống đời thật. Với luật đúng: T6 ⇒ chunk thuộc kho người hỏi nên
+                # PASS; T1 ⇒ chunk KHÔNG thuộc `expected_tenant` nên cũng PASS.
+                events = [_trace_event(tenant_id, [f"{case.tenant}-handbook-000#c1"])]
             else:
                 answer = AgentAnswer(
                     answer=f"Theo tài liệu, {case.expected}.",
