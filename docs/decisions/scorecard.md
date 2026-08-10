@@ -165,7 +165,7 @@ vào ngày.
 |---|---|---|
 | Cách biểu diễn DEC-04 trong `Aggregate` (nullable vs `n_scored_citation`). Ghi đúng chữ: *"`aggregate` không tính lại được từ payload `results` đã lưu"* | AIE-2 | D16 |
 | Hiện thực `no-trace-no-proof` ở tầng `run_smoke`/`EvalHarness.run` (DEC-05) | AIE-2 | D16 |
-| Recalibrate ngưỡng `success`/`citation_accuracy` sau golden-30 trên corpus thật. Số đo nay: bộ 5 → `0.80`, bộ 10 → `0.60` / `0.833` thật ⇒ **với mặc định `0.9/0.95` một recipe TỐT cũng FAIL cả hai trục** | AIE-2 | D16 |
+| **Recalibrate ngưỡng `success`/`citation_accuracy`** — `DEC-D16-05` chốt *đo trong D16, quyết ở ngày sau*. **Đã đo trên golden-30 (10/08), số dưới đây, và kết luận là CHƯA ĐỦ CƠ SỞ để đổi ngưỡng.** Xem khối *"Số đo T6"* ngay dưới bảng này. Ngưỡng `0.9/0.95` **giữ nguyên**. **Điều kiện lật (đọc được, không phải "chờ thêm"):** có số từ **một agent thật** chạy 30 case — tức `#106` (interpreter AIE-1) xong; mọi số D16 đều đo trên `StubAgentRunner` nên chúng đo **bộ chấm**, không đo agent | AIE-2 | **D17** (điều kiện: `#106`) |
 | Giao **golden-30** (`callisto-golden-30-v1`, sinh SAU corpus D13). Nhận chia lô 20@D15 + 10@sáng D16 **nếu chia lô có trong log**. Không nhận *"sẽ có"* | **DE** | D15 |
 | **Yêu cầu MỚI cho golden-30 (từ DEC-08):** ≥1/3 case phải có **≥2 ứng viên cùng `tenant` + cùng `section_role`**, để ranking buộc phải chọn thật. Hiện chỉ **2/6** case có tranh chấp trong fence, nên `citation_accuracy` đang đo fence chứ không đo truy xuất. Đây là yêu cầu khác với 4 yêu cầu đã nêu (phủ 2 tenant · refusal T1/T6 · `section_roles` đa dạng · ≥3 case cần judge) | **DE** | D15 |
 | **Bài test hồi quy embedding** — sau khi golden-30 có case tranh chấp, viết bài khoá *"embedding hằng số PHẢI làm `citation_accuracy` tụt"*. Không có bài này thì DEC-08 chỉ là một ghi chú, không phải một phép đo | AIE-2 | D16 |
@@ -174,6 +174,44 @@ vào ngày.
 | Breakpoint #14 — `refused = not citations` cho **dương-tính-giả**: câu bịa trọn vẹn mà quên đóng ngoặc ⇒ `citations=[]` ⇒ `refused=True` ⇒ **SC-04 PASS dù agent đã bịa**. Trên bài kiểm hàng rào, **xanh-giả nguy hiểm hơn đỏ-giả** | **AIE-1** | D17 |
 | **Chủ trục INV-1 roles** — #74 §6: *"needs an owner at D11 freeze. AIE-1 or SWE"*. AIE-2 **không nhận**: bộ chấm **quan sát** hàng rào, không **tạo** hàng rào. Đề xuất **SWE** (#112/D17 đã gán *"Own INV-1: session_id resolve {tenant,user,roles} server-side"*) | **chưa có chủ** — đề xuất SWE | gán **D12** |
 | Job CI so con trỏ kit với `main` từng submodule (đã lệch mất điểm 2 lần: `kit#73`, `kit#76`/`#77`) | AIE-2 (issue follow-up) | S2 |
+
+### Số đo T6 — độ nhạy ngưỡng trên golden-30 (10/08), `DEC-D16-05`
+
+**Đọc bảng này với một câu cảnh báo đặt trước, không đặt sau:** cả ba runner đều là
+`StubAgentRunner`. `#106` (interpreter AIE-1) chưa xong, nên **chưa có agent thật nào chạy 30 case**.
+Ba cột số dưới đây vì thế đo **bộ chấm**, không đo agent — chúng chứng minh gate có răng, và **không**
+nói được ngưỡng `0.9/0.95` là cao hay thấp đối với một recipe thật.
+
+Cấu hình runner, ghi ra để tái lập được:
+
+- **`tot`** — trả lời đúng mọi case, trích đúng `expected_citation`; refusal có 1 event/0 citation (F02).
+- **`hon-hop`** — tổng hợp có chủ đích để tạo điểm đo **giữa** hai cực: mọi refusal đúng, `1/6` case
+  trả-lời sai answer, `1/7` case trả-lời đúng nhưng trace không trích được chunk kỳ vọng.
+- **`te`** — sai mọi nhánh (answer sai ở nhánh trả-lời, trả lời thật ở nhánh từ-chối).
+
+| runner | ngưỡng success | ngưỡng citation | `success_rate` đo | `citation_accuracy` đo **`TẠM`** | verdict |
+|---|---|---|---|---|---|
+| `tot` | 0.90 | 0.95 | 1.0000 | 1.0000 | **PASS** |
+| `hon-hop` | 0.90 | 0.95 | 0.8667 | 0.8636 | **FAIL** |
+| `hon-hop` | 0.80 | 0.80 | 0.8667 | 0.8636 | **PASS** |
+| `hon-hop` | 0.85 | 0.80 | 0.8667 | 0.8636 | **PASS** |
+| `hon-hop` | 0.80 | 0.85 | 0.8667 | 0.8636 | **PASS** |
+| `te` | 0.90 | 0.95 | 0.0000 | 0.0000 | **FAIL** |
+| `te` | 0.00 | 0.00 | 0.0000 | 0.0000 | **PASS** |
+
+**Bốn dòng `hon-hop` là ô DoD 3 ở quy mô thật:** `results` **không đổi** giữa bốn lượt (cùng
+`0.8667 / 0.8636`), chỉ ngưỡng đổi, và verdict lật `FAIL → PASS`. Không phải hai bộ dữ liệu khác
+nhau — nên kết luận chỉ có một cách đọc.
+
+**Nhãn `TẠM` cho cột `citation_accuracy`** (`DEC-08`): trục này hiện đo **sức mạnh FENCE**, không đo
+**sức mạnh TRUY XUẤT** — null control cho thấy một vector hằng số 0 bit thông tin vẫn đạt
+`recall@1 = 6/6`. Điều kiện gỡ nhãn: bài hồi quy embedding xanh (T9b, tiền đề nằm ở DE).
+
+**Kết luận của T6, viết ra để không ai đọc bảng này thành một đề xuất:** số liệu **không đủ cơ sở**
+để recalibrate. Nó cũng **không** xác nhận câu cũ trong sổ hoãn (*"với `0.9/0.95` một recipe TỐT cũng
+FAIL cả hai trục"*) — runner `tot` PASS ở đúng ngưỡng đó. Nhưng `tot` tốt **theo định nghĩa**, nên
+điều đó cũng không bác được câu kia. Hai chiều đều chưa kết luận được, và lý do giống nhau: chưa có
+agent thật. Ngưỡng `0.9/0.95` **giữ nguyên trong D16**, đúng `DEC-D16-05`.
 
 ## Dấu vết chữ ký (ADR-D11-01 lớp 2 — KHÔNG phải chỗ ký)
 
