@@ -34,10 +34,16 @@ _WHY_EMPTY = (
 )
 
 _AGGREGATE_NOT_RECOMPUTABLE = (
-    "* `aggregate` KHÔNG tính lại được từ `results` đã lưu: `CaseResult` không mang cờ nhánh "
-    "từ-chối, nên ở tầng hợp đồng không phân biệt được `citation_accuracy = 1.0` là *quy ước "
-    "vacuous-truth* hay *phép đo thật* ⇒ số in ra là số của `aggregate`, không phải số dựng lại. "
-    "Cách biểu diễn (nullable vs thêm `n_scored_citation`) là nợ có chủ: AIE-2, hạn D16 (DEC-04)."
+    "* `aggregate` vẫn KHÔNG tính lại được từ `results` đã lưu, và lý do không đổi: `CaseResult` "
+    "không mang cờ nhánh từ-chối, nên ở tầng hợp đồng không phân biệt được `citation_accuracy = "
+    "1.0` là *quy ước vacuous-truth* hay *phép đo thật* ⇒ số in ra là số của `aggregate`, không "
+    "phải số dựng lại.\n"
+    "* D16 trả được HAI PHẦN BA của nợ DEC-04, ghi rõ phần nào: (1) `citation_accuracy` nhận "
+    "`None` = *trục này chưa được đo* (mẫu số rỗng ⇒ verdict FAIL, DEC-D16-03); (2) mẫu số đi kèm "
+    "output ở dòng `mẫu số citation` thay vì để người đọc tự đoán. Phần CÒN NỢ: mẫu số đó do "
+    "**caller** truyền, chưa nằm trên `Aggregate.n_scored_citation` — nên một `Scorecard` đọc từ DB "
+    "vẫn chưa tự nói được nó chia cho bao nhiêu. PR sang `contracts` là chỗ đóng nốt (DEC-D16-03, "
+    "chủ AIE-2)."
 )
 
 
@@ -162,7 +168,12 @@ def _row(label: str, value: str) -> str:
     return f"{label:<{_LABEL_W}} {value}"
 
 
-def render_scorecard(scorecard: Scorecard | None, *, golden_set_ref: str | None = None) -> str:
+def render_scorecard(
+    scorecard: Scorecard | None,
+    *,
+    golden_set_ref: str | None = None,
+    n_scored_citation: int | None = None,
+) -> str:
     """Bảng `Scorecard` cho người đọc; `None` ⇒ **khung trống có `todo:`**, không phải bảng số 0.
 
     `scorecard is None` là trạng thái **thật của hôm nay**, không phải trạng thái lỗi: chưa có
@@ -171,6 +182,19 @@ def render_scorecard(scorecard: Scorecard | None, *, golden_set_ref: str | None 
     để hình dạng output được khoá bằng test **trước** khi có dataset (GUIDE-C §3.2).
 
     `golden_set_ref` chỉ dùng cho nhánh trống (khi có `scorecard` thì lấy từ chính nó).
+
+    **`n_scored_citation` — mẫu số của trục citation, do CALLER truyền (D16).** `citation_accuracy`
+    chỉ chia cho các case **nhánh trả-lời** (`DEC-04` loại refusal khỏi mẫu số), nên in con số mà
+    không nói mẫu số là để người đọc tự đoán giữa `22` và `30` — đúng chỗ `kit#134` gọi tên: *chỗ
+    hỏng không nằm ở probe, nằm ở bước từ `8/10` sang tám-mươi-phần-trăm*.
+
+    Vì sao renderer **không tự đếm**: `CaseResult` không mang cờ nhánh (`contracts/scorecard.py:22-30`)
+    nên cấu trúc mà nói nó đếm không được; và `DEC-D15-01` cấm renderer tự tính — một renderer tự
+    tính là nguồn số **thứ hai** cho cùng một run. Không truyền ⇒ in `todo:`, **không** đoán
+    `len(results)`: con số đó sai một cách đọc-được-thành-đúng, đúng thứ `DEC-04` sinh ra để chặn.
+
+    Tham số này là **tạm** và có điều kiện gỡ đọc được: khi `Aggregate.n_scored_citation` land
+    (`DEC-D16-03`, PR sang `contracts`) thì số đọc thẳng từ field và tham số biến mất.
     """
     header = "SCORECARD — " + (
         scorecard.golden_set_ref if scorecard is not None else (golden_set_ref or "(chưa có golden-set)")
@@ -209,6 +233,13 @@ def render_scorecard(scorecard: Scorecard | None, *, golden_set_ref: str | None 
             f"{scorecard.aggregate.citation_accuracy:.2f}*"
             if scorecard.aggregate.citation_accuracy is not None
             else _count_or_not_estimable(0, 0),
+        ),
+        _row(
+            "mẫu số citation",
+            f"{n_scored_citation}/{len(scorecard.results)} "
+            f"(đã loại {len(scorecard.results) - n_scored_citation} refusal — DEC-04)"
+            if n_scored_citation is not None
+            else _TODO + " (caller chưa truyền; Aggregate.n_scored_citation là DEC-D16-03, chờ PR contracts)",
         ),
         _row(
             "gate.threshold",
