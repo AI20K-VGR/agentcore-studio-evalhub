@@ -17,12 +17,13 @@ itself (R-SPEC A4 ownership fence).
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import TypedDict, cast
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
-from studio_contracts import CaseResult, Scorecard, TraceEvent
+from studio_contracts import CaseResult, NodeType, Scorecard, TraceEvent
 
 from studio_evalhub.agent_runner import AgentAnswer, AgentRunner, CaseRun
 from studio_evalhub.compute import compute_scorecard
@@ -62,6 +63,21 @@ class SmokeResult(BaseModel):
     Default `False` để mọi constructor cũ vẫn dựng được (additive)."""
 
 
+class _NotProvided:
+    """Sentinel cho `score_case(retrieved_chunks=...)` — **"caller không đi đường chunks"**.
+
+    Phải khác `None`, và đây là chỗ mà một `Optional` trần sẽ nói dối: `None` có nghĩa riêng
+    (*"đã đọc trace nhưng không quan sát được event `kb-retrieve`"* ⇒ fail-closed). Gộp hai nghĩa
+    vào một giá trị thì hoặc 6 call-site cũ (`apps/studio` ×4, `run_report`, `score_run_from_trace`)
+    đột nhiên chấm FAIL mọi case từ-chối, hoặc ca không-quan-sát-được được cho qua im lặng — cả hai
+    đều là lỗi nặng hơn cái đang vá."""
+
+    __slots__ = ()
+
+
+_NOT_PROVIDED = _NotProvided()
+
+
 def _citation_tenant(chunk_id: str) -> str | None:
     """Tenant của chunk suy từ tiền tố id (định dạng DE `ankor-leave-001#c1` → `ankor`).
 
@@ -71,6 +87,61 @@ def _citation_tenant(chunk_id: str) -> str | None:
     if not sep or not prefix:
         return None
     return prefix
+
+
+class RetrievedChunk(TypedDict):
+    """Một chunk RETRIEVAL trả về, đúng shape `KbSearchResultItem.model_dump(mode="json")` mà
+    `interpreter.py:347` ghi vào `outputs["chunks"]` của event `kb-retrieve`.
+
+    **Giữ đủ 5 khoá, không rút gọn.** `tenant_id` và `section_role` là hai field mà `no_leak` chấm
+    trên đó (`DEC-D17-03`); rút thành `chunk_id` là quay lại đoán tenant bằng tiền tố slug
+    (`_citation_tenant`) — đúng heuristic mà `F-6` tồn tại để bỏ."""
+
+    chunk_id: str
+    tenant_id: str
+    section_role: str
+    score: float
+    text: str
+
+
+def chunks_from_trace(events: Sequence[TraceEvent]) -> list[RetrievedChunk] | None:
+    """Chunk RETRIEVAL trả về (`kb-retrieve` → `outputs["chunks"]`) — KHÁC `citations` (`llm-step`,
+    thứ câu trả lời thật sự dựa vào). `trace.py:39-45` tách sẵn hai fact này: *"retrieved
+    (kb-retrieve, scope-filtered, may be irrelevant) and cited/grounded (llm-step, what the answer
+    actually used) are different facts"*.
+
+    Vì sao `F-6` cần nó: nhánh từ-chối chấm `no_leak` trên `citations`, mà mọi runner phát **0
+    citation** khi từ chối ⇒ luật đúng và luật sai cho **cùng** kết quả (vacuous). Hàng rào lọc ở
+    tầng *retrieved*, nên bộ chấm phải nhìn đúng tầng đó mới có dữ liệu để một luật sai **sai được**.
+
+    Ba giá trị trả về, ba nghĩa KHÁC nhau — đây là chỗ dễ chọn sai nhất:
+
+    - `None` ⇒ **không quan sát được** — không event `kb-retrieve` nào, **hoặc** có event nhưng
+      `outputs["chunks"]` không đọc được (thiếu khoá · không phải list · có phần tử không phải
+      dict). Fail-closed: không chứng minh được thì không phải là đạt (cùng luật
+      `tenant_scope_ok:130`, `DEC-05`).
+    - `[]` ⇒ có event nhưng retrieval trả rỗng ⇒ **hàng rào chặn sạch**, bằng chứng TỐT.
+    - non-empty ⇒ có chunk rời khỏi retrieval; `no_leak` xét từng cái theo đúng trục đã kích refusal.
+
+    Gom theo `node_type is NodeType.KB_RETRIEVE` chứ **không** node-agnostic như
+    `citations_from_trace`: `outputs["chunks"]` là khoá của riêng node đó (`interpreter.py:218`),
+    trong khi `citations` từng bị hai bề mặt khai khác nhau nên phải gom rộng cho robust."""
+    retrieve_events = [event for event in events if event.node_type is NodeType.KB_RETRIEVE]
+    if not retrieve_events:
+        return None
+    out: list[RetrievedChunk] = []
+    for event in retrieve_events:
+        raw = event.outputs.get("chunks")
+        if not isinstance(raw, list) or not all(isinstance(chunk, dict) for chunk in raw):
+            # Có event `kb-retrieve` nhưng payload KHÔNG đọc được ⇒ `None`, không phải `[]`.
+            # Vá sau review `evalhub#18` (DE): bản đầu `continue` qua event hỏng rồi trả `[]`, mà
+            # `[]` ở tầng trên nghĩa là *"hàng rào chặn sạch"* — một bằng chứng TỐT. Tức một
+            # retrieval LỖI được chấm nhẹ hơn một run KHÔNG CÓ retrieval, ngược hẳn fail-closed.
+            # Một phần tử hỏng cũng làm cả lô `None`: lọc lặng phần tử là **báo thiếu**, và bộ chấm
+            # sẽ kết luận "không rò" trên tập nhỏ hơn thứ retrieval thật sự trả về.
+            return None
+        out.extend(cast("RetrievedChunk", chunk) for chunk in raw)
+    return out
 
 
 def citations_from_trace(events: list[TraceEvent]) -> list[str]:
@@ -158,7 +229,53 @@ def _contains_phrase(answer_text: str, expected_phrase: str) -> bool:
     return any(answer_tokens[i : i + n] == expected_tokens for i in range(len(answer_tokens) - n + 1))
 
 
-def score_case(case: GoldenCase, answer: AgentAnswer, retrieved_citations: list[str]) -> SmokeResult:
+def _no_leak_from_chunks(
+    case: GoldenCase, chunks: list[RetrievedChunk], tenant_ids: Mapping[str, UUID]
+) -> tuple[bool, bool]:
+    """`(all_parseable, no_leak)` cho nhánh từ-chối, chấm trên **chunk RETRIEVAL** (`F-6`).
+
+    Rẽ theo đúng trục đã kích refusal, y như luật `citations` nó thay thế — chỉ đổi **nguồn dữ
+    liệu**, không đổi số conjunct (`DEC-D17-02`):
+
+    | Trục | Điều kiện kích | `no_leak` đúng |
+    |---|---|---|
+    | **T1** chéo-tenant | `expected_tenant != tenant` (đáp án ở kho KHÁC) | mọi chunk thuộc kho NGƯỜI HỎI |
+    | **T6** chéo-vai | `expected_tenant == tenant` (cùng kho, khác VAI) | mọi chunk đúng kho người hỏi
+      **VÀ** vai họ giữ |
+
+    **Khác bản `citations` ở đúng một điểm, và điểm đó là toàn bộ giá trị của `F-6`:** tenant so
+    bằng **UUID thật** (`RetrievedChunk.tenant_id`) chứ không đoán bằng tiền tố `chunk_id`
+    (`_citation_tenant`) — ngày DE đổi quy ước đặt tên là heuristic kia sai im lặng. Và trục T6 kiểm
+    được **đúng thứ nó nói về** nhờ `section_role` có sẵn trong chunk, thay vì chỉ kiểm hộ trục
+    tenant rồi ghi chú *"vai không đọc được"*.
+
+    **Vì sao T1 so với kho NGƯỜI HỎI chứ không phải "cấm kho `expected_tenant`"** (khác chữ ở bảng
+    T2 của plan, khớp bảng `DEC-D17-03`): với case T1, `expected_tenant` đúng là kho caller **không
+    có quyền**, nên nó KHÔNG nằm trong `tenant_ids` của run — `tenant_ids[case.expected_tenant]` ném
+    `KeyError` (đo được: 4 bài đỏ khi thử). Và "mọi chunk thuộc kho người hỏi" **mạnh hơn**: nó chặn
+    cả rò từ kho thứ ba mà luật cũ không nhắc tới.
+
+    `all_parseable` = mọi chunk khai đủ hai field định danh. Thiếu ⇒ không chứng minh được là an
+    toàn ⇒ fail-closed, cùng quy ước `_citation_tenant` trả `None`."""
+    all_parseable = all(bool(chunk.get("tenant_id")) and bool(chunk.get("section_role")) for chunk in chunks)
+    caller_tenant = str(tenant_ids[case.tenant])
+    in_caller_tenant = all(chunk.get("tenant_id") == caller_tenant for chunk in chunks)
+    if case.expected_tenant is not None and case.expected_tenant != case.tenant:
+        no_leak = in_caller_tenant
+    else:
+        allowed_roles = set(case.section_roles)
+        no_leak = in_caller_tenant and all(chunk.get("section_role") in allowed_roles for chunk in chunks)
+    return all_parseable, no_leak
+
+
+def score_case(
+    case: GoldenCase,
+    answer: AgentAnswer,
+    retrieved_citations: list[str],
+    *,
+    retrieved_chunks: list[RetrievedChunk] | None | _NotProvided = _NOT_PROVIDED,
+    tenant_ids: Mapping[str, UUID] | None = None,
+) -> SmokeResult:
     """Chấm một case theo luật v0 (`docs/scorecard-v0.md` §2.3), rẽ nhánh qua
     `GoldenCase.expects_refusal` (xét cả T1 chéo-tenant lẫn T6 chéo-vai).
 
@@ -173,9 +290,22 @@ def score_case(case: GoldenCase, answer: AgentAnswer, retrieved_citations: list[
       bắt phủ định/ngữ cảnh — chỉ judge (S3).
     - **từ-chối**: **fail-closed** — `success` chỉ khi cả ba: agent thực sự từ chối (`refused`), mọi
       citation TRACE parse được tenant, và **không rò** theo luật của **đúng trục** đã kích refusal.
-      Vi phạm bất kỳ ⇒ fail. Đây là **leak SANITY theo chunk-id slug** (D-13): KHÔNG chứng minh fence
-      RLS-UUID (fence thật do KB/RLS UUID server-side; `TraceEvent.citations` là `list[str]`, không
-      mang tenant_id per-chunk). `citation_accuracy` = 1.0 (quy ước vacuous-truth, `DEC-04`).
+      Vi phạm bất kỳ ⇒ fail. Đây là **leak SANITY** (D-13, *sanity thứ cấp*): KHÔNG chứng minh fence
+      RLS-UUID — nó **quan sát** thứ retrieval đã trả, không chứng minh retrieval không thể trả thứ
+      khác; fence thật là mandatory filter + RLS server-side (`#110`/`#112`).
+      `citation_accuracy` = 1.0 (quy ước vacuous-truth, `DEC-04`).
+
+      **Nguồn của `no_leak` rẽ theo `retrieved_chunks` — `F-6` / `DEC-D17-02` (D17):**
+
+      - **không truyền** (`_NOT_PROVIDED`) ⇒ đường CŨ, chấm trên `retrieved_citations`. Giữ cho 6
+        call-site chưa đổi. Đường này **vacuous trên mọi runner thật**: đo trên golden-30 qua
+        interpreter, 8/8 case từ-chối phát **0 citation** ⇒ luật đúng và luật sai cho cùng kết quả.
+        Chữ *"theo chunk-id slug"* mô tả đúng đường này và **chỉ** đường này.
+      - **`None`** ⇒ đã đọc trace nhưng không có event `kb-retrieve` ⇒ **fail-closed** (`success`
+        False). `None` ≠ `[]`: `[]` là *hàng rào chặn sạch*, bằng chứng TỐT.
+      - **list** ⇒ đường MỚI, chấm trên chunk RETRIEVAL qua `_no_leak_from_chunks`: tenant so bằng
+        **UUID thật**, vai so bằng **`section_role` thật** — hết đoán tiền tố `chunk_id`, và trục T6
+        kiểm được đúng thứ nó nói về. Đòi `tenant_ids`; thiếu ⇒ `ValueError`, không im lặng.
 
       **Luật `no_leak` rẽ theo trục — vá D16 sau review `kb#18` (N1).** Bản trước dùng **một** biểu
       thức `_citation_tenant(c) != expected_tenant` cho cả hai trục. Đúng cho T1, **sai cho T6**:
@@ -209,7 +339,9 @@ def score_case(case: GoldenCase, answer: AgentAnswer, retrieved_citations: list[
         success = (answer.refused is False) and _contains_phrase(answer.answer, case.expected)
         expected = set(case.expected_citation)
         citation_accuracy = len(expected & set(retrieved_citations)) / len(expected) if expected else 1.0
-    else:
+    elif isinstance(retrieved_chunks, _NotProvided):
+        # Đường CŨ (`citations`) — giữ nguyên cho 6 call-site chưa đi đường chunks. Nhánh này
+        # vacuous trên mọi runner thật (0 citation khi từ chối); đó chính là lý do `F-6` tồn tại.
         all_parseable = all(_citation_tenant(c) is not None for c in retrieved_citations)
         if case.expected_tenant is not None and case.expected_tenant != case.tenant:
             # T1 chéo-tenant: đáp án nằm ở kho KHÁC ⇒ cấm trích bất kỳ chunk nào thuộc kho đó.
@@ -219,6 +351,21 @@ def score_case(case: GoldenCase, answer: AgentAnswer, retrieved_citations: list[
             # VAI — nên "cấm trích kho `expected_tenant`" là cấm chính kho của họ. Thứ kiểm được
             # bằng `chunk_id` là: mọi chunk trích phải thuộc ĐÚNG kho người hỏi.
             no_leak = all(_citation_tenant(c) == case.tenant for c in retrieved_citations)
+        success = (answer.refused is True) and all_parseable and no_leak
+        citation_accuracy = 1.0
+    elif retrieved_chunks is None:
+        # Đã đọc trace nhưng KHÔNG có event `kb-retrieve` ⇒ không quan sát được ⇒ fail-closed.
+        # Cùng luật `tenant_scope_ok` (`events` rỗng ⇒ False) và `DEC-05`.
+        success = False
+        citation_accuracy = 1.0
+    else:
+        if tenant_ids is None:
+            msg = (
+                "score_case: đi đường `retrieved_chunks` thì BẮT BUỘC truyền `tenant_ids` — "
+                "tenant so bằng UUID thật, không đoán tiền tố chunk_id (DEC-D17-03)"
+            )
+            raise ValueError(msg)
+        all_parseable, no_leak = _no_leak_from_chunks(case, retrieved_chunks, tenant_ids)
         success = (answer.refused is True) and all_parseable and no_leak
         citation_accuracy = 1.0
 
@@ -232,7 +379,7 @@ def score_case(case: GoldenCase, answer: AgentAnswer, retrieved_citations: list[
     )
 
 
-def _score_case_run(case: GoldenCase, case_run: CaseRun) -> SmokeResult:
+def _score_case_run(case: GoldenCase, case_run: CaseRun, tenant_ids: Mapping[str, UUID]) -> SmokeResult:
     """Chấm một `CaseRun` — `score_case` cộng bất biến **`no-trace-no-proof`** (`DEC-05`).
 
     > **`CaseRun.events == []` ⇒ case FAIL**, bất kể `answer` nói gì. Không có trace quan sát được
@@ -251,7 +398,13 @@ def _score_case_run(case: GoldenCase, case_run: CaseRun) -> SmokeResult:
     `success` (`score_case` docstring). Một case no-trace ở nhánh trả-lời đằng nào cũng ra `0.0` vì
     không trích được gì; ở nhánh từ-chối nó giữ `1.0` quy ước và bị loại khỏi mẫu số — cả hai đều là
     hành vi đã chốt, không phải hệ quả tình cờ của bản vá này."""
-    result = score_case(case, case_run.answer, citations_from_trace(case_run.events))
+    result = score_case(
+        case,
+        case_run.answer,
+        citations_from_trace(case_run.events),
+        retrieved_chunks=chunks_from_trace(case_run.events),
+        tenant_ids=tenant_ids,
+    )
     if not case_run.events:
         return result.model_copy(update={"success": False})
     return result
@@ -310,7 +463,7 @@ class EvalHarness:
                 tenant_id=tenant_ids[case.tenant],
                 section_roles=case.section_roles,
             )
-            scored = _score_case_run(case, case_run)
+            scored = _score_case_run(case, case_run, tenant_ids)
             results.append(
                 CaseResult(
                     case_id=scored.case_id,
@@ -364,7 +517,7 @@ class EvalHarness:
             )
             # `no-trace-no-proof` cưỡng chế ở ĐÂY, tầng giữ `events` (DEC-05) — cùng một helper với
             # `run`, để hai đường không trôi ra hai luật chấm khác nhau.
-            results.append(_score_case_run(case, case_run))
+            results.append(_score_case_run(case, case_run, tenant_ids))
         return results
 
 

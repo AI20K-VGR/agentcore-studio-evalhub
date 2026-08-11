@@ -11,7 +11,9 @@ from studio_evalhub.golden_case import GoldenCase, GoldenSet
 from studio_evalhub.golden_loader import load_golden_set
 from studio_evalhub.harness import (
     EvalHarness,
+    RetrievedChunk,
     SmokeResult,
+    chunks_from_trace,
     citations_from_trace,
     score_case,
     tenant_scope_ok,
@@ -29,6 +31,8 @@ __all__ = [
     "LLMJudge",
     "SmokeResult",
     "StubAgentRunner",
+    "RetrievedChunk",
+    "chunks_from_trace",
     "citations_from_trace",
     "compute_scorecard",
     "load_golden_set",
