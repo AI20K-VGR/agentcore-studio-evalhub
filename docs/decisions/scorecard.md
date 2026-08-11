@@ -246,13 +246,88 @@ vào ngày.
 > bịa ra một giờ"* — đúng, và đó là câu tôi đặt sai người. ⇒ chuyển thành **mặc định của tôi**: sáng D13
 > re-run e2e + smoke **trước** khi làm việc khác, không chờ ai báo giờ.
 
+### DEC-D17-04 · Recalibrate ngưỡng — điều kiện lật cũ ĐÃ THOẢ, kết luận vẫn là KHÔNG ĐỔI
+
+**Quyết:** giữ `0.9/0.95`. **Đóng** điều kiện lật cũ (*"chờ `#106`"*) vì nó đã thoả, và mở một điều
+kiện lật **mới** — vì số đo được không dùng để hiệu chỉnh ngưỡng.
+
+**Điều kiện cũ thoả nhưng số không dùng được.** Sổ hoãn ghi *"điều kiện lật: có số từ **một agent
+thật** chạy 30 case — tức `#106` xong"*. `#106` CLOSED (`engine#20`, `engine@6857885`). Chạy lại
+hôm nay: `run_golden_batch.py` → **`30/30 khớp nhãn golden`**.
+
+**Nhưng `30/30` KHÔNG chuyển thành `success_rate` của scorecard.** Đo thật qua `EvalHarness.run` trên
+chính output đó (golden-30, `StubAgentRunner` nạp từ interpreter thật):
+
+| `thr_success` | `thr_citation` | `success_rate` | `citation_accuracy` | `n_scored` | verdict |
+|---|---|---|---|---|---|
+| 0.90 | 0.95 | 0.2667 | 1.0000 | 22 | **FAIL** |
+| 0.30 | 0.95 | 0.2667 | 1.0000 | 22 | **FAIL** |
+| 0.2667 | 1.00 | 0.2667 | 1.0000 | 22 | **FAIL** |
+| 0.20 | 0.95 | 0.2667 | 1.0000 | 22 | **PASS** |
+| 0.20 | 1.00 | 0.2667 | 1.0000 | 22 | **PASS** |
+
+`success_rate = 0.2667 = 8/30` — **đúng 8 case từ-chối đạt, 22 case trả-lời trượt hết**. Nguyên nhân
+đã truy: `_GoldenAwareLLM` (`run_golden_batch.py:~105`) là double trả **câu canned**
+*"Theo tài liệu đã truy xuất, câu trả lời có căn cứ tại [chunk_id]"* — nó **không bao giờ** chứa cụm
+`expected` (vd `"3 ngày mỗi tuần"`), nên `_contains_phrase` trượt ở cả 22 case.
+
+⇒ **`30/30` của `run_golden_batch.py` nghĩa là *citations + refused khớp nhãn*, KHÔNG phải *agent trả
+lời đúng*.** Hai phép đo khác nhau, và trước hôm nay chúng bị đọc lẫn.
+
+**Cái đo được là thật, cái không đo được cũng phải nói ra:**
+
+- `citation_accuracy = 1.0000` trên `n_scored = 22` là **tín hiệu thật** — double trích đúng chunk.
+- `success_rate = 0.2667` **không đo chất lượng agent** — nó đo prose của một double không sinh prose.
+
+**Không đủ cơ sở đổi ngưỡng, và lý do mạnh hơn giả định ban đầu.** Bản plan sáng nay suy đoán số sẽ
+là `1.000/1.000` (*"agent hoàn hảo, không có phương sai"*). Đo xong thì sai: không phải thiếu phương
+sai, mà là **trục `success` chưa có dữ liệu hợp lệ nào để hiệu chỉnh**. Chỉnh `0.9` xuống `0.2` cho
+verdict PASS sẽ là fitting theo một artefact của test-double — đúng thứ `DEC-D16-05` tự cấm.
+
+**Điều kiện lật MỚI (thay câu cũ trong sổ hoãn):**
+
+> Có số từ một LLM **sinh prose thật và không biết trước nhãn** trên ≥30 case (đường `#116`/D18 hoặc
+> demo-flag live trong cap), **và** `success_rate` phản ánh nội dung câu trả lời chứ không phản ánh
+> khuôn câu của double. Trước đó mọi đề xuất đổi ngưỡng là chỉnh-cho-vừa-số.
+
+Nhãn **`TẠM`** trên trục `citation_accuracy` (`DEC-08`) **giữ nguyên**, chưa gỡ.
+
+**Bảng ngưỡng vẫn chứng minh gate có răng:** verdict lật giữa `0.30` (FAIL) và `0.20` (PASS) trên
+cùng một bộ `results`; và `thr_citation = 1.00` với `citation_accuracy = 1.0000` cho **PASS** — khoá
+đúng `>=`, không phải `>`.
+
+**Kiểm không-hồi-quy:** chạy đúng bảng trên với `harness.py` **trước** bản vá `F-6` (`419d29f`) ra
+**số y hệt** (`0.2667 / 1.0000 / 22`, 5/5 dòng). Bản vá T2/T3 không đổi một con số nào ở đây — đúng
+như dự đoán, vì 8/8 case âm không có chunk lệch kho/lệch vai nên luật mới cho cùng verdict qua
+đường khác.
+
+### T4b · Fence trên đường Postgres — phép đo RIÊNG, không suy từ `StaticKbSearch`
+
+Số `0/8 chunk-khác-kho` ở plan §1 đo trên `StaticKbSearch` (lọc bằng vòng `for` trong RAM). `#110`
+lật seam chính thức sang `PgKbSearch` (lọc trong SQL + RLS) — **hai impl khác nhau**, nên tính chất
+của bản này không tự động đúng cho bản kia. Đo lại, DB thật (`docker-compose.test.yml`, 5433,
+`studio_app`/`studio_owner`, 140 chunk seed):
+
+| Đường đo | Impl | tổng chunk / 8 case âm | lệch-kho | lệch-vai |
+|---|---|---|---|---|
+| control | `StaticKbSearch` | 40 | 0 | 0 |
+| fence thật, `kb@main` | `PgKbSearch` | 40 | **0** | **0** |
+| fence thật, `kb#19` (`494bf41`) | `KbSearchService` → `PgKbSearch` | 40 | **0** | **0** |
+
+Ba đường đồng thuận. Đo **không chờ `#110` merge** — nhánh PR fetch sẵn ở local.
+
+**Đọc cho đúng phạm vi:** đây là **quan sát** thứ retrieval đã trả về, **không** phải chứng minh
+retrieval *không thể* trả thứ khác. Nó không chứng minh fence RLS-UUID; leak-test thật vẫn là
+`#110`/`#112`. Cái nó chứng minh: trên bộ 8 case âm này, hàng rào **đang** giữ cả hai trục, và từ
+hôm nay điều đó **được đo** thay vì được giả định.
+
 ## Hoãn — mọi món có chủ + hạn (0 món vô chủ)
 
 | Món | Chủ | Hạn |
 |---|---|---|
 | Cách biểu diễn DEC-04 trong `Aggregate` (nullable vs `n_scored_citation`). Ghi đúng chữ: *"`aggregate` không tính lại được từ payload `results` đã lưu"* | AIE-2 | D16 |
 | Hiện thực `no-trace-no-proof` ở tầng `run_smoke`/`EvalHarness.run` (DEC-05) | AIE-2 | D16 |
-| **Recalibrate ngưỡng `success`/`citation_accuracy`** — `DEC-D16-05` chốt *đo trong D16, quyết ở ngày sau*. **Đã đo trên golden-30 (10/08), số dưới đây, và kết luận là CHƯA ĐỦ CƠ SỞ để đổi ngưỡng.** Xem khối *"Số đo T6"* ngay dưới bảng này. Ngưỡng `0.9/0.95` **giữ nguyên**. **Điều kiện lật (đọc được, không phải "chờ thêm"):** có số từ **một agent thật** chạy 30 case — tức `#106` (interpreter AIE-1) xong; mọi số D16 đều đo trên `StubAgentRunner` nên chúng đo **bộ chấm**, không đo agent | AIE-2 | **D17** (điều kiện: `#106`) |
+| **Recalibrate ngưỡng `success`/`citation_accuracy`** — `DEC-D16-05` chốt *đo trong D16, quyết ở ngày sau*. **Điều kiện lật cũ (`#106`) ĐÃ THOẢ 11/08 và đã đo — kết luận vẫn là KHÔNG ĐỔI, xem `DEC-D17-04`.** Ngưỡng `0.9/0.95` **giữ nguyên**. Số đo qua scorecard: `success_rate = 0.2667` (8/30), `citation_accuracy = 1.0000` trên `n_scored = 22`. `success_rate` **không đo chất lượng agent** — `_GoldenAwareLLM` là double trả câu canned không chứa cụm `expected`, nên 22 case trả-lời trượt `_contains_phrase`. **Điều kiện lật MỚI:** số từ một LLM **sinh prose thật, không biết trước nhãn** trên ≥30 case (`#116`/D18 hoặc demo-flag trong cap) | AIE-2 | **D18** (điều kiện: LLM sinh prose thật) |
 | Giao **golden-30** (`callisto-golden-30-v1`, sinh SAU corpus D13). Nhận chia lô 20@D15 + 10@sáng D16 **nếu chia lô có trong log**. Không nhận *"sẽ có"* | **DE** | D15 |
 | **Yêu cầu MỚI cho golden-30 (từ DEC-08):** ≥1/3 case phải có **≥2 ứng viên cùng `tenant` + cùng `section_role`**, để ranking buộc phải chọn thật. Hiện chỉ **2/6** case có tranh chấp trong fence, nên `citation_accuracy` đang đo fence chứ không đo truy xuất. Đây là yêu cầu khác với 4 yêu cầu đã nêu (phủ 2 tenant · refusal T1/T6 · `section_roles` đa dạng · ≥3 case cần judge) | **DE** | D15 |
 | **Bài test hồi quy embedding** — sau khi golden-30 có case tranh chấp, viết bài khoá *"embedding hằng số PHẢI làm `citation_accuracy` tụt"*. Không có bài này thì DEC-08 chỉ là một ghi chú, không phải một phép đo | AIE-2 | D16 |
