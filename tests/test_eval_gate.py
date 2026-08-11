@@ -53,7 +53,10 @@ def _event(tenant_id: UUID, citations: list[str]) -> TraceEvent:
         node_type=NodeType.KB_RETRIEVE,
         ts="2026-08-10T00:00:00+00:00",
         inputs_hash="h",
-        outputs={},
+        # `kb-retrieve` THẬT luôn mang `outputs["chunks"]` (`interpreter.py:347`), kể cả khi
+        # retrieval trả rỗng. Stub phải mô hình đúng: thiếu hẳn khoá nghĩa là *payload không
+        # đọc được* ⇒ `chunks_from_trace` fail-closed `None` (vá sau review evalhub#18, DE).
+        outputs={"chunks": []},
         tokens=Tokens(prompt=0, completion=0),
         cost=0.0,
         citations=citations,

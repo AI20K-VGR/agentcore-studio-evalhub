@@ -85,8 +85,16 @@ def tenant_ids() -> Mapping[str, UUID]:
     return {"ankor": uuid5(NAMESPACE_DNS, "ankor"), "borea": uuid5(NAMESPACE_DNS, "borea")}
 
 
-def _trace_event(tenant_id: UUID, citations: list[str]) -> TraceEvent:
-    """Một event `kb-retrieve` mang `citations` — mặt quan sát bộ chấm đọc."""
+def _trace_event(tenant_id: UUID, citations: list[str], *, chunks: list[dict[str, object]] | None = None) -> TraceEvent:
+    """Một event `kb-retrieve` mang **hai** mặt quan sát: `citations` (tầng *cited*) và
+    `outputs["chunks"]` (tầng *retrieved*).
+
+    Sau `F-6` (`DEC-D17-02`) nhánh từ-chối chấm `no_leak` trên **`chunks`**, không trên `citations`.
+    Nên một stub chỉ mang `citations` là stub **không mô hình được** thứ bộ chấm đọc — và tệ hơn,
+    nó lặng lẽ biến `runner_tot` thành **fixture thuận lợi** đúng cái mà docstring của fixture đó
+    viết ra để tránh: `all(...)` trên tập chunk rỗng luôn `True` nên luật `no_leak` sai kiểu gì
+    cũng không lộ. `chunks=None` ⇒ `{"chunks": []}` (retrieval trả rỗng), khớp `interpreter.py:347`
+    vốn LUÔN ghi khoá đó cho `kb-retrieve`."""
     return TraceEvent(
         event_id="e1",
         run_id="r1",
@@ -96,7 +104,7 @@ def _trace_event(tenant_id: UUID, citations: list[str]) -> TraceEvent:
         node_type=NodeType.KB_RETRIEVE,
         ts="2026-08-10T00:00:00+00:00",
         inputs_hash="h",
-        outputs={},
+        outputs={"chunks": chunks if chunks is not None else []},
         tokens=Tokens(prompt=0, completion=0),
         cost=0.0,
         citations=citations,
@@ -141,7 +149,21 @@ def runner_tot() -> Callable[[GoldenSet, Mapping[str, UUID]], StubAgentRunner]:
                 # Một agent thật gần như luôn có retrieval trước khi quyết định từ chối, nên rỗng
                 # mới là ca không giống đời thật. Với luật đúng: T6 ⇒ chunk thuộc kho người hỏi nên
                 # PASS; T1 ⇒ chunk KHÔNG thuộc `expected_tenant` nên cũng PASS.
-                events = [_trace_event(tenant_id, [f"{case.tenant}-handbook-000#c1"])]
+                chunk_id = f"{case.tenant}-handbook-000#c1"
+                role = case.section_roles[0] if case.section_roles else "public"
+                # Chunk hợp lệ nằm ở CẢ HAI mặt. Sau `F-6`, `no_leak` đọc `outputs["chunks"]` —
+                # để chunk chỉ ở `citations` là trả fixture về trạng thái thuận lợi mà chính
+                # docstring dưới đây viết ra để tránh.
+                chunks = [
+                    {
+                        "chunk_id": chunk_id,
+                        "tenant_id": str(tenant_id),
+                        "section_role": role,
+                        "score": 0.5,
+                        "text": "t",
+                    }
+                ]
+                events = [_trace_event(tenant_id, [chunk_id], chunks=chunks)]
             else:
                 answer = AgentAnswer(
                     answer=f"Theo tài liệu, {case.expected}.",

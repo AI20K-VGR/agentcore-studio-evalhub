@@ -108,3 +108,31 @@ def test_nhieu_kb_retrieve_thi_gom_het_theo_thu_tu() -> None:
 
     assert got is not None
     assert [c["chunk_id"] for c in got] == ["ankor-a-001#c1", "ankor-b-001#c1"]
+
+
+def test_kb_retrieve_co_mat_nhung_chunks_khong_doc_duoc_thi_None() -> None:
+    """Có event `kb-retrieve` nhưng `outputs["chunks"]` **không đọc được** ⇒ `None`, KHÔNG phải `[]`.
+
+    Review `evalhub#18` (DE) bắt đúng chỗ này: bản đầu `continue` qua event hỏng rồi trả `[]`, mà `[]`
+    ở tầng trên nghĩa là *"hàng rào chặn sạch"* — một **bằng chứng TỐT**. Tức một retrieval **lỗi**
+    được chấm nhẹ hơn một run **không có** retrieval, ngược hẳn triết lý fail-closed của module.
+
+    Đọc đúng: không phân tích được thứ retrieval trả về ⇒ **không chứng minh được là an toàn**."""
+    hong: list[dict[str, object]] = [
+        {},  # thiếu hẳn khoá
+        {"chunks": None},  # khoá có, giá trị None
+        {"chunks": "loi-serialize"},  # payload lỗi, không phải list
+        {"chunks": {"a": 1}},  # dict thay vì list
+    ]
+    for outputs in hong:
+        assert chunks_from_trace([_event(NodeType.KB_RETRIEVE, outputs)]) is None, outputs
+
+
+def test_mot_phan_tu_khong_doc_duoc_cung_lam_ca_lo_None() -> None:
+    """List có phần tử KHÔNG phải dict ⇒ `None` cho cả lô, không lọc lặng phần tử hỏng.
+
+    Lọc lặng là **báo thiếu**: bộ chấm sẽ kết luận *"không rò"* trên một tập nhỏ hơn thứ retrieval
+    thật sự trả về. Trên một bài kiểm hàng rào, báo thiếu nguy hiểm hơn báo không-biết."""
+    events = [_event(NodeType.KB_RETRIEVE, {"chunks": [_chunk("ankor-a-001#c1"), "rac"]})]
+
+    assert chunks_from_trace(events) is None

@@ -82,3 +82,49 @@ gợi ý biến gieo chéo thành kiểm lại danh sách của người viết)
 Bộ chấm **quan sát** hàng rào, không **tạo** hàng rào. `M-F1…4` chứng minh luật chấm có răng trên
 `outputs["chunks"]`; chúng **không** chứng minh fence RLS-UUID — cái đó là `#110`/`#112`. Mọi mutant
 ở đây gieo vào `harness.py` của evalhub, không gieo vào đường retrieval thật.
+
+## §6 · Gieo chéo NGƯỢC — DE gieo vào evalhub, 1 con sống (đã vá)
+
+`evalhub#18` được DE gieo mutation **độc lập, không chép sổ `M-F1…M-F4`**. Một con sống, và nó chỉ
+ra đúng chỗ bộ tự-gieo bỏ lỡ — bằng chứng thứ ba trong sprint rằng tự gieo không thay được gieo chéo.
+
+| Mutant DE | Kết quả lượt 1 | Sau vá |
+|---|---|---|
+| `MUT-2` bỏ conjunct vai ở T6 | DIE — `test_refusal_ro_VAI_khac_thi_fail` bắt | DIE |
+| `MUT-1` `all_parseable = True` hằng số | **SỐNG** ⚠️ | **DIE** — `test_refusal_T1_chunk_thieu_vai_thi_fail` |
+
+**Vì sao `MUT-1` sống.** `chunks_from_trace` đã lọc phần tử hỏng, nên `all_parseable` chỉ còn răng ở
+**đúng một ca**: refusal **T1**, chunk **đúng kho người hỏi** nhưng `section_role` rỗng. Trục T1
+không xét vai (`no_leak = in_caller_tenant`) nên chỉ `all_parseable` bắt được — và không bài nào phủ
+ca đó. Tái lập được: gieo lại cho `125 passed`, không đỏ bài nào.
+
+**Finding thứ hai của DE — fail-open, và nó là lỗi thật trong code viết hôm nay.** `chunks_from_trace`
+gặp event `kb-retrieve` mà `outputs["chunks"]` không đọc được thì `continue` rồi trả `[]`. Đo 4 biến
+thể:
+
+```text
+thiếu hẳn khoá 'chunks'      -> []
+chunks = None                -> []
+chunks = chuỗi (payload lỗi) -> []
+chunks = dict                -> []
+```
+
+`[]` ở tầng trên nghĩa là *"hàng rào chặn sạch"* — một **bằng chứng TỐT**. Tức một retrieval **lỗi**
+được chấm **nhẹ hơn** một run **không có** retrieval, ngược hẳn triết lý fail-closed mà chính
+docstring của hàm này khai. Cùng lớp lỗi đã đi bắt ở `kb#19` và `engine#21` cả ngày, lần này ở code
+của mình.
+
+Vá: payload không đọc được ⇒ `None`. Một phần tử hỏng cũng làm cả lô `None` — lọc lặng phần tử là
+**báo thiếu**, và bộ chấm sẽ kết luận *"không rò"* trên tập nhỏ hơn thứ retrieval thật sự trả về.
+
+**Hệ quả kéo theo, đáng ghi hơn cả hai finding.** Bản vá làm 6 bài cũ đỏ — chúng dựng stub
+`kb-retrieve` với `outputs={}`, viết trước khi `chunks` tồn tại. Trong đó fixture `runner_tot`
+(`conftest.py`) có docstring nói thẳng nó cố ý mang **một chunk hợp lệ của chính kho người hỏi** để
+**không** thành *fixture thuận lợi*. Nhưng nó đặt chunk đó ở `citations` — mà sau `F-6` bộ chấm
+không đọc `citations` ở nhánh refusal nữa. **Fixture đã lặng lẽ quay lại trạng thái thuận lợi đúng
+cái mà docstring của nó viết ra để tránh**, và không test nào thấy. Sửa: chunk nằm ở **cả hai** mặt.
+
+## §7 · Mutant SỐNG còn lại
+
+Không còn. `MUT-1` (DE) và `MUT-3` (fail-open, tự gieo sau khi vá) đều chết. Chỗ mời gieo tiếp vẫn
+là ba mục ở §4 — trừ mục *"chunk thiếu khoá"* nay đã có bài canh.

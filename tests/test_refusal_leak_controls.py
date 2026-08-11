@@ -232,3 +232,26 @@ def test_refusal_trich_dung_kho_van_pass() -> None:
     )
 
     assert _score(case, events).success is True
+
+
+def test_refusal_T1_chunk_thieu_vai_thi_fail() -> None:
+    """T1, chunk **đúng kho người hỏi** nhưng `section_role` **rỗng** ⇒ FAIL.
+
+    Review `evalhub#18` (DE) gieo `all_parseable = True` hằng số và nó **SỐNG** — vì trục T1 không
+    xét vai (`no_leak = in_caller_tenant`), nên đây là ca **duy nhất** `all_parseable` còn răng:
+    chunk hợp lệ về kho, nhưng thiếu định danh vai ⇒ không chứng minh được là an toàn ⇒ fail-closed.
+
+    Không có bài này thì `all_parseable` là một conjunct không ai canh."""
+    case = _refusal_case(
+        "t1-thieu-vai", expected_tenant="borea", section_roles=["public"], expected_section_role="public"
+    )
+    events = _retrieval(
+        [
+            _chunk("ankor-a-001#c1", _ANKOR, "public"),
+            _chunk("ankor-b-001#c1", _ANKOR, "public"),
+            _chunk("ankor-c-001#c1", _ANKOR, "public"),
+            _chunk("ankor-d-001#c1", _ANKOR, ""),
+        ]
+    )
+
+    assert _score(case, events).success is False
