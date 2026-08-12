@@ -175,6 +175,55 @@ D15 vừa cho thấy giá của nó (3 id treo, 8 chỗ trích, cả ngày khôn
 gắn được vào sáu id trên thì **không thuộc D16** — nó đi vào bảng *Hoãn* kèm chủ + hạn, không nhét
 vào ngày.
 
+## D18 · 2026-08-12
+
+> **Ghi bổ sung ngày 13/08 (D19/T0b), và ghi luôn cả việc nó bổ sung muộn.** Bảy id dưới đây suốt
+> ngày D18 chỉ tồn tại trong `docs/plans/day-18-aie2.md` — một file **chưa nằm trong commit nào** cho
+> tới hôm nay. Trong khi đó comment đóng [kit#118](https://github.com/AI20K-VGR/agentcore-studio-kit/issues/118)
+> đã dẫn `DEC-D18-04` ra ngoài. Tức người tra id đó từ ngoài repo sẽ không tìm thấy gì và **có quyền
+> kết luận là bịa ra lúc viết** — đúng nguyên văn cái bẫy mục `D15` đã tự nêu và vẫn giẫm lại. Xoá
+> vết thì mất đúng phần đáng học.
+>
+> **Sổ này còn thiếu `D17`** (`DEC-D17-01/02/03/05` chưa có mặt; chỉ `DEC-D17-04` xuất hiện, và ở
+> mục *Còn mở* chứ không ở một mục ngày). Đo: `grep -c "DEC-D17" → 2`. Chủ **AIE-2**, chưa xếp lịch —
+> ghi ra ở đây thay vì để nó thành lỗ thứ hai không ai đếm.
+>
+> **Cả bảy là quyết định TỰ CHỐT.** Từ 03/08 mentor không trả lời câu hỏi kiến trúc. Không có chữ ký
+> thứ hai ở đây.
+
+| # | Quyết định | Lý do | PR / bằng chứng | Trạng thái |
+|---|---|---|---|---|
+| **DEC-D18-01** | `GoldenCase`: `extra="forbid"` **và** khai `manual_label: str \| None = None` trong **cùng một** thay đổi, không tách | Tách ra thì mỗi vế hỏng một kiểu: `extra="forbid"` một mình làm yaml của DE **đỏ ngay** khi họ emit (chặn DE); khai `manual_label` một mình thì field vào được nhưng **mọi typo tương lai vẫn câm** (`manual_labels`, `manaul_label` — nuốt sạch, và đó chính là lỗi đã xảy ra). Đi cùng nhau: nhãn đúng tên đi vào được, nhãn sai tên **đỏ tại loader** kèm tên field in ra. Không cần mini-RFC — `GoldenCase` là **kiểu nội bộ quadrant** (`golden_case.py:8`, nhắc lại ở `DEC-D16-06`), không đụng `studio_contracts`. Rủi ro `extra="forbid"` **đo được là 0**: golden-30 có đúng 8 field khớp 1:1 | `golden_case.py:44` (`ConfigDict(frozen=True, extra="forbid")`) · `:100` (`manual_label`) · [evalhub#19](https://github.com/AI20K-VGR/agentcore-studio-evalhub/pull/19) merged `cbb5e36` · mutation **M-J1** (`extra="forbid"` → `"ignore"`) **DIE** trên **3 bài** | ✅ merged |
+| **DEC-D18-02** | `LLMJudge` nhận `LLM` qua **seam tiêm vào**, KHÔNG import `studio_app`. Composition root (CLI / `apps/studio` / fixture) là chỗ **duy nhất** biết provider thật | Cùng lý lẽ `DEC-D16-01`, không phải luật mới: (1) `.importlinter` xếp 4 quadrant **sibling**, provider thật sống ở `apps/studio` tức **phía trên** evalhub — import ngược là lint đỏ, và đường vòng (`importlib`, đọc env thẳng) là **cùng một phụ thuộc, chỉ né được lint chứ không né được thực tế**; (2) `kit#74` chấm bằng *fresh clone* — clone riêng evalhub thì `apps/studio` không tồn tại; (3) tiền lệ trong chính repo: `AgentRunner` đã là seam đúng hình đó | `judge.py:43` (`from studio_contracts.protocols import LLM`) · `:145` (`__init__(self, llm: LLM, *, cache_path, cap_path, cap=100)`) · [evalhub#20](https://github.com/AI20K-VGR/agentcore-studio-evalhub/pull/20) merged `afe35a5` | ✅ merged · ô DoD *CI deterministic* đóng như **hệ quả cấu trúc**, không phải một việc riêng |
+| **DEC-D18-03** | Descope là đường **MẶC ĐỊNH** của D18, không phải phương án dự phòng: chạy ở nấc exact-match, judge dựng đủ + test đủ nhưng **0 call LLM thật** trong ngày và **0 call trong CI, bao giờ cũng** | `DESCOPE.md` (viết D2, không phải viết hôm đó) liệt 4 trigger; đo sáng D18 **hai** trigger đã thoả: *nhà cung cấp LLM không dùng được* (không key, `USE_FAKE_PROVIDERS=true`) và *CI cần tất định*. Một thang cắt giảm viết sẵn từ D2 mà đến ngày trigger thoả lại không kích hoạt thì nó **chưa bao giờ là thang cắt giảm** — nó là một trang văn bản. Cùng hình `DEC-D16-04` | Descope **không đụng một byte** contract: `judge=None` đã mang đúng nghĩa *"case chấm KHÔNG qua LLM-judge"* từ `DEC-02` ⇒ dẫn thẳng tới `DEC-D18-06` | ✅ |
+| **DEC-D18-04** | Ô DoD *"agreement-check có số vs nhãn tay"* đóng bằng agreement của **bộ chấm exact-match hiện tại**, không phải của judge. Nhãn **THẬT** đòi **2/2** điều kiện (dữ liệu về **và** trục/vocabulary đã chốt), thiếu một ⇒ nhãn **CƠ CHẾ** | Baseline không phải bước đệm, nó là **mẫu số** của mọi kết luận về judge sau này: một judge đạt `0.85` nghe như tốt cho tới khi biết exact-match đạt `0.92` — lúc đó bật judge là **hạ chất lượng**. Cổng 2/2 vì một field **có giá trị** không đồng nghĩa một phép so **có nghĩa**: bộ chấm trả `SmokeResult.success: bool` (*đạt/không đạt*), nhãn nhánh `ANSWER`/`REFUSE` nằm trên **trục khác** — so thẳng cho ra một số **in được nhưng vô nghĩa** | `agreement.py:76` — hàm thuần trả **ba** giá trị (`rate` · `n_compared` · `lệch`), không trả `rate` trần (`kit#134`) · mutation **M-J5** (`n_compared == 0` ⇒ `0.0` thay vì `None`) **DIE** trên **2 bài** | ✅ quyết · ⚠️ **tên con số đổi trong ngày**, xem dòng dưới bảng |
+| **DEC-D18-05** | Cap ≤100/ngày **bền ngoài tiến trình bằng file JSON** cạnh cache (KHÔNG `eval.` table); đọc không được ⇒ **coi như đã chạm trần** ⇒ descope. Khoá cache `(case_id, actual)` | Counter RAM reset mỗi lần khởi động tiến trình, mà `INV-4` nói ≤100 call/**ngày** — một đơn vị **thời gian**, không phải đơn vị **tiến trình**: chạy harness 5 lần trong ngày là cap thật ≤500 và **không dòng code nào sai** để ai nhìn ra. File chứ không table vì chữ ký là `cap_path: Path`/`cache_path: Path` (không tham số DSN nào) và một counter trong Postgres kéo test ra khỏi *"tất định, không mạng"* mà `DEC-D18-02`/`-03` vừa chốt. Fail-closed vì đây là chỗ **duy nhất** trong quadrant mà fail-open đi về phía **tốn tiền thật** — 4 tiền lệ đã fail-closed: `tenant_scope_ok`, `chunks_from_trace`, `_citation_tenant`, `compute_scorecard` | `judge.py:145` (`cap_path`, `cap: int = 100`) · `:70`, `:86` (đọc "thứ không phải PASS" ⇒ `False`) · mutation **M-J2 · M-J3 · M-J4 · M-J6 · M-J7 · M-J8** **DIE** | ✅ · **assumption single-writer khai tường minh** — cap ≤100 chỉ đảm bảo cho **một writer tại một thời điểm**; hai tiến trình song song có thể cùng đọc `99` rồi cùng ghi `100`. Nợ có **điều kiện lật**: ai đó bật `pytest-xdist`/`-n auto`, hoặc harness chạy song song nhiều tiến trình/CI job |
+| **DEC-D18-06** | D18 **không** mở PR nào sang `contracts` — và đó là lý do `kit#117` (SWE) thành **no-op** | `#117` giao SWE *"`scorecard_threshold` đọc được cả nhánh judge lẫn exact-match"*; điều kiện để câu đó đúng **đã có sẵn**: `GateThreshold` là `(success, citation_accuracy)` — **hai trục, không trục nào của judge**, và `judge=None` là trạng thái hợp lệ đã khoá bằng validator. ⇒ tụt nấc **không đổi shape nào** mà threshold đọc. Việc thật của `#117` vì thế không phải sửa code mà là **một bài test** chứng minh `gate.verdict` giữ nguyên nghĩa ở cả hai nhánh | `contracts/src/studio_contracts/scorecard.py:150-154` (`GateThreshold.success` · `.citation_accuracy`) · 0 diff chạm `packages/contracts/` trong D18 | ✅ · đo trước rồi báo, thay vì để người khác đo lại thứ mình đã đo |
+| **DEC-D18-07** | **Không** thêm `match_mode` vào `GoldenCase` — hoãn tiếp, và hạn mới đặt theo **ĐIỀU KIỆN** chứ không theo ngày: `match_mode` land **cùng commit** với bài test đầu tiên dùng nó | `DEC-D16-06` hoãn nó tới D18 với điều kiện lật đo được (*"ngày DE giao case cần judge, ≥3 case"*). Đo lại sáng D18: **0/30** case có `match_mode`, **0/30** case cần judge ⇒ **chưa thoả**. Lý lẽ gốc giữ nguyên: *thêm một field mà mọi giá trị đều là `exact` là thêm một nhánh code không có case nào đi qua*. Điểm phải ghi: đây là lần **rút một hạn tự đặt lần thứ hai** — một hạn theo ngày mà rút hai lần thì lần thứ ba không còn ai tin | `DEC-D16-06` (hạn cũ) · đếm trên golden-30 | 🟡 hoãn **theo điều kiện** · kiểm lại D19: điều kiện **chưa đổi** |
+
+**`DEC-D18-04` đổi tên con số ngay trong ngày, và đó là phần đáng ghi nhất của D18.** Sau khi
+`manual_label` của DE về (`kb#21`) và bump được con trỏ kb, phép đo trên **dữ liệu thật** cho:
+
+```text
+agreement kb ↔ evalhub trên golden-30:   n_compared = 10   rate = 1.0   lệch = []
+trước khi bump con trỏ kb:               n_compared = 0    rate = None            ← KHÔNG phải 0.0
+```
+
+`rate = 1.0` **không** phải một điểm số tốt — nó là dấu hiệu con số đang đo thứ khác với cái tên nó
+mang. Kiểm chứng: `manual_label` trùng khít `expects_refusal` ở **10/10** case có nhãn (phía `kb` còn
+có guard khoá cứng sự trùng đó), mà `expects_refusal` là thuộc tính **dẫn xuất** từ
+`expected_tenant`/`tenant`/`expected_section_role`/`section_roles` — dữ liệu golden-30 **tự khai**.
+⇒ nhãn tay **không mang thông tin nào độc lập** với bộ case, nên gọi nó là *"human–machine agreement"*
+là **tuyên bố một phép đo không tồn tại**.
+
+Con số được đặt lại đúng thứ nó đo: **`kb ↔ evalhub semantic-fence agreement`** — hai repo suy ra
+cùng một ngữ nghĩa (*case này thuộc nhánh trả-lời hay từ-chối*) bằng **hai bản cài đặt độc lập**, nên
+so chúng là một **regression detector cho semantic drift**, không phải một phép chấm. Giá trị đó có
+tiền lệ đã trả giá: trước 23/07 `expects_refusal` bỏ trục T6 chéo-vai, nên case chéo-vai cùng tenant
+rơi nhầm nhánh trả-lời-được và agent từ chối **đúng** bị chấm FAIL — một bộ dò lệch hai phía sẽ bắn
+ngay hôm đó. Ranh giới còn lại, nói thẳng: **judge chưa được đo agreement lần nào**, thiếu cả key lẫn
+case cần judge (`DEC-D18-04` điều kiện (b) và (c)).
+
 ## Còn mở — chặn `FROZEN` thật sự
 
 | # | Nội dung | Chờ ai | Hạn |
