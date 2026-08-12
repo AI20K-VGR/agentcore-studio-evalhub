@@ -31,8 +31,8 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from uuid import UUID
 
-import pytest
 from studio_contracts import NodeType, Tokens, TraceEvent
+from studio_evalhub import judge as judge_module
 from studio_evalhub.agent_runner import AgentAnswer, CaseRun, StubAgentRunner
 from studio_evalhub.golden_case import GoldenSet
 from studio_evalhub.golden_loader import load_golden_set
@@ -41,6 +41,13 @@ from studio_evalhub.judge import LLMJudge
 
 _TS = 0.9
 _TC = 0.95
+
+
+class _LLMLuonPass:
+    """`LLM` double tất định — bài dưới đo **shape** của giá trị trả về, không đo nội dung chấm."""
+
+    async def complete(self, prompt: str, **kwargs: object) -> str:
+        return "PASS"
 
 
 def _event(tenant_id: UUID, citations: list[str]) -> TraceEvent:
@@ -170,19 +177,41 @@ async def test_gate_passes_on_good_recipe(
     assert len(scorecard.results) == 30
 
 
-async def test_judge_seam_van_con_notimplemented() -> None:
-    """KHÓA seam **duy nhất còn là spec**: `LLMJudge.judge` phải `raise NotImplementedError`.
+async def test_judge_khong_tra_agreement_hang_so(tmp_path: Path) -> None:
+    """**Bài kế nhiệm của `test_judge_seam_van_con_notimplemented`** — seam cuối đã được điền, nên
+    nửa *"còn là spec"* hết chỗ bám; nửa **quan trọng hơn** được giữ nguyên ở đây.
 
-    **D16 — bài này được THU HẸP, không bị xoá** (`DEC-D16-04`). Bản cũ
-    (`test_harness_judge_compute_not_implemented`) khẳng định **cả ba** seam còn raise. T2 và T4 điền
-    hai trong ba, nên bài **phải đỏ** — đúng như thiết kế, và đúng cái nó tồn tại để báo.
+    Lịch sử, vì mỗi bước đều được chính bài cũ dự báo trước:
 
-    Xoá bài là mất lưới bắt *"stub một giá trị giả"* cho seam còn lại: ai đó làm `judge` trả một
-    `Judge(label="pass", agreement=1.0)` hằng số sẽ khiến bài này ĐỎ. Đó là lớp lỗi `judge.py:6-9`
-    cấm đích danh — một `agreement` hằng số không phân biệt được với một judge thật đồng thuận 100%,
-    và nó hỏng âm thầm mọi aggregate trên `agreement` (INV-4).
+    - bản gốc (`test_harness_judge_compute_not_implemented`) khẳng định **cả ba** seam còn raise;
+    - **D16** (`DEC-D16-04`) thu hẹp còn `LLMJudge.judge`, ghi sẵn *"T2 và T4 điền hai trong ba, nên
+      bài **phải đỏ** — đúng như thiết kế, và đúng cái nó tồn tại để báo"*, và tự đặt hạn **D18**;
+    - **D18/T2** điền `LLMJudge.judge` thật ⇒ bài đỏ đúng như đã dự báo, bằng
+      `TypeError: __init__() missing 1 required positional argument: 'llm'` — tức seam đã có hình
+      dạng thật (`DEC-D18-02`: `LLM` tiêm vào), không còn là spec rỗng.
 
-    Đổi tên theo phạm vi mới: giữ tên cũ (`..._harness_judge_compute_...`) sẽ là một cái tên nói dối
-    về thứ nó kiểm. Hạn của seam này là **D18** (`kit#118`, mốc `F-6` agreement)."""
-    with pytest.raises(NotImplementedError):
-        await LLMJudge().judge(case_id="case-1", expected="A", actual="A")
+    **Không thu hẹp được lần thứ hai**, và đây là dữ kiện phải ghi chứ không phải suy: đo sau T2,
+    `grep -rn "raise NotImplementedError" src/` ra **0 kết quả** — `compute_scorecard` đã được cài từ
+    trước (nó raise `ValueError` cho `results` rỗng, không phải `NotImplementedError`). Không còn
+    seam spec nào để bài trỏ tới, nên giữ lại vế `NotImplementedError` là giữ một bài **không thể
+    xanh vì bất kỳ lý do đúng nào**.
+
+    Nửa được giữ: lưới bắt *"stub một giá trị giả"*. Đây là lớp lỗi mà `judge.py:6-9`, `ADR B5` và §7
+    ô DoD 2 cấm bằng ba chỗ khác nhau, luôn cùng một câu: **một `agreement` hằng không phân biệt được
+    với một judge thật đồng thuận 100%**, và nó hỏng âm thầm mọi aggregate trên `agreement` (INV-4).
+
+    Đây là lớp lỗi mà `judge.py:6-9`, `ADR B5` và §7 ô DoD 2 cấm bằng ba chỗ khác nhau, luôn cùng một
+    câu: **một `agreement` hằng không phân biệt được với một judge thật đồng thuận 100%**, và nó hỏng
+    âm thầm mọi aggregate trên `agreement` (INV-4). Ngày ô DoD được làm đầy bằng một hằng số là ngày
+    con số agreement mất hết ý nghĩa cho mọi ngày sau.
+
+    Khoá bằng **shape**, không bằng lời hứa: `judge()` trả `bool` — không có chỗ nào để nhét một
+    `float` bịa ra. `agreement` là phép so với **nhãn tay**, mà `judge()` không nhận nhãn tay, nên
+    mọi số nó trả ở vị trí đó **chỉ có thể** là hằng số. Bài này đỏ ngay khi ai đó nới chữ ký về
+    `tuple[bool, float]` rồi trả `1.0` cho đủ ô."""
+    judge = LLMJudge(_LLMLuonPass(), cache_path=tmp_path / "c.json", cap_path=tmp_path / "q.json")
+
+    ket_qua = await judge.judge(case_id="case-1", expected="A", actual="A")
+
+    assert isinstance(ket_qua, bool)
+    assert "Judge(" not in (Path(judge_module.__file__ or "").read_text(encoding="utf-8"))
