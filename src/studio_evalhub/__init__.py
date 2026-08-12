@@ -21,6 +21,7 @@ from studio_evalhub.harness import (
 )
 from studio_evalhub.judge import LLMJudge
 from studio_evalhub.render import render_scorecard
+from studio_evalhub.run_report import RunCost, run_cost_from_trace
 
 __all__ = [
     "AgentAnswer",
@@ -30,6 +31,7 @@ __all__ = [
     "GoldenCase",
     "GoldenSet",
     "LLMJudge",
+    "RunCost",
     "SmokeResult",
     "StubAgentRunner",
     "RetrievedChunk",
@@ -38,6 +40,7 @@ __all__ = [
     "compute_scorecard",
     "load_golden_set",
     "render_scorecard",
+    "run_cost_from_trace",
     "score_case",
     "tenant_scope_ok",
 ]

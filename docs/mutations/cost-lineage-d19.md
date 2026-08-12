@@ -98,6 +98,59 @@ nhiên viết trước; còn bài giết mutant lại là bài cho trạng thái
 *đã đo, bằng 0* (`True`). Cùng hình với `M-F3` của D17 (dự đoán 2 bài, thực tế 1): dự đoán sai,
 không phải test sai, và chỗ lệch mới là dữ liệu.
 
-## §4 · Kết quả — T3/T4
+## §4 · Kết quả — T3 (dòng cost ở `render_run_cases` + CLI)
 
-Chưa chạy. `M-C6` (T3) và `M-C7` (T4) khai ở §1, kết quả điền khi các T đó chạy.
+Baseline: `189 → 203 passed, 1 skipped` sau 14 bài mới của T3.
+
+| # | Mutation áp vào `render.py` | Dự đoán | **Thực tế** | Kết quả |
+|---|---|---|---|---|
+| `M-C6` | `_COST_DISPLAY_NDIGITS = 6` → `2` | 1 bài (`…khong_lam_tron_mat_cost_that`) | **3 bài** — nhưng chỉ sau khi vá test, xem dưới | **DIE** |
+
+Bài giết (sau vá): `test_in_du_6_chu_so_khong_lam_tron_mat_cost_that` ·
+`test_in_du_6_chu_so_cho_tong_le` · `test_da_do_bang_0_thi_in_0_000000_chu_khong_phai_chua_do`.
+
+### `M-C6` bắt được HAI bài xanh vacuous của chính mình — đây là giá trị thật của lượt gieo này
+
+Lượt gieo **thứ nhất**, `M-C6` chỉ giết **1** bài, và **không phải** bài đã khai:
+
+```text
+gieo lần 1:  FAILED test_da_do_bang_0_thi_in_0_000000_chu_khong_phai_chua_do
+             (test_in_du_6_chu_so_khong_lam_tron_mat_cost_that   → VẪN XANH)
+             (test_in_du_6_chu_so_cho_tong_le                    → VẪN XANH)
+```
+
+Hai bài độ-chính-xác — **đúng hai bài sinh ra để canh `M-C6`** — xanh dưới mutant. Nguyên nhân đo
+được:
+
+```python
+>>> "0.000291" in _WHY_COST_PRECISION   # khối caveat do CHÍNH MÌNH viết
+True
+>>> "0.011994" in _WHY_COST_PRECISION
+True
+```
+
+Bài viết `assert "0.000291" in out` quét **cả** output, mà output mang một khối caveat giải thích
+*"in `.2f` thì một cost thật 0.000291 hiện thành `0.00`"* — tức chuỗi cần tìm nằm sẵn trong lời giải
+thích về chính lỗi đó. Renderer in `0.00` vẫn xanh.
+
+Vá: mọi khẳng định về **nội dung** dòng cost đi qua `_dong_cost(out)` (rút đúng dòng bắt đầu bằng
+`cost (Σ, USD)`, assert có **đúng một**). Gieo lại ⇒ **3 bài đỏ**, gồm đủ hai bài lẽ ra phải đỏ từ
+đầu.
+
+**Đây là lần thứ ba trong một ngày cùng một lớp lỗi**, và cả ba đều là *bài xanh vì chuỗi cần tìm
+tình cờ có mặt ở chỗ khác*:
+
+| # | Ở đâu | Chuỗi khớp nhầm | Tìm ra bởi |
+|---|---|---|---|
+| 1 | `kb#22` của DE — `len(surfaces) > 5` | 9 file `scripts/` đỡ cho 12 file `src/` bị bỏ qua | mutant `Z-2` (T1) |
+| 2 | `test_in_mau_so_cost_ben_canh_tong` (của mình) | `"event"` khớp `trace_source="obs.trace_events (test)"`; `"6"` khớp `"D16"` | đọc lại khi bài xanh sớm hơn dự kiến |
+| 3 | hai bài độ-chính-xác (của mình) | `"0.000291"`/`"0.011994"` khớp khối caveat tự viết | **mutant `M-C6`** |
+
+Luật rút ra, áp cho T4: **một bề mặt render mang prose dài thì `assert <chuỗi> in out` gần như không
+bao giờ là một phép kiểm** — phải neo vào **dòng** hoặc **vị trí**, và phải có đối chứng âm (đổi
+giá trị ⇒ chuỗi phải đổi). Điều này áp thẳng vào lớp **C** của T4 (*"output UI-test thật sự chứa giá
+trị đó"*), nơi cám dỗ viết `assert str(cost) in out` là lớn nhất.
+
+## §5 · Kết quả — T4
+
+Chưa chạy. `M-C7` khai ở §1, kết quả điền khi T4 chạy.

@@ -482,12 +482,17 @@ async def _amain(argv: list[str] | None = None) -> int:
 
         results: list[SmokeResult] = []
         run_ids: list[str] = []
+        events_by_run: dict[str, list[TraceEvent]] = {}
         for spec in args.run:
             run_id, sep, case_id = spec.partition(":")
             if not sep:
                 parser.error(f"--run phải có dạng RUN_ID:CASE_ID, nhận {spec!r}")
-            events = await read_run(pool, run_id)
-            results.append(score_run_from_trace(_case_by_id(case_id), events))
+            # Đọc MỘT lần cho mỗi run_id. Hai `--run R1:A --run R1:B` mà đọc hai lượt thì `events`
+            # nhân đôi ⇒ Σcost nhân đôi — đúng `F-3` (replay double-count) trong failure-mode list
+            # của DE, chỉ khác là ở đây nó sinh ra từ chính vòng lặp CLI chứ không từ replay.
+            if run_id not in events_by_run:
+                events_by_run[run_id] = await read_run(pool, run_id)
+            results.append(score_run_from_trace(_case_by_id(case_id), events_by_run[run_id]))
             run_ids.append(run_id)
     finally:
         await pool.close()
@@ -498,9 +503,32 @@ async def _amain(argv: list[str] | None = None) -> int:
             run_id=", ".join(run_ids),
             golden_set_ref=_demo_golden_set().golden_set_ref,
             trace_source=TRACE_SOURCE_POSTGRES,
+            run_cost=_run_cost_cho_cli(events_by_run),
         )
     )
     return 0
+
+
+def _run_cost_cho_cli(events_by_run: dict[str, list[TraceEvent]]) -> RunCost | None:
+    """Cost của bảng CLI — chỉ khi lệnh nói về **đúng một** run.
+
+    Đây là chỗ bề mặt UI-test đọc số từ **trace đã bền hoá trong Postgres**, không từ RAM: `events`
+    đi qua `read_run` → `_row_to_event` (`NUMERIC → Decimal → float`), tức cùng đường mà một người
+    khác đọc lại run của mình ngày mai sẽ đi.
+
+    **Nhiều run trong một lệnh ⇒ `None`, không phải một tổng gộp.** `RunCost` là cost **của một
+    run**; cộng chéo run cho ra một con số không trả lời được câu hỏi nào, và `run_cost_from_trace`
+    đã fail-closed đúng như thế. Chọn `None` thay vì để nó raise vì `--run` **vốn** nhận nhiều spec
+    từ trước D19 — biến một lệnh đang chạy được thành lỗi là phá hợp đồng CLI để thêm một dòng
+    hiển thị, đổi sai chiều.
+
+    Ranh giới này nói ra chứ không để phát hiện sau: bảng nhiều run **không có** dòng cost, và đó là
+    *"không có dữ liệu thì không dựng ô"* (`DEC-D12-02`) chứ không phải cost bằng 0.
+    """
+    if len(events_by_run) != 1:
+        return None
+    (events,) = events_by_run.values()
+    return run_cost_from_trace(events)
 
 
 def main() -> int:
