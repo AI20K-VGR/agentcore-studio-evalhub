@@ -159,8 +159,9 @@ def citations_from_trace(events: list[TraceEvent]) -> list[str]:
     consumer của scorecard cần — `apps/studio` dùng ở cả script e2e lẫn test chấm-từ-Postgres, và
     `scripts/smoke_eval_d6.py` ở repo cha import nó **xuyên repo**. Một hàm có người ngoài quadrant
     phụ thuộc thì không còn là chi tiết nội bộ; giữ dấu gạch dưới chỉ khiến người dùng phải phá
-    quy ước để làm việc đúng. Alias `_retrieved_citations` giữ lại ở cuối module nên không consumer
-    nào vỡ khi đổi.
+    quy ước để làm việc đúng. Alias `_retrieved_citations` giữ cuối module suốt D7→D18 để không
+    consumer nào vỡ khi đổi; **gỡ ở D18/T6** (`T9c` bước 2) sau khi đo bằng AST ra **0 consumer
+    thật** trên toàn workspace. Bài `test_alias_retrieved_citations_da_go` giữ cho nó không quay lại.
 
     Vì sao tên là `citations_from_trace` chứ không phải `retrieved_citations`: `score_case` đã có
     **tham số** tên `retrieved_citations`, và 14 call-site truyền nó bằng keyword nên tên tham số
@@ -587,16 +588,3 @@ class EvalHarness:
             # `run`, để hai đường không trôi ra hai luật chấm khác nhau.
             results.append(_score_case_run(case, case_run, tenant_ids))
         return results
-
-
-# ── Alias tương thích ngược ─────────────────────────────────────────────────────────────────────
-# `retrieved_citations` đổi tên từ `_retrieved_citations` ở D7 (xem docstring hàm). Giữ tên cũ vì có
-# consumer NGOÀI quadrant đang import nó: `scripts/smoke_eval_d6.py` ở repo cha (bút DE) và
-# `apps/studio` (script e2e + test chấm-từ-Postgres). Đổi tên mà không giữ alias sẽ làm vỡ một file
-# đã merge vào `main` của repo cha — đúng loại vỡ mà `workbench#4` vừa gây ra khi xoá
-# `builder_d4.py`, và bài học rút ra là: bề mặt có người ngoài dùng thì không xoá cùng lúc với đổi.
-#
-# Không đánh dấu deprecated bằng warning: `run_smoke` chạy trong CI của 3 repo, một `DeprecationWarning`
-# ở đó chỉ tạo tiếng ồn mà không ai hành động. Dọn alias khi 3 consumer trên đã chuyển hết — theo dõi
-# ở #34, KHÔNG dọn trước D11 freeze.
-_retrieved_citations = citations_from_trace

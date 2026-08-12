@@ -289,3 +289,30 @@ async def test_run_recipe_hash_none_van_dung_scorecard(tmp_path: Path, tenant_id
     assert scorecard.agent_id == "agent-1"
     assert scorecard.golden_set_ref == "gs-run-v1"
     assert scorecard.gate.verdict == "PASS"
+
+
+def test_alias_retrieved_citations_da_go() -> None:
+    """**T6/`T9c` bước 2:** alias tương thích ngược `_retrieved_citations` đã được **gỡ hẳn**.
+
+    Alias ra đời ở D7 khi `_retrieved_citations` đổi tên thành `citations_from_trace`, và lý do giữ
+    nó được ghi rõ: có consumer **ngoài quadrant** đang import (`scripts/smoke_eval_d6.py` ở repo cha,
+    `apps/studio`). Điều kiện gỡ cũng ghi rõ: *"dọn alias khi 3 consumer trên đã chuyển hết"*.
+
+    Đo trước khi gỡ, bằng **AST** chứ không bằng grep văn bản (docstring và comment nhắc tên nó ở 5
+    chỗ, grep thô sẽ đếm nhầm thành 5 consumer):
+
+    ```text
+    Consumer THẬT trên toàn workspace: 1  →  chính dòng định nghĩa alias
+    scripts/smoke_eval_d6.py:66,249       →  đã dùng `citations_from_trace`
+    apps/ · workbench · engine · kb       →  0 hit code
+    ```
+
+    ⇒ điều kiện gỡ đã thoả. Bài này giữ cho nó **không quay lại**: một alias tương thích ngược không
+    còn ai dùng là bề mặt công khai phải nuôi mãi mà không đổi lấy gì, và mỗi lần ai đó thấy tên cũ
+    trong docstring sẽ lại phân vân nên dùng tên nào."""
+    import studio_evalhub.harness as harness_module
+
+    assert not hasattr(harness_module, "_retrieved_citations"), (
+        "alias `_retrieved_citations` đã được gỡ ở D18/T6 — 0 consumer thật, đo bằng AST. "
+        "Thêm lại thì phải kèm consumer thật và lý do giữ."
+    )

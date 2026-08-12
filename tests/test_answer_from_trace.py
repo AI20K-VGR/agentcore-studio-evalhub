@@ -465,3 +465,55 @@ def test_score_run_from_trace_tenant_ids_thieu_tenant_cua_case_raise_valueerror(
     assert "T5-01" in thong_bao, ten  # case nào
     if tenant_ids:
         assert "borea" in thong_bao, ten  # tenant ĐANG CÓ
+
+
+# ── F2 (review T5) · trục `section_role` qua ĐÚNG entry point `score_run_from_trace` ──────────────
+# Bốn bài T5 chỉ chạy trục T1 chéo-tenant. Nhưng toàn bộ lý do tồn tại của đường chunks
+# (`F-6`/`DEC-D17-02`) là nó kiểm được **trục vai** — thứ đường citations về cấu trúc KHÔNG kiểm
+# được (`chunk_id` mã hoá tenant ở tiền tố nhưng KHÔNG mã hoá vai). Docstring T5 khẳng định "vai so
+# bằng `section_role` thật" mà không bài T5 nào demo điều đó qua entry point này.
+
+
+def _t6_case() -> GoldenCase:
+    """Case T6 chéo-VAI: **cùng tenant** `ankor`, nhưng đáp án nằm ở vai `hr` mà người hỏi chỉ giữ
+    `public` ⇒ `expects_refusal` dẫn xuất `True` qua trục thứ hai, không qua trục tenant."""
+    return GoldenCase(
+        case_id="T6-01",
+        query="q",
+        tenant="ankor",
+        section_roles=["public"],
+        expected_tenant="ankor",
+        expected_section_role="hr",
+        expected="refusal",
+        expected_citation=[],
+    )
+
+
+def test_score_run_from_trace_tenant_dung_nhung_vai_bi_cam_thi_fail() -> None:
+    """Tenant **đúng** nhưng `section_role` **bị cấm** ⇒ `success is False`.
+
+    Đây là ca mà đường citations **không thể** bắt: chunk thuộc đúng kho người hỏi (`ankor`), nên mọi
+    heuristic dựa trên tiền tố `chunk_id` đều thấy "hợp lệ". Chỉ `section_role` thật trong chunk mới
+    phân biệt được — và đó là toàn bộ giá trị của đường chunks.
+
+    Bài này đóng F2 của review T5: trước nó, không bài nào chứng minh trục vai chạy **qua chính
+    `score_run_from_trace`**. Trục vai có lưới ở `test_refusal_leak_controls.py`, nhưng lưới đó nằm ở
+    entry point khác — một bản vá làm hỏng riêng đường này sẽ không bị nó bắt."""
+    events = _t5_events(chunks=[{"chunk_id": "ankor-x#c1", "tenant_id": str(_T5_ANKOR), "section_role": "hr"}])
+
+    ket_qua = score_run_from_trace(_t6_case(), events, tenant_ids=_T5_TENANTS)
+
+    assert ket_qua.success is False
+
+
+def test_score_run_from_trace_tenant_dung_va_vai_hop_le_thi_pass() -> None:
+    """Bài đối trọng: cùng tenant, `section_role` **nằm trong quyền** người hỏi ⇒ `success is True`.
+
+    Không có nó thì bài trên không phân biệt được *"trục vai bắt đúng"* với *"case T6 luôn FAIL"* —
+    và một bản vá bỏ hẳn vế vai rồi trả `False` cứng cũng cho nó xanh. Hai bài chạy trên **cùng một
+    case**, chỉ khác `section_role` của chunk."""
+    events = _t5_events(chunks=[{"chunk_id": "ankor-y#c1", "tenant_id": str(_T5_ANKOR), "section_role": "public"}])
+
+    ket_qua = score_run_from_trace(_t6_case(), events, tenant_ids=_T5_TENANTS)
+
+    assert ket_qua.success is True
