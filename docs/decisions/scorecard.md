@@ -387,19 +387,52 @@ mini-RFC. Đọc theo template ⇒ rơi **đúng hai dòng đầu** của bảng
   là **1 approval**: `contracts#5` chuyển `APPROVED`/`CLEAN` với một approval từ người **không** phải
   CODEOWNER).
 
-**Trạng thái — đây là cách đọc một luật CHUNG, nên chưa phải luật cho tới khi team không phản đối.**
-AIE-2 tự quyết và tự ghi (mentor S2 không trả lời câu hỏi quy trình), kèm cửa sổ phản hồi tới **D18**.
-Ai phản đối thì quay về nguyên văn umbrella §3 và ADR này bị rút — ghi rõ để không ai đọc nó thành
-việc đã rồi.
+**Trạng thái (D16, khi mở) — đây là cách đọc một luật CHUNG, nên chưa phải luật cho tới khi team
+không phản đối.** AIE-2 tự quyết và tự ghi (mentor S2 không trả lời câu hỏi quy trình), kèm cửa sổ
+phản hồi tới **D18**. Ai phản đối thì quay về nguyên văn umbrella §3 và ADR này bị rút — ghi rõ để
+không ai đọc nó thành việc đã rồi.
+
+#### ✅ CỬA SỔ ĐÓNG 12/08 (D18) — 0 phản đối ⇒ ADR **có hiệu lực**
+
+Điều kiện rút đã công bố trước là *"ai **phản đối** thì ADR này bị rút"*. Đo lúc đóng, quét cả 5
+thread `ADR-D16-05` từng xuất hiện (`kit#83` · `#84` · `#108` · `#113` · `#114`) cộng `evalhub#18`
+(body + comment + 4 review) cộng `kit#118`/`#119`: **0 phản đối**. Điều kiện rút không thoả ⇒ ADR đứng.
+
+**Phản hồi thực chất có đúng một, và nó nằm ở `kit#114` — KHÔNG ở `#113` cũng không ở `evalhub#18`.**
+Ghi lại chỗ này vì nó là bài học quy trình: cửa sổ được công bố ở thread A, phản hồi rơi vào thread B,
+và một lần kiểm chỉ-đúng-thread-đã-công-bố sẽ kết luận "im lặng" **sai sự thật**. Cửa sổ sau phải khai
+rõ nơi nhận phản hồi, hoặc phải quét theo định danh ADR chứ không theo thread.
+
+DE (`kit#114`, 11/08 10:28) — nguyên văn *"ack `ADR-D16-05` (**không phản đối**)"* và *"Đồng ý cách
+đọc hẹp — trên lập luận"*, kèm **hai điểm**, cả hai đều **không phải phản đối nội dung**:
+
+1. **Van "đếm reader" bắt người *import*, không bắt người *giả định non-null*.** Hỏi thẳng:
+   `contracts#5` đã đếm-non-null và dán chưa; nếu chưa thì *"nó là breaking đeo phù hiệu miễn"*.
+   **Đã kiểm — rồi, và chặt hơn mức lo ngại.** PR body `contracts#5` dán cả hai lệnh `grep`, và không
+   dừng ở đếm import: nó chỉ đích danh **1 reader production** — `studio_evalhub/render.py` format
+   `:.2f`, tức đúng ca **vỡ `TypeError` trên `None`** dù "đọc field bình thường" — rồi **vá reader đó
+   trong cùng thay đổi**. Nguyên văn: *"Điều kiện của `DEC-01` được thoả bằng cách vá reader, không
+   phải bằng cách tuyên bố nó không tồn tại."* ⇒ điểm 1 thoả trên chính tiền lệ đang xét. Yêu cầu dán
+   lệnh đếm **kèm kết luận non-null** giữ nguyên cho mọi lần sau.
+2. **Đề nghị nâng lazy-consensus lên ack tường minh 4/4 người giữ bút** — *"im lặng có thể là 'chưa
+   đọc', không phải 'đồng ý'"*. **Ghi nhận là process-improvement, áp cho ADR SAU, KHÔNG hồi tố ADR
+   này.** Lý do: đổi bar phê chuẩn sau khi cửa sổ đã đóng theo điều kiện công bố trước là đổi luật
+   giữa chừng — đúng lớp lỗi mà chính ADR này vá. Ghi lại làm nợ quy trình, không làm điều kiện đóng.
+
+Trạng thái ack tường minh tại thời điểm đóng, ghi để ADR sau có mốc: **DE ✅ 1/4** · SWE ⬜ · AIE-1 ⬜
+(chỉ *ghi nhận đang treo* ở tổng hợp `kit#114`, không phải ack) · AIE-2 = tác giả.
 
 **Hai việc kèm:**
 
-1. `mini-rfc/TEMPLATE.md` thêm một dòng trỏ về ADR này, để người mở template thấy ngay cách đọc đã
-   chốt thay vì suy lại.
-2. Câu *"bất kỳ"* ở `umbrella-contract.md:92-93` nên sửa cho khớp — nhưng umbrella nằm ở
-   `docs/requirements` (submodule chung, **không** thuộc write-scope quadrant này), nên **đề xuất qua
-   issue kit**, không tự sửa. Tới khi nó được sửa, mâu thuẫn vẫn tồn tại trên giấy và ADR này là chỗ
-   ghi cách xử.
+1. ✅ **XONG.** `mini-rfc/TEMPLATE.md` đã mang dòng trỏ về ADR này ngay từ `bde93de` (cùng commit với
+   chính ADR, D16); D18 cập nhật wording từ *"cửa sổ phản đối"* sang trạng thái **đã có hiệu lực** để
+   người mở template không đọc một cửa sổ đã đóng thành đang mở.
+2. ⬜ **CHƯA LÀM — nợ mở.** Câu *"bất kỳ"* ở `umbrella-contract.md:92-93` nên sửa cho khớp, nhưng
+   umbrella nằm ở `docs/requirements` (submodule chung, **không** thuộc write-scope quadrant này), nên
+   **đề xuất qua issue kit**, không tự sửa. Issue **chưa được tạo** tính tới D18 — nội dung đã soạn,
+   còn chờ mở. DE cũng yêu cầu đúng món này: *"cần một owner + issue theo dõi, đừng để trôi — không
+   thì người đọc umbrella trước vẫn gặp 'bất kỳ' và tái tranh luận từ đầu."* Bút đề xuất: AIE-2.
+   Tới khi nó được sửa, **mâu thuẫn vẫn tồn tại trên giấy** và ADR này là chỗ ghi cách xử.
 
 ### Số đo T6 — độ nhạy ngưỡng trên golden-30 (10/08), `DEC-D16-05`
 

@@ -1,8 +1,9 @@
 """AgentCore Studio Evalhub — eval harness, LLM-judge, scorecard, golden-set. Owner: AIE-2.
 
-Phase 8: `schema.ddl()` fills `eval.golden_sets`/`eval.scorecards` (P1 stub); `EvalHarness`,
-`LLMJudge`, `compute_scorecard` are the empty (`NotImplementedError`) OJT spec seams AIE-2 fills
-next — see harness.py/judge.py/compute.py docstrings for each seam's contract.
+Phase 8: `schema.ddl()` fills `eval.golden_sets`/`eval.scorecards` (P1 stub). `LLMJudge` không còn là
+spec seam rỗng — điền ở D18/T2 (`kit#118`): seam `LLM` tiêm vào + cache `(case_id, actual)` + cap
+≤100/ngày fail-closed + sentinel `JudgeUnavailable(reason=...)`. Xem harness.py/judge.py/compute.py
+docstrings cho hợp đồng của từng seam.
 """
 
 from studio_evalhub.agent_runner import AgentAnswer, AgentRunner, CaseRun, StubAgentRunner

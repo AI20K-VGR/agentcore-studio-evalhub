@@ -60,7 +60,7 @@ class CaseRun(BaseModel):
 
     Gói `answer` (câu trả lời + cờ từ chối) cùng `events` (trace của đúng run đó). Bộ chấm lấy
     citations từ `events` (event `node_type == kb-retrieve`), KHÔNG từ `answer.citations` — xem
-    `harness._retrieved_citations` + `docs/scorecard-v0.md` §2.3/§2.7."""
+    `harness.citations_from_trace` + `docs/scorecard-v0.md` §2.3/§2.7."""
 
     model_config = ConfigDict(frozen=True)
 

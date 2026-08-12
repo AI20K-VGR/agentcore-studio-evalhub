@@ -25,9 +25,15 @@ created_by: AIE-2 — Lưu Tiến Duy (D11)
 > ngoài quadrant** thì gần chắc không cần mini-RFC.
 >
 > **Cách đọc này hẹp hơn `umbrella-contract.md:92-93`** (*"đổi **bất kỳ** contract nào = mini-RFC"*),
-> và khoảng chênh đó là **cố ý** — lý do, ranh giới, và cửa sổ phản đối nằm ở **`ADR-D16-05`**
-> (`docs/decisions/scorecard.md`). Đọc ADR đó trước khi kết luận một thay đổi được miễn: nó cũng ghi
-> rõ **cái gì KHÔNG được miễn** (decision-log · lệnh đếm reader · ba dạng breaking).
+> và khoảng chênh đó là **cố ý** — lý do và ranh giới nằm ở **`ADR-D16-05`**
+> (`docs/decisions/scorecard.md`). **ADR đó đã có hiệu lực từ 12/08 (D18)**: cửa sổ phản đối đóng với
+> **0 phản đối**, nên cách đọc trên trang này là cách đọc đang áp dụng — không phải một đề xuất đang
+> chờ. Đọc ADR trước khi kết luận một thay đổi được miễn: nó cũng ghi rõ **cái gì KHÔNG được miễn**
+> (decision-log · lệnh đếm reader · ba dạng breaking).
+>
+> ⚠️ **Câu *"bất kỳ"* ở umbrella §3 vẫn CHƯA được sửa** (nằm ngoài write-scope quadrant này, đang chờ
+> mở issue kit). Gặp ai dẫn nguyên văn §3 để đòi mini-RFC cho một ca nằm trong bảng miễn ở trên thì
+> trỏ về `ADR-D16-05`, đừng tranh luận lại từ đầu.
 
 ---
 

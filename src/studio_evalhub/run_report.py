@@ -35,7 +35,9 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
+from collections.abc import Mapping
 from typing import Any
+from uuid import UUID
 
 from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
@@ -44,7 +46,7 @@ from studio_contracts import NodeType, Tokens, TraceEvent
 from studio_evalhub.agent_runner import AgentAnswer
 from studio_evalhub.cli import _demo_golden_set
 from studio_evalhub.golden_case import GoldenCase
-from studio_evalhub.harness import SmokeResult, citations_from_trace, score_case
+from studio_evalhub.harness import SmokeResult, chunks_from_trace, citations_from_trace, score_case
 from studio_evalhub.render import render_run_cases
 
 Pool = AsyncConnectionPool[AsyncConnection[Any]]
@@ -147,14 +149,69 @@ def answer_from_trace(events: list[TraceEvent]) -> AgentAnswer:
     )
 
 
-def score_run_from_trace(case: GoldenCase, events: list[TraceEvent]) -> SmokeResult:
+def score_run_from_trace(
+    case: GoldenCase,
+    events: list[TraceEvent],
+    *,
+    tenant_ids: Mapping[str, UUID] | None = None,
+) -> SmokeResult:
     """Chấm một case **hoàn toàn** từ trace đã bền hoá: cả `answer` lẫn `citations` đọc từ `events`.
 
     Đây là chỗ hai vế gặp nhau. `citations_from_trace` (D5) lo vế citation; `answer_from_trace` (hôm
     nay) lo vế câu trả lời. Sau hàm này, không còn mảnh nào của phép chấm phụ thuộc RAM của tiến
     trình đã chạy agent — bảng điểm dựng lại được từ `run_id` và không gì khác.
+
+    ## `tenant_ids` — additive, default `None` (D18/T5)
+
+    Trả nợ ghi trong bảng D17: hàm này là **một trong 6 call-site còn đi đường `citations` vacuous**
+    sau `F-6`, và là món nặng nhất — vì `workbench/dev_playground_server.py:189` gọi nó, nên **số
+    hiển thị trên Playground chưa hưởng bản vá**. Nêu bởi SWE ở review `evalhub#18`.
+
+    - **không truyền** ⇒ `no_leak` chấm trên `retrieved_citations` — đường CŨ, y nguyên. Đang dùng:
+      `dev_playground_server.py:189` (gọi 2 tham số vị trí) và `run_report` CLI.
+    - **truyền** ⇒ chấm trên `outputs["chunks"]` qua `chunks_from_trace`: tenant so bằng **UUID
+      thật**, vai so bằng **`section_role` thật**. Caller chọn opt-in.
+
+    **Keyword-only + default `None` là hình duy nhất giữ được tương thích**: đây là API công khai có
+    consumer **ngoài quadrant**, nên đổi hành vi mặc định là phá hợp đồng của người khác mà họ không
+    chọn. Luật này ghi sẵn ở chính bảng nợ (*"phải additive + báo trước SWE"*), không phải phép lịch sự.
+
+    **Vì sao đường cũ vacuous, và vì sao vẫn giữ:** case từ-chối trên runner thật gần như luôn phát
+    **0 citation**, nên `all(...)` chạy trên tập rỗng ⇒ `no_leak` luôn `True` ⇒ luật đúng và luật sai
+    cho **cùng một kết quả**. Đo trên golden-30 ở D17: 8/8 case từ-chối. Giữ nó không phải vì nó đúng
+    — mà vì đổi mặc định của một API công khai là việc của **caller**, không phải của hàm này.
+
+    `tenant_ids` **bắt buộc đi cùng** đường chunks chứ không phải một cờ bật/tắt: `_no_leak_from_chunks`
+    so tenant bằng UUID thật, nên thiếu bảng ánh xạ slug→UUID thì không có gì để so. Gộp hai thứ vào
+    một tham số làm chỗ này không thể dùng sai.
+
+    **Map thiếu tenant của case ⇒ `ValueError` nêu tên, không để `KeyError` trần lọt.** Trước bản vá
+    này, `tenant_ids` thiếu key sẽ ném `KeyError: '<tenant>'` từ `harness.py:268` — **khác kiểu** với
+    thứ `score_case` hứa (*"Đòi `tenant_ids`; thiếu ⇒ `ValueError`"*), và mang đúng một chuỗi tenant
+    không nói được gì về việc phải làm. Cạnh sắc đó vốn có sẵn ở đường harness, nhưng T5 là chỗ **đưa
+    nó ra một API công khai có consumer ngoài quadrant**, nên chặn ở đây trước khi mời ai opt-in.
+
+    Chỉ đòi `case.tenant`. `expected_tenant` **cố ý không** bị đòi: với case T1 nó đúng là kho caller
+    **không có quyền**, nên nó không nằm trong `tenant_ids` của run (`harness.py:259-263`) — đòi nó sẽ
+    làm mọi case T1 đỏ.
     """
-    return score_case(case, answer_from_trace(events), citations_from_trace(events))
+    answer = answer_from_trace(events)
+    citations = citations_from_trace(events)
+    if tenant_ids is None:
+        return score_case(case, answer, citations)
+    if case.tenant not in tenant_ids:
+        raise ValueError(
+            f"`tenant_ids` thiếu tenant của case {case.case_id!r}: {case.tenant!r} không có trong "
+            f"{sorted(tenant_ids)}. Đường chunks so tenant bằng UUID thật nên thiếu UUID là không so "
+            "được — dựng lại map cho đủ tenant của case."
+        )
+    return score_case(
+        case,
+        answer,
+        citations,
+        retrieved_chunks=chunks_from_trace(events),
+        tenant_ids=tenant_ids,
+    )
 
 
 _READ_RUN = """

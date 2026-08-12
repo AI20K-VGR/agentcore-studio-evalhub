@@ -302,3 +302,218 @@ def test_answer_from_trace_khong_doi_event_dau_vao() -> None:
     answer_from_trace(events)
 
     assert [e.model_dump() for e in events] == before
+
+
+# ── T5 · `score_run_from_trace` nhận đường chunks (kit#118, nợ đến hạn D18) ───────────────────────
+# Nợ D17: 6 call-site còn đi đường `citations` **vacuous**, và món nặng nhất là hàm này — vì
+# `workbench/dev_playground_server.py:189` gọi nó, nên **số hiển thị trên Playground chưa hưởng bản
+# vá F-6**. Nêu bởi SWE ở review `evalhub#18`.
+
+_T5_ANKOR = uuid5(NAMESPACE_DNS, "ankor")
+_T5_BOREA = uuid5(NAMESPACE_DNS, "borea")
+_T5_TENANTS = {"ankor": _T5_ANKOR, "borea": _T5_BOREA}
+
+
+def _t5_case() -> GoldenCase:
+    """Case âm T1 chéo-tenant: người hỏi ở `ankor`, đáp án nằm ở `borea` ⇒ agent PHẢI từ chối."""
+    return GoldenCase(
+        case_id="T5-01",
+        query="q",
+        tenant="ankor",
+        section_roles=["public"],
+        expected_tenant="borea",
+        expected_section_role="public",
+        expected="refusal",
+        expected_citation=[],
+    )
+
+
+def _t5_events(*, chunks: list[dict[str, object]]) -> list[TraceEvent]:
+    """Agent từ chối, `citations` **rỗng**, nhưng retrieval ĐÃ kéo về `chunks`.
+
+    Đây chính là hình dạng của bug `F-6`: nhìn từ `citations` thì trace *"không trích gì"* ⇒ hàng rào
+    trông như chặn sạch; nhìn từ `outputs["chunks"]` thì thấy đã rò chunk của kho khác."""
+    return [
+        TraceEvent(
+            event_id="e1",
+            run_id="r1",
+            agent_id="a",
+            tenant_id=_T5_ANKOR,
+            node_id="n1",
+            node_type=NodeType.KB_RETRIEVE,
+            ts="2026-08-12T00:00:00+00:00",
+            inputs_hash="h",
+            outputs={"chunks": chunks},
+            tokens=Tokens(prompt=0, completion=0),
+            cost=0.0,
+            citations=[],
+        ),
+        TraceEvent(
+            event_id="e2",
+            run_id="r1",
+            agent_id="a",
+            tenant_id=_T5_ANKOR,
+            node_id="n2",
+            node_type=NodeType.LLM_STEP,
+            ts="2026-08-12T00:00:01+00:00",
+            inputs_hash="h",
+            outputs={
+                "answer": "Không tìm thấy thông tin trong phạm vi được phép, nên không thể trả lời.",
+                "refused": True,
+                "citations": [],
+            },
+            tokens=Tokens(prompt=0, completion=0),
+            cost=0.0,
+            citations=[],
+        ),
+    ]
+
+
+def test_score_run_from_trace_khong_truyen_tenant_ids_giu_nguyen_duong_cu() -> None:
+    """**Additive**: không truyền `tenant_ids` ⇒ đường CŨ y nguyên, không đổi một dòng hành vi.
+
+    Điều kiện để `workbench/dev_playground_server.py:189` — gọi **2 tham số vị trí** — chạy nguyên khi
+    chữ ký đổi. `tenant_ids` keyword-only + default `None` là hình duy nhất giữ được điều đó.
+
+    Trace ở đây **rò chunk của `borea`** trong khi người hỏi ở `ankor`. Đường cũ chấm `no_leak` trên
+    `citations` (rỗng) ⇒ `all(...)` trên tập rỗng ⇒ `True` ⇒ **PASS oan**. Bài này khoá chính hành vi
+    vacuous đó — không phải vì nó đúng, mà vì **đổi nó mà không ai chọn** là phá hợp đồng của một API
+    công khai có consumer ngoài quadrant."""
+    events = _t5_events(chunks=[{"chunk_id": "borea-x#c1", "tenant_id": str(_T5_BOREA), "section_role": "public"}])
+
+    ket_qua = score_run_from_trace(_t5_case(), events)
+
+    assert ket_qua.success is True  # PASS oan — đường cũ, giữ nguyên có chủ đích
+
+
+def test_score_run_from_trace_co_tenant_ids_thi_di_duong_chunks() -> None:
+    """Truyền `tenant_ids` ⇒ đi đường **chunks**, và bắt được đúng cái đường cũ để lọt.
+
+    Cùng một `case`, cùng một `events` với bài trên — **chỉ khác một tham số** — mà kết quả lật từ
+    `True` sang `False`. Đó là cách duy nhất chứng minh nhánh mới **chạy thật** chứ không phải chạy
+    rồi cho ra cùng số: nếu bài chỉ assert `success is False` mà không có bài đối chiếu ở trên, một
+    bản vá làm hỏng cả hai đường vẫn xanh."""
+    events = _t5_events(chunks=[{"chunk_id": "borea-x#c1", "tenant_id": str(_T5_BOREA), "section_role": "public"}])
+
+    ket_qua = score_run_from_trace(_t5_case(), events, tenant_ids=_T5_TENANTS)
+
+    assert ket_qua.success is False  # rò kho `borea` ⇒ FAIL, đúng luật F-6
+
+
+def test_score_run_from_trace_co_tenant_ids_va_hang_rao_sach_thi_pass() -> None:
+    """Bài đối trọng: cùng đường chunks, retrieval **không rò** ⇒ vẫn PASS.
+
+    Không có bài này thì bài trên không phân biệt được *"đường chunks bắt đúng rò rỉ"* với *"đường
+    chunks chấm FAIL mọi thứ"* — và một bản vá trả `success=False` cứng cũng cho nó xanh."""
+    events = _t5_events(chunks=[{"chunk_id": "ankor-x#c1", "tenant_id": str(_T5_ANKOR), "section_role": "public"}])
+
+    ket_qua = score_run_from_trace(_t5_case(), events, tenant_ids=_T5_TENANTS)
+
+    assert ket_qua.success is True
+
+
+def test_score_run_from_trace_co_tenant_ids_nhung_khong_co_kb_retrieve_thi_fail_closed() -> None:
+    """Có `tenant_ids` mà trace **không có event `kb-retrieve`** ⇒ `chunks_from_trace` trả `None` ⇒
+    **fail-closed**.
+
+    `None` ≠ `[]`: `[]` là *"hàng rào chặn sạch"* — bằng chứng TỐT; `None` là *"không quan sát được"*
+    — không chứng minh được gì. Một bản vá gộp hai cái đó sẽ biến mọi trace thiếu retrieval thành
+    một hàng rào hoàn hảo."""
+    events = [e for e in _t5_events(chunks=[]) if e.node_type is not NodeType.KB_RETRIEVE]
+
+    ket_qua = score_run_from_trace(_t5_case(), events, tenant_ids=_T5_TENANTS)
+
+    assert ket_qua.success is False
+
+
+@pytest.mark.parametrize(
+    ("ten", "tenant_ids"),
+    [("map-rong", {}), ("map-thieu-tenant-cua-case", {"borea": _T5_BOREA})],
+)
+def test_score_run_from_trace_tenant_ids_thieu_tenant_cua_case_raise_valueerror(
+    ten: str, tenant_ids: dict[str, object]
+) -> None:
+    """`tenant_ids` có mặt nhưng **thiếu tenant của case** ⇒ `ValueError` nêu tên, KHÔNG `KeyError` trần.
+
+    Trước bản vá, đường này ném `KeyError: 'ankor'` từ `harness.py:268` (`tenant_ids[case.tenant]`) —
+    một exception **khác kiểu** với thứ hợp đồng hứa, và mang đúng một chuỗi `'ankor'` không nói được
+    gì về việc phải làm.
+
+    Ba lý do bài này tồn tại:
+
+    1. **Lệch hợp đồng.** `score_case` docstring khai *"Đòi `tenant_ids`; thiếu ⇒ `ValueError`, không
+       im lặng"*. Map **thiếu một phần** lại cho `KeyError` — người bắt `ValueError` theo hợp đồng sẽ
+       không bắt được.
+    2. **Bán kính mới.** Trước T5, `score_run_from_trace` chưa bao giờ đi đường chunks. T5 đưa cạnh
+       sắc này ra một API công khai **có consumer ngoài quadrant**.
+    3. **Đúng lúc mời người ta dùng.** Ask ② sẽ bảo SWE opt-in; nếu họ truyền map thiếu, thứ nhận được
+       phải đọc ra hành động, không phải một chuỗi tenant trần.
+
+    Assert **nội dung** thông báo, không chỉ loại exception: người nhận lỗi này đang dựng map ở phía
+    họ, nên cần biết **thiếu tenant nào** và **đang có những tenant nào** — không phải mở
+    `harness.py` ra mà dò.
+
+    `expected_tenant` **cố ý không** bị đòi: với case T1 nó đúng là kho caller không có quyền, nên nó
+    không nằm trong `tenant_ids` của run (`harness.py:259-263`). Bắt nó ở đây sẽ làm mọi case T1 đỏ."""
+    events = _t5_events(chunks=[{"chunk_id": "borea-x#c1", "tenant_id": str(_T5_BOREA), "section_role": "public"}])
+
+    with pytest.raises(ValueError) as excinfo:
+        score_run_from_trace(_t5_case(), events, tenant_ids=tenant_ids)  # type: ignore[arg-type]
+
+    thong_bao = str(excinfo.value)
+    assert "ankor" in thong_bao, ten  # tenant BỊ THIẾU
+    assert "T5-01" in thong_bao, ten  # case nào
+    if tenant_ids:
+        assert "borea" in thong_bao, ten  # tenant ĐANG CÓ
+
+
+# ── F2 (review T5) · trục `section_role` qua ĐÚNG entry point `score_run_from_trace` ──────────────
+# Bốn bài T5 chỉ chạy trục T1 chéo-tenant. Nhưng toàn bộ lý do tồn tại của đường chunks
+# (`F-6`/`DEC-D17-02`) là nó kiểm được **trục vai** — thứ đường citations về cấu trúc KHÔNG kiểm
+# được (`chunk_id` mã hoá tenant ở tiền tố nhưng KHÔNG mã hoá vai). Docstring T5 khẳng định "vai so
+# bằng `section_role` thật" mà không bài T5 nào demo điều đó qua entry point này.
+
+
+def _t6_case() -> GoldenCase:
+    """Case T6 chéo-VAI: **cùng tenant** `ankor`, nhưng đáp án nằm ở vai `hr` mà người hỏi chỉ giữ
+    `public` ⇒ `expects_refusal` dẫn xuất `True` qua trục thứ hai, không qua trục tenant."""
+    return GoldenCase(
+        case_id="T6-01",
+        query="q",
+        tenant="ankor",
+        section_roles=["public"],
+        expected_tenant="ankor",
+        expected_section_role="hr",
+        expected="refusal",
+        expected_citation=[],
+    )
+
+
+def test_score_run_from_trace_tenant_dung_nhung_vai_bi_cam_thi_fail() -> None:
+    """Tenant **đúng** nhưng `section_role` **bị cấm** ⇒ `success is False`.
+
+    Đây là ca mà đường citations **không thể** bắt: chunk thuộc đúng kho người hỏi (`ankor`), nên mọi
+    heuristic dựa trên tiền tố `chunk_id` đều thấy "hợp lệ". Chỉ `section_role` thật trong chunk mới
+    phân biệt được — và đó là toàn bộ giá trị của đường chunks.
+
+    Bài này đóng F2 của review T5: trước nó, không bài nào chứng minh trục vai chạy **qua chính
+    `score_run_from_trace`**. Trục vai có lưới ở `test_refusal_leak_controls.py`, nhưng lưới đó nằm ở
+    entry point khác — một bản vá làm hỏng riêng đường này sẽ không bị nó bắt."""
+    events = _t5_events(chunks=[{"chunk_id": "ankor-x#c1", "tenant_id": str(_T5_ANKOR), "section_role": "hr"}])
+
+    ket_qua = score_run_from_trace(_t6_case(), events, tenant_ids=_T5_TENANTS)
+
+    assert ket_qua.success is False
+
+
+def test_score_run_from_trace_tenant_dung_va_vai_hop_le_thi_pass() -> None:
+    """Bài đối trọng: cùng tenant, `section_role` **nằm trong quyền** người hỏi ⇒ `success is True`.
+
+    Không có nó thì bài trên không phân biệt được *"trục vai bắt đúng"* với *"case T6 luôn FAIL"* —
+    và một bản vá bỏ hẳn vế vai rồi trả `False` cứng cũng cho nó xanh. Hai bài chạy trên **cùng một
+    case**, chỉ khác `section_role` của chunk."""
+    events = _t5_events(chunks=[{"chunk_id": "ankor-y#c1", "tenant_id": str(_T5_ANKOR), "section_role": "public"}])
+
+    ket_qua = score_run_from_trace(_t6_case(), events, tenant_ids=_T5_TENANTS)
+
+    assert ket_qua.success is True
