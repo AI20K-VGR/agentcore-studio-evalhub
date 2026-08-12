@@ -15,6 +15,7 @@ người cấp key · `STATE_UNREADABLE` ⇒ cần dọn file hỏng. Gộp lạ
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -43,6 +44,9 @@ class _BoomLLM:
     async def complete(self, prompt: str, **kwargs: object) -> str:
         self.calls.append(prompt)
         raise RuntimeError("no API key configured")
+
+
+_HOM_NAY = datetime.now(UTC).date().isoformat()
 
 
 def _paths(tmp_path: Path) -> dict[str, Any]:
@@ -196,3 +200,50 @@ async def test_judge_khong_biet_gemini_ton_tai(tmp_path: Path) -> None:
     assert "studio_app" not in nguon
     assert "environ" not in nguon
     assert "getenv" not in nguon
+
+
+# ── Shape sai nhưng parse ĐƯỢC — lỗ tìm ra khi viết sổ mutation D18 (T7a §6) ──────────────────────
+# `_doc_json` fail-closed đúng khi file KHÔNG parse được. Nhưng JSON hợp lệ mà **cấu trúc khác** thì
+# lọt qua mọi lớp phòng thủ, và lọt theo bốn kiểu khác nhau — hai trong số đó fail-OPEN về phía tiêu
+# tiền thật, tức đúng chỗ duy nhất trong quadrant không được phép fail-open (`DEC-D18-05`).
+@pytest.mark.parametrize(
+    ("ten", "cache", "cap"),
+    [
+        ("cache-value-la-str", {"HB-01": "pass"}, None),
+        ("cache-verdict-khong-bool", {"HB-01": {"y": "pass"}}, None),
+        ("counter-date-sai-kieu", None, {"date": 123, "count": 99}),
+        ("counter-count-la-bool", None, {"date": _HOM_NAY, "count": True}),
+    ],
+)
+async def test_state_shape_sai_phai_fail_closed(
+    tmp_path: Path, *, ten: str, cache: dict[str, Any] | None, cap: dict[str, Any] | None
+) -> None:
+    """State parse được nhưng **shape sai** ⇒ `STATE_UNREADABLE`, không đường nào khác.
+
+    Đo trên code trước khi vá — bốn ca, **không ca nào** raise, và mỗi ca hỏng một kiểu riêng:
+
+    | Ca | Trước khi vá | Vì sao nguy hiểm |
+    |---|---|---|
+    | cache value là `str` | `AttributeError` lọt ra ngoài | `harness` chỉ bắt `JudgeUnavailable` ⇒ **vỡ cả run** |
+    | verdict không phải `bool` | trả `'pass'` (**str**) | hợp đồng `judge() -> bool` bị phá âm thầm |
+    | `date` sai kiểu | `123 != "2026-08-12"` ⇒ **quota reset về 0** | fail-**OPEN** về phía tiêu tiền |
+    | `count` là `bool` | `isinstance(True, int)` ⇒ count = 1 | fail-**OPEN**, lọt qua chính bài kiểm `int` |
+
+    Hai ca cuối là chỗ khó thấy nhất: chúng **không** ném gì, **không** trả gì lạ, chỉ lặng lẽ mở lại
+    hạn mức đã dùng hết. Một file rác — thứ hoàn toàn có thể xảy ra khi một lượt chạy bị giết giữa
+    chừng — biến cap ≤100/ngày thành không cap.
+
+    Gộp cả bốn vào một bài parametrize vì chúng là **một** bất biến: *state đọc được nhưng không dùng
+    được ⇒ coi như không đọc được*. Tách bốn bài sẽ gợi ý rằng có bốn luật."""
+    paths = _paths(tmp_path)
+    if cache is not None:
+        paths["cache_path"].write_text(json.dumps(cache), encoding="utf-8")
+    if cap is not None:
+        paths["cap_path"].write_text(json.dumps(cap), encoding="utf-8")
+    llm = _FakeLLM()
+
+    with pytest.raises(JudgeUnavailable) as excinfo:
+        await LLMJudge(llm, **paths).judge(case_id="HB-01", expected="x", actual="y")
+
+    assert excinfo.value.reason is JudgeUnavailableReason.STATE_UNREADABLE, ten
+    assert len(llm.calls) == 0, f"{ten}: state hỏng mà vẫn chạm provider"

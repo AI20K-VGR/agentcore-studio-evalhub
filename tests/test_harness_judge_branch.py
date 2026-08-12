@@ -334,3 +334,41 @@ def test_conftest_khong_dung_provider_that() -> None:
                     pass
 
     assert not vi_pham, "CI phải tất định: test không được dựng provider LLM thật.\n" + "\n".join(vi_pham)
+
+
+async def test_cache_shape_sai_thi_tut_nac_chu_khong_vo_run(
+    golden_fx: Path, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """State judge hỏng **shape** ⇒ harness tụt nấc, **KHÔNG** vỡ run (INV-7).
+
+    Bài này là nửa harness của lỗ tìm ra khi viết sổ mutation D18 (T7a §6). Trước khi vá,
+    `LLMJudge` để lọt `AttributeError` thay vì `JudgeUnavailable`, và vì `_hoi_judge` **chỉ** bắt
+    `JudgeUnavailable` nên exception đi thẳng ra ngoài:
+
+    ```text
+    EvalHarness.run(..., judge=judge)  →  AttributeError: 'str' object has no attribute 'get'
+    ```
+
+    Tức một file cache rác — thứ hoàn toàn có thể xảy ra khi một lượt chạy bị giết giữa chừng — làm
+    sập **đúng cái mà descope-guard sinh ra để chống**.
+
+    **Cố ý KHÔNG vá bằng cách nới `_hoi_judge` thành `except Exception`.** Bắt rộng sẽ nuốt luôn lỗi
+    lập trình thật (typo, sai kiểu, lỗi logic) thành *"tụt nấc"* im lặng — biến descope từ một tín
+    hiệu vận hành thành một cái thùng rác. Chỗ vá đúng là `judge.py`: state không dùng được thì nói
+    ra bằng `STATE_UNREADABLE`, và harness giữ nguyên hợp đồng hẹp của nó.
+
+    Assert cả ba mặt: run **ra được** `Scorecard`, kết quả **trùng khít** đường `judge=None` (tụt nấc
+    là quay về nấc dưới, không phải nấc thứ ba), và tụt nấc **được ghi lại kèm `reason`**."""
+    cache = tmp_path / "c.json"
+    cache.write_text('{"FX-02": "pass"}', encoding="utf-8")  # JSON hợp lệ, shape SAI
+    judge = LLMJudge(_FakeLLM(), cache_path=cache, cap_path=tmp_path / "q.json")
+
+    with caplog.at_level(logging.WARNING):
+        tut_nac = await _chay(golden_fx, judge=judge)
+    khong_judge = await _chay(golden_fx, judge=None)
+
+    assert tut_nac == khong_judge
+
+    ghi_nhan = [r.getMessage() for r in caplog.records if "descope" in r.getMessage().lower()]
+    assert ghi_nhan, "tụt nấc bị nuốt câm"
+    assert any(JudgeUnavailableReason.STATE_UNREADABLE.value in m for m in ghi_nhan)

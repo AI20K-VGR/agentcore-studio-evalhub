@@ -38,7 +38,7 @@ import json
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from studio_contracts.protocols import LLM
 
@@ -218,8 +218,20 @@ class LLMJudge:
         sinh ra**: bất kỳ ký tự phân tách nào cũng có thể xuất hiện trong đó, và một `case_id` chứa
         ký tự phân tách sẽ đụng khoá của case khác. Lỗi đó chỉ hiện ra dưới dạng *"cache trả verdict
         của case khác"* — sai âm thầm, không exception.
+
+        **Kiểm shape SAU khi parse, không chỉ kiểm parse được.** `_doc_json` fail-closed khi file
+        không phải JSON; nhưng JSON **hợp lệ mà cấu trúc khác** thì lọt, và lọt theo hai kiểu đều tệ:
+
+        - `{"HB-01": "pass"}` ⇒ `.get(actual)` chạy trên một `str` ⇒ `AttributeError` **thoát ra ngoài
+          `JudgeUnavailable`** ⇒ `harness._hoi_judge` không bắt được ⇒ **vỡ cả run**, đúng thứ INV-7
+          sinh ra để chống;
+        - `{"HB-01": {"y": "pass"}}` ⇒ trả thẳng một `str` ra khỏi một hàm khai `-> bool`.
         """
-        return _doc_json(self._cache_path, mac_dinh={})
+        noi_dung = _doc_json(self._cache_path, mac_dinh={})
+        for muc in noi_dung.values():
+            if not isinstance(muc, dict) or any(not isinstance(v, bool) for v in muc.values()):
+                raise JudgeUnavailable(JudgeUnavailableReason.STATE_UNREADABLE)
+        return cast("dict[str, dict[str, bool]]", noi_dung)
 
     def _ghi_cache(self, cache: dict[str, dict[str, bool]]) -> None:
         _ghi_json(self._cache_path, cache)
@@ -234,12 +246,27 @@ class LLMJudge:
         **Ngày khác ⇒ đếm lại từ 0**, và đó là lý do file mang `date` chứ không chỉ mang `count`: một
         counter không có ngày là cap **trọn đời**, tức khoá cứng judge sau 100 call đầu tiên và không
         bao giờ mở lại — sai theo chiều ngược nhưng vẫn sai.
+
+        **Hai lớp kiểm shape, và cả hai chặn đúng một hướng hỏng: fail-OPEN về phía tiêu tiền thật.**
+        Đây là điều đáng ghi nhất của hàm này, vì cả hai ca đều **không ném gì và không trả gì lạ** —
+        chúng chỉ lặng lẽ mở lại hạn mức đã dùng hết:
+
+        - `date` **sai kiểu** (vd `123`) ⇒ `123 != "2026-08-12"` là `True` ⇒ rơi vào nhánh *"ngày
+          khác"* ⇒ **quota reset về 0**. Một file rác biến cap ≤100/ngày thành **không cap**.
+        - `count` là `bool` ⇒ `isinstance(True, int)` là `True` trong Python, nên nó **lọt qua đúng
+          lớp kiểm `int`** đã có, rồi đếm thành `1`.
+
+        `DEC-D18-05` chốt counter là chỗ **duy nhất** trong quadrant không được phép fail-open, nên
+        cả hai ca phải thành `STATE_UNREADABLE` — *đọc được nhưng không dùng được* ≡ *không đọc được*.
         """
         state = _doc_json(self._cap_path, mac_dinh={})
-        if state.get("date") != _hom_nay():
+        ngay = state.get("date")
+        if ngay is not None and not isinstance(ngay, str):
+            raise JudgeUnavailable(JudgeUnavailableReason.STATE_UNREADABLE)
+        if ngay != _hom_nay():
             return 0
         so = state.get("count", 0)
-        if not isinstance(so, int):
+        if not isinstance(so, int) or isinstance(so, bool):
             raise JudgeUnavailable(JudgeUnavailableReason.STATE_UNREADABLE)
         return so
 

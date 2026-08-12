@@ -132,7 +132,7 @@ vô tình mở lại lỗ.
 
 Đã gửi thành review: [kb#21 comment](https://github.com/AI20K-VGR/agentcore-studio-kb/pull/21#issuecomment-5263795288).
 
-## §6 · Khiếm khuyết TÌM RA khi viết sổ này — cache shape sai làm **vỡ cả run**
+## §6 · Khiếm khuyết TÌM RA khi viết sổ này — state shape sai làm **vỡ cả run** · ĐÃ VÁ
 
 Không phải mutant, và cũng không phải *"chưa đo được"* — **đã đo, và nó hỏng**.
 
@@ -158,12 +158,48 @@ Nó **không** bị `M-J1…M-J6` bắt vì cả sáu mutant đều tấn công 
 *hình dạng dữ liệu* chưa ai dựng. Đúng loại điểm mù mà gieo chéo tồn tại để tìm — chỉ khác là lần này
 người viết tự vấp phải khi đang viết mục *"chỗ tự biết là mỏng"* ở dưới.
 
-**Trạng thái: CHƯA VÁ.** Nằm ngoài scope T7a (T7a là sổ mutation, không phải sửa code), và không chặn
-merge-ready của T1–T4 vì mọi bài hiện có vẫn xanh. Ghi ở đây để nó không biến mất, và để lần vá có sẵn
-ca tái hiện.
+### §6.1 · ĐÃ VÁ — và lỗ rộng hơn ca đầu tiên: **4 hình dạng**, hai trong đó fail-OPEN
 
-Đường vá gợi ý, khi được duyệt: `_doc_cache`/`_doc_counter` kiểm shape sau khi parse (giá trị phải là
-`dict`/`int`), lệch ⇒ `STATE_UNREADABLE` — cùng luật đã áp cho `count` không phải `int`.
+Khi dựng ca tái hiện thì lộ ra ca ban đầu chỉ là một trong bốn. Đo trên code trước khi vá:
+
+| Ca | Trước khi vá | Hướng hỏng |
+|---|---|---|
+| cache value là `str` — `{"HB-01": "pass"}` | `AttributeError` **lọt ra ngoài** | vỡ cả run |
+| verdict không `bool` — `{"HB-01": {"y": "pass"}}` | trả `'pass'` (**str**) | phá hợp đồng `-> bool` |
+| `date` sai kiểu — `{"date": 123, ...}` | `123 != "2026-08-12"` ⇒ **quota reset về 0** | **fail-OPEN** |
+| `count` là `bool` — `{"count": true}` | `isinstance(True, int)` là `True` ⇒ đếm thành `1` | **fail-OPEN** |
+
+Hai ca cuối nguy hiểm hơn ca đầu dù trông hiền hơn: chúng **không ném gì, không trả gì lạ**, chỉ lặng
+lẽ mở lại hạn mức đã dùng hết. Ca `count: true` còn lọt **đúng qua lớp kiểm `int` đã có**, vì `bool`
+là lớp con của `int` trong Python. `DEC-D18-05` chốt counter là chỗ **duy nhất** trong quadrant không
+được phép fail-open, và nó đang fail-open theo hai đường.
+
+**Vá:** `_doc_cache`/`_doc_counter` kiểm **shape sau khi parse**, lệch ⇒ `STATE_UNREADABLE` —
+*đọc được nhưng không dùng được* ≡ *không đọc được*.
+
+**Cố ý KHÔNG vá bằng cách nới `harness._hoi_judge` thành `except Exception`.** Bắt rộng sẽ nuốt luôn
+lỗi lập trình thật thành *"tụt nấc"* im lặng, biến descope từ một tín hiệu vận hành thành một cái
+thùng rác. Chỗ vá đúng là phía sinh ra tín hiệu; harness giữ nguyên hợp đồng hẹp.
+
+**Hai mutant mới cho bất biến mới**, khai trước khi gieo:
+
+| # | Gieo vào | Bất biến | Dự đoán | Thực tế | KQ |
+|---|---|---|---|---|---|
+| `M-J7` | `_doc_cache` bỏ kiểm shape | Cache đọc được nhưng không dùng được ⇒ fail-closed | 2 ca cache + bài harness | **3 bài**, đúng y | **DIE** |
+| `M-J8` | `_doc_counter` bỏ kiểm `date`/`bool` | Counter hỏng **không được fail-open** | 2 ca counter | **2 bài**, đúng y | **DIE** |
+
+```text
+M-J7  test_state_shape_sai_phai_fail_closed[cache-value-la-str] · [cache-verdict-khong-bool]
+      test_cache_shape_sai_thi_tut_nac_chu_khong_vo_run
+M-J8  test_state_shape_sai_phai_fail_closed[counter-date-sai-kieu] · [counter-count-la-bool]
+```
+
+Đây là hai mutant đầu tiên của ngày mà **dự đoán khớp thực tế chính xác** — khác `M-J1/J5/J6` (rộng
+hơn dự đoán) và `M-J3` (hẹp hơn, sống một lượt). Lý do đọc được: bất biến này được phát hiện **từ một
+ca hỏng cụ thể**, nên bản đồ lưới trong đầu người viết dựng **sau** khi đã thấy hình dạng thật — chứ
+không phải suy trước rồi kiểm.
+
+`167 passed, 1 skipped` sau vá (nền 162).
 
 ## §7 · Mời gieo vào `evalhub` — chỗ người viết BIẾT là chưa đo được
 
@@ -171,7 +207,7 @@ Không đưa bảng gợi ý (bảng gợi ý biến gieo chéo thành kiểm l�
 chỗ tự biết là mỏng:
 
 - **Lần cuối AIE-2 tự gieo:** hôm nay 12/08, 6 mutant `M-J1…M-J6`, cả 6 chết — nhưng `M-J3` phải gieo
-  **hai lượt** mới chết ở nửa harness (§2), và §6 là một khiếm khuyết cả sáu mutant không chạm tới.
+  **hai lượt** mới chết ở nửa harness (§2), và §6 là một khiếm khuyết mà cả sáu mutant không chạm tới (đã vá, có `M-J7`/`M-J8` canh).
 - **Chỗ chưa đo được ①** — *đồng thời*: `LLMJudge` khai tường minh chỉ đảm bảo cap cho **một writer tại
   một thời điểm** (`DEC-D18-05`). Chưa bài nào dựng hai tiến trình cùng ghi `cap_path`; assumption được
   khai ra chứ chưa được kiểm.
