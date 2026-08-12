@@ -14,6 +14,7 @@ from studio_evalhub.agent_runner import StubAgentRunner
 from studio_evalhub.golden_case import GoldenSet
 from studio_evalhub.golden_loader import load_golden_set
 from studio_evalhub.harness import EvalHarness
+from studio_evalhub.judge import LLMJudge
 
 
 async def test_run_tra_scorecard_30_case(
@@ -52,3 +53,53 @@ async def test_run_tra_scorecard_30_case(
     # Runner đúng theo định nghĩa ⇒ mọi case phải PASS. `28/30` ở đây nghĩa là hai case T6 bị nuốt.
     assert scorecard.aggregate.success_rate == 1.0
     assert scorecard.gate.verdict == "PASS"
+
+
+class _LLMDemNhungKhongDuocGoi:
+    """`LLM` double tồn tại **để chứng minh nó không bị gọi** — `calls` là toàn bộ nội dung phép đo."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    async def complete(self, prompt: str, **kwargs: object) -> str:
+        self.calls.append(prompt)
+        return "PASS"
+
+
+async def test_golden_30_khong_case_nao_di_qua_judge(
+    golden_30_path: Path,
+    golden_30_ref: str,
+    tenant_ids: Mapping[str, UUID],
+    runner_tot: Callable[[GoldenSet, Mapping[str, UUID]], StubAgentRunner],
+    tmp_path: Path,
+) -> None:
+    """**Đo lại trên dữ liệu THẬT** cái mà `DEC-D18-07` khẳng định: golden-30 đi exact-match TOÀN BỘ.
+
+    Nền D18 đo `0/30` case khai `match_mode`. Bài này đo vế mạnh hơn và là vế thật sự quan trọng: kể
+    cả khi judge **có mặt**, không case nào của bộ 30 được định tuyến sang nó. Đó là điều kiện để câu
+    *"thêm selector production hôm nay là dựng đường dẫn cho một tập rỗng"* còn đúng — và nếu ngày nào
+    đó nó sai, ngày đó phải lộ ra ở đây chứ không lộ ra ở hoá đơn API.
+
+    `llm.calls == []` là money-shot của ô DoD *"CI deterministic"*: 30 case chạy hết, judge được
+    truyền vào, và vẫn **0 lần chạm provider**.
+
+    Ràng buộc đọc được nếu bài này đỏ: hoặc runner tốt đã hết tốt, hoặc luật định tuyến đã đổi. Cả hai
+    đều là thứ phải biết ngay, không phải thứ để phát hiện sau.
+    """
+    golden = load_golden_set(golden_30_path, expect_ref=golden_30_ref)
+    llm = _LLMDemNhungKhongDuocGoi()
+
+    scorecard = await EvalHarness().run(
+        "agent-tot",
+        golden_30_ref,
+        golden_set_path=golden_30_path,
+        runner=runner_tot(golden, tenant_ids),
+        tenant_ids=tenant_ids,
+        threshold_success=0.9,
+        threshold_citation_accuracy=0.95,
+        judge=LLMJudge(llm, cache_path=tmp_path / "c.json", cap_path=tmp_path / "q.json"),
+    )
+
+    assert len(scorecard.results) == 30
+    assert llm.calls == []
+    assert all(r.judge is None for r in scorecard.results)

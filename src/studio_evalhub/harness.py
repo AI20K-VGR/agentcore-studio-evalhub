@@ -16,6 +16,7 @@ itself (R-SPEC A4 ownership fence).
 
 from __future__ import annotations
 
+import logging
 import re
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -29,6 +30,12 @@ from studio_evalhub.agent_runner import AgentAnswer, AgentRunner, CaseRun
 from studio_evalhub.compute import compute_scorecard
 from studio_evalhub.golden_case import GoldenCase, GoldenSet
 from studio_evalhub.golden_loader import load_golden_set
+from studio_evalhub.judge import JudgeUnavailable, LLMJudge
+
+# Logger đầu tiên của quadrant, và nó tồn tại vì đúng một lý do: tụt nấc judge phải **quan sát được**
+# mà `Scorecard` thì không đổi được một byte (`DEC-D18-06`). Log là kênh cho tín hiệu vận hành —
+# không phải chỗ chứa kết quả đo, và không có gì khác trong module này ghi log.
+_logger = logging.getLogger(__name__)
 
 
 class SmokeResult(BaseModel):
@@ -410,6 +417,34 @@ def _score_case_run(case: GoldenCase, case_run: CaseRun, tenant_ids: Mapping[str
     return result
 
 
+async def _hoi_judge(judge: LLMJudge, case: GoldenCase, scored: SmokeResult) -> SmokeResult:
+    """Hỏi judge cho một case đã trượt exact-match; `JudgeUnavailable` ⇒ **giữ nguyên** kết quả cũ.
+
+    Giữ nguyên `scored` chính là *tụt nấc*: nấc exact-match đã chấm xong trước khi judge được hỏi, nên
+    fallback không phải tính lại cái gì — nó là **không ghi đè**. Cách này làm cho *"tụt nấc"* và
+    *"chưa từng có judge"* cho ra **đúng cùng một `Scorecard`**, và đó là thứ bài test khoá bằng phép
+    so `==` giữa hai lần chạy: tụt nấc là **quay về** nấc dưới, không phải rẽ sang một nấc thứ ba.
+
+    Chỉ ghi đè `success`, **không** đụng `citation_accuracy`: trục citation là metric riêng, không
+    gate `success`, và judge không quan sát gì về trích dẫn để có ý kiến về nó.
+
+    Ba `reason` gộp chung **một** nhánh xử lý, tách nhau ở **một** dòng log (`DEC-D18-05`) — gộp
+    nhánh xử lý mà tách nhãn ghi nhận là đúng mức trừu tượng cần thiết. Log ở mức `WARNING` kèm cả
+    `case_id`: *"đã tụt nấc"* mà không nói **case nào** và **vì sao** là vứt đúng phần thông tin
+    hành động được.
+    """
+    try:
+        verdict = await judge.judge(case_id=case.case_id, expected=case.expected, actual=scored.actual)
+    except JudgeUnavailable as exc:
+        _logger.warning(
+            "judge descope → exact-match: case_id=%s reason=%s",
+            case.case_id,
+            exc.reason.value,
+        )
+        return scored
+    return scored.model_copy(update={"success": verdict})
+
+
 class EvalHarness:
     """Runs the golden-set eval loop for one agent recipe.
 
@@ -434,6 +469,7 @@ class EvalHarness:
         tenant_ids: Mapping[str, UUID],
         threshold_success: float,
         threshold_citation_accuracy: float,
+        judge: LLMJudge | None = None,
     ) -> Scorecard:
         """Chạy **mọi** case của `golden_set_ref` qua `agent_id` rồi trả `Scorecard` có verdict thật.
 
@@ -451,6 +487,36 @@ class EvalHarness:
         `run_smoke` → `compute_scorecard`. `scored_case_ids` đếm từ `case.expects_refusal` — caller
         **biết** nhánh vì nó cầm `GoldenCase`, còn `CaseResult` thì không mang cờ nhánh
         (`DEC-D16-03`).
+
+        ## `judge` — additive, default `None` (D18/T4)
+
+        **`judge=None` ⇒ không đổi một dòng** hành vi: mọi call-site hôm nay (`cli.py`, 2 bài
+        integration, `apps/studio`) chạy nguyên vì chúng không truyền tham số này.
+
+        **Định tuyến không đọc field mới nào.** `DEC-D18-07` từ chối thêm `match_mode`, nên nhánh
+        judge dẫn xuất từ **chính kết quả chấm exact-match**: case nhánh trả-lời mà `_contains_phrase`
+        không bắt được ⇒ hỏi judge. Đúng nguyên văn hai docstring có sẵn từ trước (`judge.py`
+        *"subjective (non-exact-match) cases"*, và mô tả của chính lớp này *"exact-match cases score
+        directly"*).
+
+        Hệ quả đo được: golden-30 với runner tốt ⇒ **0 case** đi qua judge, khớp phép đo *"0/30 case
+        cần judge"* của nền D18. **Không** có selector production nào được dựng cho một tập rỗng.
+
+        **Judge chỉ được hỏi ở nhánh trả-lời-được.** Nhánh từ-chối chấm bằng luật hàng rào (`refused`
+        + `no_leak`), không bằng so khớp văn bản — không có gì *subjective* để hỏi, và hỏi LLM ở đó là
+        để một mô hình phủ quyết một bằng chứng cấu trúc.
+
+        **`JudgeUnavailable` ⇒ tụt nấc exact-match, KHÔNG vỡ run** (INV-7). Cả ba `reason` đi **cùng
+        một nhánh xử lý** — cái khác nhau chỉ là **thứ được ghi lại** (`DEC-D18-05`). Tụt nấc ghi ra
+        log kèm `reason` và `case_id`: `Scorecard` không đổi được một byte (`DEC-D18-06`) nên log là
+        kênh đúng cho một tín hiệu vận hành, và một run tụt nấc mà trông y hệt run không tụt là một
+        scorecard **nói dối về phương pháp của chính nó**.
+
+        **`CaseResult.judge` vẫn `None` kể cả với case đã qua judge** — hạn chế phải nói ra, không
+        phải sơ suất: `Judge` (contract) đòi `agreement: float`, mà agreement là phép so với **nhãn
+        tay** trên một **tập** kết quả (`DEC-D18-04`); `judge()` không nhận nhãn tay nên mọi số điền
+        vào đó chỉ có thể là **hằng số**, đúng thứ bị cấm ở ba chỗ. Ô DoD *"agreement của judge"*
+        **không đóng trong D18** (§7 ô 2), và để trống trung thực hơn là điền một hằng số.
         """
         golden = load_golden_set(golden_set_path, expect_ref=golden_set_ref)
 
@@ -464,6 +530,8 @@ class EvalHarness:
                 section_roles=case.section_roles,
             )
             scored = _score_case_run(case, case_run, tenant_ids)
+            if judge is not None and not case.expects_refusal and not scored.success:
+                scored = await _hoi_judge(judge, case, scored)
             results.append(
                 CaseResult(
                     case_id=scored.case_id,
