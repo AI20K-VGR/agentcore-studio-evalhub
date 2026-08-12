@@ -36,6 +36,7 @@ import argparse
 import asyncio
 import os
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
@@ -211,6 +212,155 @@ def score_run_from_trace(
         citations,
         retrieved_chunks=chunks_from_trace(events),
         tenant_ids=tenant_ids,
+    )
+
+
+_COST_ROUND_NDIGITS = 6
+"""Số chữ số thập phân của luật cộng cost — **hằng số dùng chung với `kb`, không có cơ chế cưỡng chế**.
+
+Nguồn đối chiếu: `kb/src/studio_kb/cost.py` — `aggregate_run_cost` cộng
+`round(sum(e.cost for e in events), 6)`. Hai repo **không import được nhau** (`.importlinter` xếp
+`studio_kb | studio_engine | studio_workbench | studio_evalhub` cùng một layer), nên thứ duy nhất
+giữ hai bên khớp là **cùng luật + cùng tên field**, và không lint/type/test nào bắt được ngày `kb`
+đổi `6` thành `8`.
+
+Rằng chuyện đó có hậu quả thật thì đo được, không phải lo xa:
+
+    sum([0.000291, 0.001578, 0.010125, 0, 0, 0])  = 0.011994000000000001   ← không làm tròn
+    round(..., 6)                                 = 0.011994
+                                          bằng nhau?  False
+
+Cưỡng chế được đến đâu thì cưỡng chế đến đó: `test_conformance_luat_cong_round_6` ghim bảng
+`(per-event cost) → tổng kỳ vọng` bằng **số viết tay**, không tính bằng chính hàm đang test — số kỳ
+vọng đến từ **ngoài** cài đặt nên bài đó tautology-proof. Cùng bộ số được dán sang review `kb#22` để
+ghim đối xứng.
+
+**Điều kiện đóng nợ:** ngày `cost_of` land ở `contracts` (Q-A), luật cộng đi cùng nó và cả hai bản
+mirror bỏ được (`DEC-D19-03`)."""
+
+
+class RunCostError(ValueError):
+    """Không cộng dồn được `cost` của một run.
+
+    Có kiểu riêng thay vì `ValueError` trần để test khẳng định được **đúng lý do vỡ** — cùng khuôn
+    `TraceAnswerError` ở trên, và cùng lý lẽ: một bài `pytest.raises(ValueError)` sẽ xanh cả khi hàm
+    vỡ vì lý do khác hoàn toàn.
+    """
+
+
+@dataclass(frozen=True, slots=True)
+class RunCost:
+    """Cost mức **RUN**, đọc từ trace đã bền hoá — `DEC-D19-02`.
+
+    ## Vì sao ở đây mà không phải trên `SmokeResult` hay `contracts`
+
+    - **Cost là sự thật mức RUN, `SmokeResult` là mức CASE.** Nhét một số run-level vào mỗi dòng case
+      là nhân bản cùng một số n lần rồi mời người đọc cộng lại — đúng lớp lỗi `DEC-D15-01` mô tả
+      (*"một renderer tự tính là một nguồn số thứ hai cho cùng một run"*). Lưới `RUN_CASE_COLUMNS` +
+      `RUN_CASE_FIELDS_NOT_SHOWN` (`render.py:50-53`, ghim ở `test_render_run_cases.py:350`) sẽ đỏ
+      ngay nếu ai thêm field — và lưới đó **đang làm đúng việc của nó**.
+    - **`contracts` là nơi ra verdict.** Đặt một trục đang bằng `0.0` cạnh `gate.verdict` là dựng sẵn
+      chỗ cho ai đó gate lên nó; một gate trên hằng số 0 sẽ **PASS mọi thứ** cho tới ngày emit nối
+      giá rồi **FAIL mọi thứ** ngay hôm sau.
+
+    ## Tên field khớp `RunCost` của `kb#22` là CÓ CHỦ ĐÍCH
+
+    `run_id` · `tenant_id` · `prompt_tokens` · `completion_tokens` · `cost` · `event_count` — hai
+    bên không import được nhau, nên thứ duy nhất giữ chúng đối chiếu được khi review chéo là **tên +
+    luật giống hệt**. Lệch tên là lệch âm thầm.
+    """
+
+    run_id: str
+    tenant_id: UUID
+    prompt_tokens: int
+    completion_tokens: int
+    cost: float
+    event_count: int
+    priced: bool
+
+
+def run_cost_from_trace(events: list[TraceEvent]) -> RunCost:
+    """Cộng dồn `cost` **đã lưu** của một run — `DEC-D19-01`.
+
+    ## "Không tự tính lại" nghĩa là gì, chốt một cách đọc
+
+    Cấm mọi biểu thức suy `cost` từ `tokens × đơn giá`. **Cộng dồn `cost` đã lưu KHÔNG phải "tính
+    lại"** — nó là phép đọc trên nhiều dòng, cùng hình với `citations_from_trace` đọc nhiều event.
+
+    Phải chốt vì câu *"đọc cost từ trace, không tự tính lại"* (`kit#123`) có **hai** cách đọc, và
+    cách thứ hai (*"không tự tính = phải gọi bộ cộng dồn của DE"*, đúng nguyên văn `F-7` của `kb#22`)
+    dẫn tới ngõ cụt: `.importlinter` cấm import chéo quadrant, nên hoặc phá layering, hoặc ô DoD
+    không đóng được.
+
+    Cũng cấm luôn nhánh "tiện tay": không đọc `cost` từ `AgentAnswer`, không nhận `cost` qua tham số
+    của caller, không cache một `cost` từ lần chạy trước. Nguồn là `events`, và chỉ `events`.
+
+    ## Fail-closed ở mọi nhánh không chứng minh được — raise, không đoán
+
+    - `events` rỗng ⇒ không có run nào để nói về;
+    - trộn `run_id` ⇒ "cost của run này" mất nghĩa;
+    - trộn `tenant_id` ⇒ hở `INV-1`. `obs.trace_events` **không có RLS**, `tenant_id` trên từng event
+      là hàng rào **duy nhất**; một tổng trộn tenant là một con số của tenant này rò sang tenant kia.
+
+    ## `priced` trả lời ĐÚNG MỘT CÂU: *"cost của run này đã được đo chưa"*
+
+    Hai trạng thái của số 0 phải phân biệt được, và phân loại bằng **`tokens`**, không bằng riêng
+    `cost` (`DEC-D19-05`):
+
+    | `priced` | Điều kiện | Đọc là |
+    |---|---|---|
+    | `False` | `Σtokens > 0` **và** `Σcost == 0` | **chưa nối giá** — có việc đã chạy nhưng chưa ai áp đơn giá |
+    | `True` | mọi trường hợp còn lại | **đã đo** — *kể cả khi bằng `0`* (`Σtokens == 0` là đo thật bằng không) |
+
+    Đây là trạng thái của **mọi run trong hệ thống hôm nay**: `interpreter.py:73` `_NO_COST = 0.0`,
+    `:438` `cost=_NO_COST`. In `0.000000` trần sẽ đọc thành *"chạy 30 case tốn 0 đồng"*; in *"chưa
+    đo"* vô điều kiện (cách `TraceViewer.tsx:50` đang làm) thì tới ngày emit nối giá, node
+    `kb-retrieve` với `Tokens(0, 0)` — một **phép đo thật bằng 0** — bị gán nhãn *chưa đo*. Chỉ cách
+    phân loại theo `tokens` mới đúng ở **cả hai** ngày.
+
+    `priced` **không** gánh thêm nghĩa *"số này có nhất quán với luật giá không"*. Đó là câu hỏi về
+    **từng event**, cần đơn giá để trả lời, và `DEC-D19-01` cấm đơn giá sống trong `studio_evalhub`
+    ⇒ nó thuộc `price_mismatches` phía DE (`E-8`, điều kiện lật: Q-A).
+    """
+    if not events:
+        raise RunCostError(
+            "`events` rỗng — không có run nào để cộng cost. Trả `RunCost(cost=0)` ở đây sẽ dựng một "
+            "con số trông như phép đo trong khi thật ra là *không có gì để đo*, đúng lớp lỗi `F-6` "
+            "(`no_leak` trên tập rỗng, D17)."
+        )
+
+    run_ids = sorted({e.run_id for e in events})
+    if len(run_ids) > 1:
+        raise RunCostError(
+            f"trộn run_id trong cùng một lần cộng: {run_ids}. `RunCost` là cost **của một run**; "
+            "cộng chéo run thì con số không trả lời được câu hỏi nào."
+        )
+
+    tenants = sorted({e.tenant_id for e in events}, key=str)
+    if len(tenants) > 1:
+        raise RunCostError(
+            f"trộn tenant_id trong cùng một run: {[str(t) for t in tenants]}. `obs.trace_events` "
+            "KHÔNG có RLS nên `tenant_id` trên từng event là hàng rào duy nhất (`INV-1`) — một tổng "
+            "trộn tenant là số của tenant này rò sang tenant kia, dưới dạng một con số trông bình thường."
+        )
+
+    tong_cost = round(sum(e.cost for e in events), _COST_ROUND_NDIGITS)
+    prompt_tokens = sum(e.tokens.prompt for e in events)
+    completion_tokens = sum(e.tokens.completion for e in events)
+
+    # `priced` phân loại bằng TOKENS, không bằng riêng `cost` — chỉ cách này đúng ở CẢ HAI ngày:
+    # hôm nay (emit chưa áp giá ⇒ tokens>0, cost=0 ⇒ *chưa nối giá*) và ngày emit nối giá
+    # (`kb-retrieve` phát `Tokens(0,0)` ⇒ cost đúng bằng 0 ⇒ *đã đo, bằng 0*).
+    priced = not (tong_cost == 0 and prompt_tokens + completion_tokens > 0)
+
+    return RunCost(
+        run_id=run_ids[0],
+        tenant_id=tenants[0],
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        cost=tong_cost,
+        event_count=len(events),
+        priced=priced,
     )
 
 
