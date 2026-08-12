@@ -28,7 +28,20 @@ from pydantic import BaseModel, ConfigDict, Field
 class GoldenCase(BaseModel):
     """Một case trong golden/smoke set — đơn vị `EvalHarness.run()` chạy và chấm."""
 
-    model_config = ConfigDict(frozen=True)
+    # `extra="forbid"` (`DEC-D18-01`): field lạ trong yaml là **lỗi cứng**, không phải thứ bỏ qua.
+    #
+    # Mặc định của pydantic là `ignore`, và mặc định đó nuốt câm đúng lớp lỗi nguy hiểm nhất trên
+    # seam này: DE gõ nhầm tên một field, `load_golden_set` nạp **thành công**, không cảnh báo gì,
+    # rồi bộ chấm đọc được không có gì và trả về một **con số** thay vì một lỗi. Không test nào đỏ,
+    # vì không test nào biết field lẽ ra phải có.
+    #
+    # Rủi ro của chiều ngược lại (yaml thật đỏ vì có field chưa khai ở đây) đã đo, không suy:
+    # golden-30 hiện tại có đúng 8 field, khớp 1:1 với khai báo dưới đây ⇒ rủi ro đo được là 0 trên
+    # dữ liệu hôm nay, đổi lại chặn được mọi drift tương lai **ở đúng chỗ nó sinh ra**.
+    #
+    # Bất biến này có bài cưỡng chế ở cả hai tầng: `tests/test_golden_case_shape.py` (tầng kiểu) và
+    # `test_loader_manual_label_sai_ten_do_tai_loader` (đường đi thật của dữ liệu DE).
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     case_id: str
     """Id ổn định. Chảy thẳng vào `CaseResult.case_id`; cũng là nửa khoá cache `(case_id, actual)`
@@ -83,6 +96,27 @@ class GoldenCase(BaseModel):
     `ankor-leave-001#c1`); lệch định dạng thì mọi case ra 0 mà không có lỗi nào nổi lên.
 
     Tên số ít là của DE, giữ nguyên dù giá trị là list. Rỗng với case từ chối."""
+
+    manual_label: str | None = None
+    """Nhãn tay ground-truth cho case — mẫu số của `Judge.agreement` (`#118` ô DoD 2).
+
+    **`None` nghĩa là "case này CHƯA được gán nhãn tay", không phải "người gán nhãn kết luận là
+    không-có-nhãn".** Hai thứ đó khác nhau ở chỗ quan trọng nhất: case `None` phải bị **loại khỏi
+    mẫu số** của agreement, còn một nhãn rỗng đã gán thì không. Gộp hai nghĩa vào một giá trị là
+    cách agreement ra một con số trông hợp lệ mà mẫu số sai. Optional vì nhãn tay phủ một **subset**,
+    không phải cả 30 case (`kb` `DL-16.1`); bắt buộc field này sẽ làm đỏ toàn bộ golden-30 hiện tại
+    (0/30 case có nhãn) và biến một field phụ thành một đợt migration của DE.
+
+    **Ai sở hữu cái gì** — nguyên văn `DEC-Q5` (`docs/scorecard-v0.md:509`): DE sở hữu **giá trị**
+    (sinh + gán nhãn case, giao qua yaml trong kho của DE, `#115`); AIE-2 sở hữu **shape
+    + nơi lưu + loader**. Nên field này được khai ở đây **trước** khi DE emit — nếu khai sau,
+    `extra="forbid"` làm yaml của DE đỏ, còn không có `extra="forbid"` thì nhãn bị nuốt câm. Không
+    có thứ tự thứ ba an toàn.
+
+    Kiểu `str` chứ **không** phải enum, và đó là quyết định có hạn dùng: trục nhãn (tập giá trị hợp
+    lệ — nhãn theo *kết quả mong đợi* hay theo *chất lượng câu trả lời*) là của DE và **chưa chốt**.
+    Đóng khung thành enum từ phía tiêu thụ là AIE-2 lấn quyền `DEC-Q5` và đặt trước một vocabulary
+    chưa ai đồng ý. Ngày DE chốt trục, chỗ này siết lại được mà không đổi tên field."""
 
     @property
     def expects_refusal(self) -> bool:
