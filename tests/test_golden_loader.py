@@ -1,6 +1,6 @@
 """Test `load_golden_set` — unit, **KHÔNG chạm `packages/kb`**.
 
-Cả bốn bài dựng YAML bằng `tmp_path`, nội dung viết ngay trong bài. Không bài nào biết golden-30 của
+Cả sáu bài dựng YAML bằng `tmp_path`, nội dung viết ngay trong bài. Không bài nào biết golden-30 của
 DE nằm ở đâu — và đó là điều kiện để chúng còn là **unit test của loader**. Một bài unit đọc file của
 DE sẽ đỏ vì những lý do chẳng liên quan gì tới loader (DE đổi tên file, submodule chưa init, chạy từ
 clone riêng evalhub), và khi đó suite không còn phân biệt được *"loader vỡ"* với *"dữ liệu đi chỗ
@@ -122,6 +122,63 @@ def test_loader_thieu_field_raises(tmp_path: Path) -> None:
 
     with pytest.raises(ValidationError):
         load_golden_set(path, expect_ref=_REF)
+
+
+def test_loader_manual_label_sai_ten_do_tai_loader(tmp_path: Path) -> None:
+    """`DEC-D18-01` — nhãn tay **sai tên** trong yaml ⇒ đỏ **tại loader**, thông báo mang tên field sai.
+
+    Bài `test_manual_label_sai_ten_phai_do` khoá cùng bất biến ở tầng **kiểu**; bài này khoá nó trên
+    **đường đi thật của dữ liệu**: DE không dựng `GoldenCase` bằng Python, DE emit yaml rồi loader
+    nạp. Chỉ có bài ở tầng kiểu thì một ngày loader chèn thêm một bước làm sạch dict (lọc key lạ
+    "cho an toàn") sẽ trả `extra="forbid"` về vô hiệu mà bài kia vẫn xanh.
+
+    Vì sao thông báo phải mang **tên field sai** chứ không chỉ "validation error": người nhận lỗi
+    này là DE, đang sửa file của họ, và thứ họ cần biết là **gõ nhầm chữ nào** — không phải mở
+    `golden_case.py` của quadrant khác mà đối chiếu."""
+    sai_ten = _YAML_4_CASE.replace(
+        '    expected: "12 ngày"\n',
+        '    expected: "12 ngày"\n    manaul_label: ANSWER\n',
+        1,
+    )
+    path = _write(tmp_path, "nhan-sai-ten.yaml", sai_ten)
+
+    with pytest.raises(ValidationError) as excinfo:
+        load_golden_set(path, expect_ref=_REF)
+
+    assert "manaul_label" in str(excinfo.value)
+
+
+def test_loader_manual_label_doc_duoc_theo_tung_case(tmp_path: Path) -> None:
+    """Nhãn tay đi qua loader **về đúng case của nó**, và case không có nhãn ⇒ `None`.
+
+    **Fixture bất đối xứng ở cả hai trục**, không phải chỉ "có nhãn / không nhãn":
+
+    - vị trí — nhãn nằm ở case **1** và case **4**, hai case giữa bỏ trống. Gán đủ 4 case thì một
+      mutant phát nhãn của case đầu cho mọi case vẫn cho ra cùng kết quả;
+    - giá trị — hai nhãn **khác nhau** (`ANSWER` / `REFUSE`). Cùng một giá trị thì mutant trả hằng
+      số sống sót.
+
+    Assert nguyên **danh sách theo thứ tự** thay vì đếm số case có nhãn: `len([...]) == 2` xanh kể
+    cả khi hai nhãn dán nhầm sang hai case khác, mà nhãn dán nhầm case chính là dạng hỏng khiến
+    agreement-check ra một con số **sai mà trông hợp lệ**.
+
+    Giá trị nhãn ở đây là **chỗ giữ chỗ**, không phải vocabulary đã chốt — trục nhãn là của DE
+    (`#115`), xem docstring `GoldenCase.manual_label`. Bài này khoá **đường đi** của nhãn, không
+    khoá tập giá trị hợp lệ."""
+    co_nhan = _YAML_4_CASE.replace(
+        '    expected: "12 ngày"\n',
+        '    expected: "12 ngày"\n    manual_label: ANSWER\n',
+        1,
+    ).replace(
+        '    expected: "refusal"\n',
+        '    expected: "refusal"\n    manual_label: REFUSE\n',
+        1,
+    )
+    path = _write(tmp_path, "co-nhan-tay.yaml", co_nhan)
+
+    golden = load_golden_set(path, expect_ref=_REF)
+
+    assert [c.manual_label for c in golden.cases] == ["ANSWER", None, None, "REFUSE"]
 
 
 def test_src_khong_hardcode_duong_dan_kb() -> None:
