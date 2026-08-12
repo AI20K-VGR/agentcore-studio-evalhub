@@ -184,11 +184,27 @@ def score_run_from_trace(
     `tenant_ids` **bắt buộc đi cùng** đường chunks chứ không phải một cờ bật/tắt: `_no_leak_from_chunks`
     so tenant bằng UUID thật, nên thiếu bảng ánh xạ slug→UUID thì không có gì để so. Gộp hai thứ vào
     một tham số làm chỗ này không thể dùng sai.
+
+    **Map thiếu tenant của case ⇒ `ValueError` nêu tên, không để `KeyError` trần lọt.** Trước bản vá
+    này, `tenant_ids` thiếu key sẽ ném `KeyError: '<tenant>'` từ `harness.py:268` — **khác kiểu** với
+    thứ `score_case` hứa (*"Đòi `tenant_ids`; thiếu ⇒ `ValueError`"*), và mang đúng một chuỗi tenant
+    không nói được gì về việc phải làm. Cạnh sắc đó vốn có sẵn ở đường harness, nhưng T5 là chỗ **đưa
+    nó ra một API công khai có consumer ngoài quadrant**, nên chặn ở đây trước khi mời ai opt-in.
+
+    Chỉ đòi `case.tenant`. `expected_tenant` **cố ý không** bị đòi: với case T1 nó đúng là kho caller
+    **không có quyền**, nên nó không nằm trong `tenant_ids` của run (`harness.py:259-263`) — đòi nó sẽ
+    làm mọi case T1 đỏ.
     """
     answer = answer_from_trace(events)
     citations = citations_from_trace(events)
     if tenant_ids is None:
         return score_case(case, answer, citations)
+    if case.tenant not in tenant_ids:
+        raise ValueError(
+            f"`tenant_ids` thiếu tenant của case {case.case_id!r}: {case.tenant!r} không có trong "
+            f"{sorted(tenant_ids)}. Đường chunks so tenant bằng UUID thật nên thiếu UUID là không so "
+            "được — dựng lại map cho đủ tenant của case."
+        )
     return score_case(
         case,
         answer,

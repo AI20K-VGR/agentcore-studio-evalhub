@@ -424,3 +424,44 @@ def test_score_run_from_trace_co_tenant_ids_nhung_khong_co_kb_retrieve_thi_fail_
     ket_qua = score_run_from_trace(_t5_case(), events, tenant_ids=_T5_TENANTS)
 
     assert ket_qua.success is False
+
+
+@pytest.mark.parametrize(
+    ("ten", "tenant_ids"),
+    [("map-rong", {}), ("map-thieu-tenant-cua-case", {"borea": _T5_BOREA})],
+)
+def test_score_run_from_trace_tenant_ids_thieu_tenant_cua_case_raise_valueerror(
+    ten: str, tenant_ids: dict[str, object]
+) -> None:
+    """`tenant_ids` có mặt nhưng **thiếu tenant của case** ⇒ `ValueError` nêu tên, KHÔNG `KeyError` trần.
+
+    Trước bản vá, đường này ném `KeyError: 'ankor'` từ `harness.py:268` (`tenant_ids[case.tenant]`) —
+    một exception **khác kiểu** với thứ hợp đồng hứa, và mang đúng một chuỗi `'ankor'` không nói được
+    gì về việc phải làm.
+
+    Ba lý do bài này tồn tại:
+
+    1. **Lệch hợp đồng.** `score_case` docstring khai *"Đòi `tenant_ids`; thiếu ⇒ `ValueError`, không
+       im lặng"*. Map **thiếu một phần** lại cho `KeyError` — người bắt `ValueError` theo hợp đồng sẽ
+       không bắt được.
+    2. **Bán kính mới.** Trước T5, `score_run_from_trace` chưa bao giờ đi đường chunks. T5 đưa cạnh
+       sắc này ra một API công khai **có consumer ngoài quadrant**.
+    3. **Đúng lúc mời người ta dùng.** Ask ② sẽ bảo SWE opt-in; nếu họ truyền map thiếu, thứ nhận được
+       phải đọc ra hành động, không phải một chuỗi tenant trần.
+
+    Assert **nội dung** thông báo, không chỉ loại exception: người nhận lỗi này đang dựng map ở phía
+    họ, nên cần biết **thiếu tenant nào** và **đang có những tenant nào** — không phải mở
+    `harness.py` ra mà dò.
+
+    `expected_tenant` **cố ý không** bị đòi: với case T1 nó đúng là kho caller không có quyền, nên nó
+    không nằm trong `tenant_ids` của run (`harness.py:259-263`). Bắt nó ở đây sẽ làm mọi case T1 đỏ."""
+    events = _t5_events(chunks=[{"chunk_id": "borea-x#c1", "tenant_id": str(_T5_BOREA), "section_role": "public"}])
+
+    with pytest.raises(ValueError) as excinfo:
+        score_run_from_trace(_t5_case(), events, tenant_ids=tenant_ids)  # type: ignore[arg-type]
+
+    thong_bao = str(excinfo.value)
+    assert "ankor" in thong_bao, ten  # tenant BỊ THIẾU
+    assert "T5-01" in thong_bao, ten  # case nào
+    if tenant_ids:
+        assert "borea" in thong_bao, ten  # tenant ĐANG CÓ
