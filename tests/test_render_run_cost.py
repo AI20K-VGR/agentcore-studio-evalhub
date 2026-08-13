@@ -98,9 +98,7 @@ def test_khong_truyen_run_cost_thi_output_y_HET_nhu_cu() -> None:
     So **toàn bộ chuỗi**, không so từng mảnh: chỉ cần thêm một dòng trắng cũng là đổi output của
     caller cũ.
     """
-    cu = render_run_cases(
-        _results(), run_id=_RUN_ID, golden_set_ref=_GOLDEN_SET_REF, trace_source=_TRACE_SOURCE
-    )
+    cu = render_run_cases(_results(), run_id=_RUN_ID, golden_set_ref=_GOLDEN_SET_REF, trace_source=_TRACE_SOURCE)
 
     assert _render(None) == cu
 
@@ -262,9 +260,7 @@ def test_so_tu_run_cost_from_trace_di_thang_toi_chuoi_in_ra() -> None:
             tokens=Tokens(prompt=p, completion=c),
             cost=cost,
         )
-        for i, (cost, p, c) in enumerate(
-            [(0.000291, 37, 12), (0.001578, 211, 63), (0.010125, 1290, 417)], start=1
-        )
+        for i, (cost, p, c) in enumerate([(0.000291, 37, 12), (0.001578, 211, 63), (0.010125, 1290, 417)], start=1)
     ]
 
     ket_qua = run_cost_from_trace(events)
