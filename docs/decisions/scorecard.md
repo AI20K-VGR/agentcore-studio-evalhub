@@ -224,6 +224,56 @@ rơi nhầm nhánh trả-lời-được và agent từ chối **đúng** bị ch
 ngay hôm đó. Ranh giới còn lại, nói thẳng: **judge chưa được đo agreement lần nào**, thiếu cả key lẫn
 case cần judge (`DEC-D18-04` điều kiện (b) và (c)).
 
+## D19 · 2026-08-13
+
+> **Vào sổ muộn — ghi ra thay vì lấp.** Bảy quyết định này chốt trong ngày D19 và land qua
+> [evalhub#22](https://github.com/AI20K-VGR/agentcore-studio-evalhub/pull/22) (merged `24066c6`,
+> approve @DongAnh2704), nhưng **không được ghi vào sổ hôm đó**. Phát hiện khi rà sổ ở D20:
+> `grep -c "DEC-D19" docs/decisions/` → **0**, trong khi `grep` toàn repo → **88 lần dẫn**. Một
+> quyết định được dẫn 88 lần mà không có mục nào định nghĩa nó là **nợ sổ**, không phải nợ việc.
+>
+> **Cả bảy là quyết định TỰ CHỐT** — từ 03/08 mentor không trả lời câu hỏi kiến trúc.
+
+| # | Quyết định | Lý do | PR / bằng chứng | Trạng thái |
+|---|---|---|---|---|
+| **DEC-D19-01** | *"Không tự tính lại"* = **cấm suy `cost` từ `tokens` × đơn giá**. **Cộng dồn** `cost` đã lưu **không** phải tính lại — nó là phép **đọc** | Hai nơi tính ra một giá trị thì ngày luật đổi một chỗ, không mặt nào biết mặt nào đúng. Nhưng đọc câu này thành *"cấm mọi phép toán trên cost"* là **ngõ cụt**: nó cấm luôn phép cộng, mà không cộng thì không có `Σcost` nào tồn tại. Ranh giới đúng: cấm **dẫn xuất**, cho phép **tổng hợp** | `run_report.py` · [evalhub#22](https://github.com/AI20K-VGR/agentcore-studio-evalhub/pull/22) merged `24066c6` | ✅ merged |
+| **DEC-D19-02** | `RunCost` + `run_cost_from_trace()` sống ở `studio_evalhub/run_report.py` — **không** thêm field vào `SmokeResult`, **không** đụng `contracts` | Thêm field vào `SmokeResult` là đổi shape một kiểu đã có consumer ngoài quadrant; đưa lên `contracts` là **4/4 chữ ký cho mỗi lần đổi shape**. Cả hai giá quá cao cho một đại lượng chỉ có **một** mặt đọc | `run_report.py` (`RunCost` frozen, thuần) · 0 diff chạm `packages/contracts/` trong D19 | ✅ merged |
+| **DEC-D19-03** | Luật cộng chốt cứng `round(sum, 6)`, hằng số `_COST_ROUND_NDIGITS = 6`, docstring trỏ thẳng `kb/src/studio_kb/cost.py` | Hai repo cộng cùng một đại lượng thì `ndigits` phải là **một hằng số dùng chung có tên**, không phải một con số lặp lại ở hai chỗ. Khai là **nợ có điều kiện lật** vì lúc chốt, neo phía kb còn trỏ **nhánh PR** `kb#22` | `run_report.py` (`_COST_ROUND_NDIGITS`) · mutation `ndigits 6→7` **DIE** (fixture `0.12345678` phân biệt được cả 5/6/7/8) | ✅ merged · ⚠️ **điều kiện lật đã THOẢ ở D20**: `kb#22` MERGED, `round(·,6)` có trên `kb origin/main` `cost.py:102`. Nhưng con trỏ `packages/kb` trong kit còn sau **13 commit** ⇒ workspace chưa thấy |
+| **DEC-D19-04** | Bất biến *"cùng-1-số"* khẳng định trên **giá trị `float` sau `round(·,6)`**, KHÔNG trên chuỗi in ra. Renderer in ít hơn 6 chữ số phải **ghi nhãn là bản rút gọn** | So chuỗi là so **cách trình bày**, không so **giá trị**: hai mặt cùng đúng vẫn khác chuỗi nếu một bên `.2f` một bên `.6f`, và hai mặt cùng sai vẫn khớp chuỗi nếu cả hai cùng cắt về `.2f` | bề mặt evalhub in `.6f` | ✅ merged |
+| **DEC-D19-05** | Bề mặt cost của evalhub **không bao giờ in một số `0` trần**. Hai trạng thái của số 0 phân biệt **trong chính output**, phân loại bằng điều kiện đo được trên `events` | *Chưa đo được* ≠ *đo được và bằng 0*. Cùng luật `DEC-D16-03` (`rate=None ≠ 0.0`) và `DEC-D12-02`, chỉ khác trục. Một `0.00` in ra đi thẳng vào báo cáo như một phép đo | `render_run_cost.py` · mutation `priced-drop-prompt` · `priced-drop-completion` · `priced (+ → -)` **DIE** bằng 2 test bất đối xứng chỉ-prompt / chỉ-completion | ✅ merged |
+| **DEC-D19-06** | Ô DoD *"cost cùng-1-số"* đóng ở **đường đọc**; phần **số thật** khai **KHÔNG đóng được**. Hai câu, không gộp | `interpreter.py:73` `_NO_COST = 0.0` ⇒ mọi cost trên đường thật là `0.0`. Đường đọc đúng **không** làm số đúng. Gộp hai câu thành *"cost-lineage xong"* là báo cáo thiếu | Điều kiện lật **hai vế cùng lúc**: `price_mismatches` **rỗng** trên một run golden thật **VÀ** `Σcost > 0` | ⚠️ **nửa đóng, giữ nguyên tới D20** · chủ vế số thật: **AIE-1** (`kit#121`) |
+| **DEC-D19-07** | Failure-mode list của **phía eval** (`docs/design-notes/aie2-day19-eval-failure-modes.md`), **không chép** danh sách của DE — chỉ những mode mà **bộ chấm** nhìn thấy và danh sách DE **không** nhìn thấy | Chép lại danh sách người khác là tạo ra một bản sao sẽ mục độc lập với bản gốc. Mỗi mode bắt buộc có neo `file:line` kiểm được | `docs/design-notes/aie2-day19-eval-failure-modes.md` (`E-1`…`E-8`) | ✅ merged |
+
+**Mutation D19:** battery vét cạn **75 mutant**, survivor `13 → 9` sau vá, suite `218 → 222 passed`.
+9 survivor còn lại **không còn lỗ thật**: 6 tương đương chứng minh được, 2 cận-biên miền không thật,
+1 nợ coverage đã ghi nhận (`amain not-in → in`).
+
+## D20 · 2026-08-14
+
+> **GATE-2.** Sáu quyết định. Bằng chứng là commit **local, CHƯA merge** tại thời điểm ghi — nhánh
+> `aie-2/d20-gate2-verdict` (evalhub) và `aie-2/d20-gate2-verdict-from-live-spine` (`apps/studio`).
+> Ghi trạng thái đúng lúc đọc thay vì viết sẵn *"merged"*.
+
+| # | Quyết định | Lý do | Bằng chứng | Trạng thái |
+|---|---|---|---|---|
+| **DEC-D20-01** | Chỗ nối GATE-2 sống ở **composition root** (`apps/studio/tests/`), **không** ở evalhub. Chỉ **thêm file test mới** — không sửa `src/studio_app/`, `eval_adapter.py`, `e2e_smoke_eval.py` | `.importlinter:18-21` xếp `studio_kb \| studio_engine \| studio_workbench \| studio_evalhub` **sibling cùng layer** ⇒ `studio_evalhub` **cấu trúc mà nói** không import được `PgKbSearch` hay `interpreter`. Phép nối cần cả ba trong **một tiến trình** ⇒ `studio_app` là chỗ **duy nhất** hợp lệ. Tiền lệ, không phải ngoại lệ mới: `test_spine_scored_from_postgres.py` sống ở đó từ **D7**, bút AIE-2, merge qua PR#2, **cùng lập luận**. `.importlinter` ràng buộc `src/`, **không quét `tests/`** | `apps/studio@b866bc2` · `19b7f4d` | ✅ quyết · ⏳ chưa merge |
+| **DEC-D20-02** | `recipe_hash` — evalhub **NHẬN** giá trị, tuyệt đối **không tự dẫn xuất**. `compute_scorecard(..., recipe_hash: str \| None = None)` keyword-only, additive, truyền thẳng | Băm **cái gì** chính là câu *"scorecard này chứng nhận cái gì"*, mà `Recipe` là **bút SWE** (`DEC-03`). Hai cạnh sắc **đo được**, không phải lo xa: (a) `Edge.from_` mang `Field(alias="from")` ⇒ `model_dump_json()` ra `{"from_":…}` còn `by_alias=True` ra `{"from":…}` — **hai chuỗi byte cho cùng một recipe**; (b) ngày `Recipe` thêm **một field tuỳ chọn**, mọi scorecard đã lưu **mất hiệu lực trong im lặng** — không lỗi, không cảnh báo. Cùng luật `DEC-D19-01` (*đọc, không tính lại*), khác trục | `evalhub@7684658` · bất biến **cưỡng chế** bằng `test_src_khong_tu_dan_xuat_recipe_hash` (quét AST cấm `hashlib`/`model_dump_json` trong `src/`) · mutation **M-G2 KILLED** | ✅ quyết · ⏳ chưa merge |
+| **DEC-D20-03** | Verdict `FAIL` từ run thật là **kết quả ĐÚNG**. **Không** hạ ngưỡng, **không** đổi fixture cho đẹp. Báo cáo bắt buộc **hai câu, không gộp** | Ba neo có trước hôm nay: `DEC-D17-04` (điều kiện lật ngưỡng đã đo, kết luận **KHÔNG ĐỔI**) · D11 `§4` (chiều lệch đúng của một hàng rào là **xuống**) · GUIDE-C `§3.2` (ngưỡng chốt **trước** dataset). Hạ số vào **đúng ngày gate** là hiệu chỉnh theo thứ mình muốn nhìn thấy | Đo: `success_rate=0.1667` · `citation_accuracy=0.2273` · `n_scored_citation=22` · `verdict=FAIL` · **120 row** `obs.trace_events`. Ngưỡng `0.9/0.95` **0 diff** | ✅ |
+| **DEC-D20-04** | Agreement báo **ba giá trị** (`rate` · `n_compared` · `lệch`) **+ một câu nói nó đo gì**; và khai thẳng đang ở nấc descope, **bằng SỐ** | Một `rate` trần không mẫu số là đúng thứ `kit#134` gọi là **bằng chứng dị dạng**. `rate=1.0` đọc một mình nghe như *"đồng thuận tuyệt đối trên golden-30"*, sự thật mẫu số là **10/30**. Và nó **không** phải human–machine agreement: `manual_label` trùng khít `expects_refusal` 10/10, mà `expects_refusal` **dẫn xuất từ chính dữ liệu golden** ⇒ nhãn tay không mang thông tin độc lập. Cái nó đo là **đồng thuận ngữ nghĩa hàng rào kb ↔ evalhub** — regression detector cho semantic drift | `evalhub@2640b9b` · mutation **M-G5 KILLED** · **FINDING:** đếm định tuyến judge trên run thật = **17/22**, plan dự đoán **0** ⇒ tiền đề *"selector cho một tập rỗng"* (dùng để **hoãn việc** ở D18) **chỉ đúng trên đường stub** | ✅ |
+| **DEC-D20-05** | `eval.scorecards` + `eval.golden_sets` thêm `tenant_id NOT NULL` + `ENABLE`/**`FORCE`** RLS **hôm nay**. Phạm vi: **chỉ** `schema.py` của evalhub | `kb#24` lật `eval.scorecards` sang **CẦN RLS**, tiêu chí là **bản chất data** không phải *ai đọc*: `harness.py:463` đổ `actual`/`expected` vào `results JSONB` ⇒ chứa **answer-text của tenant**. Land **trước** writer đầu tiên = một dòng DDL trên bảng rỗng; land **sau** = migration trên bảng nhiều tenant **cộng** một câu hỏi không trả lời được (*"dữ liệu đã ghi thuộc tenant nào"*). D20 là ngày `Scorecard` thật đầu tiên tồn tại ⇒ **ngày cuối món này còn rẻ** | `evalhub@3a7df0b` · 2/2 bảng `rls=t force=t` (đo bằng `pg_class`) · mutation **M-G6 KILLED** | ✅ quyết · ⏳ chưa merge · ⚠️ **TRỄ 4 ngày** so với hạn D16 mà D11 `§5` tự đặt |
+| **DEC-D20-06** | plan-vs-actual đối chiếu **D11 nguyên trạng** — không sửa design-note cho khớp thực tế — và **bắt buộc có dòng D11 SAI** | Một bảng chỉ có dòng đúng là một bảng **tự chấm**, không phải một đối chiếu. Và một plan-vs-actual chỉ chấm những gì plan cũ đã liệt kê thì **không đo được cái plan cũ bỏ sót** ⇒ bắt buộc có **bảng thứ năm** cho rủi ro D11 không nhìn thấy | `evalhub@4d9481a` — 5 bảng, **4 dòng đánh dấu D11 SAI**, 3/4 lệch **cùng một chiều: định giá quá cao ⇒ hoãn vô cớ** | ✅ |
+
+**Mutation D20: `M-G1`…`M-G6` — 6/6 KILLED, 0 survivor** ([`docs/mutations/gate2-d20.md`](../mutations/gate2-d20.md)).
+
+**Kết quả đáng ghi nhất của ngày, và nó là một phép đo chứ không phải một nhận xét:** dưới `M-G1`
+(`compute_scorecard` trả hằng `verdict="FAIL"`), **bài live VẪN XANH** — chỉ bài đối chứng runner-tốt
+đỏ. `FAIL` là giá trị **dễ trúng nhất**: mọi cài đặt hỏng đều ra `FAIL`. Nếu hôm nay chỉ làm đúng
+những gì ô DoD **chữ nghĩa** đòi (*"eval v1 ra verdict"*), ô đó đã **đóng bằng một hằng số**, suite
+vẫn xanh, và không ai biết. ⇒ Bài đối chứng không phải phần thêm; nó **là điều kiện** của ô.
+
+**3/6 mutant lộ ra lỗi trong bài test của chính mình, 0/6 lộ bug trong code sản phẩm** — nặng nhất là
+`match="verdict"` khớp vào `agent_id` mà `publish()` nội suy vào thông điệp, chứ không vào lý do chặn.
+
 ## Còn mở — chặn `FROZEN` thật sự
 
 | # | Nội dung | Chờ ai | Hạn |
