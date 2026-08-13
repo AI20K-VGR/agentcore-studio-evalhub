@@ -181,6 +181,47 @@ def test_conformance_luat_cong_round_6() -> None:
     assert ket_qua.event_count == 6, "Σcost không được in mà thiếu mẫu số (E-6, kit#134)"
 
 
+def test_luat_cong_ghim_ndigits_ca_HAI_phia() -> None:
+    """`_COST_ROUND_NDIGITS` phải bị ghim ở **cả hai chiều** — nhiều chữ số cũng sai như ít chữ số.
+
+    ## Vì sao cần bài này ngoài bài conformance ở trên
+
+    Bài trên dùng bộ số `0.011994...` và ghim `round(·, 6)`. Đo bằng mutation:
+
+        6 → 5 : 6 bài đỏ   ← chết
+        6 → 7 : 219 passed ← SỐNG
+        6 → 8 : 219 passed ← SỐNG
+
+    Hằng số bị canh **một phía**. Lý do: `round(0.011994000000000001, 8)` vẫn ra `0.011994` — giá trị
+    đó không có chữ số thập phân thứ 7 khác 0, nên tăng `ndigits` không đổi kết quả.
+
+    ## Vì sao đây không phải nit tùy chọn
+
+    Docstring của `_COST_ROUND_NDIGITS` khai thẳng rủi ro là *"không lint/type/test nào bắt được ngày
+    `kb` đổi `6` thành **`8`**"*. Tức trước bài này, hằng số **có cam kết canh kịch bản `6→8` mà
+    không có lưới nào đỏ khi nó thành `8`** — doc nói mạnh hơn test.
+
+    Hai đường xử: thêm bài, hoặc xoá câu trong docstring. Chọn thêm bài, vì cam kết đó **đúng** —
+    `round(·, 6)` là hằng số dùng chung với `kb/src/studio_kb/cost.py` và hai repo không import được
+    nhau, nên đây đúng là chỗ duy nhất có thể cưỡng chế được gì đó.
+
+    Phát hiện qua mutation vét cạn của @DongAnh2704 khi review `evalhub#22` (xếp mục B *"tùy chọn"*);
+    đo lại cho thấy nó chạm vào một cam kết đã ghi nên không tùy chọn.
+
+    ## Fixture — một số phân biệt được cả bốn `ndigits`
+
+        round(0.12345678, 5) = 0.12346
+        round(0.12345678, 6) = 0.123457     ← luật hiện hành
+        round(0.12345678, 7) = 0.1234568
+        round(0.12345678, 8) = 0.12345678
+
+    Bốn giá trị khác nhau ⇒ mọi mutation của `ndigits` đều đỏ, không chỉ chiều giảm.
+    """
+    ket_qua = run_cost_from_trace([_event(seq=1, cost=0.12345678, tokens=Tokens(prompt=1, completion=1))])
+
+    assert ket_qua.cost == 0.123457
+
+
 # ── 3 · fail-closed (kiểu lỗi riêng, không ValueError trần) ─────────────────────────────────────
 
 
@@ -251,6 +292,67 @@ def test_priced_false_khi_co_tokens_ma_cost_bang_0() -> None:
     assert ket_qua.priced is False
     assert ket_qua.cost == 0.0
     assert ket_qua.prompt_tokens + ket_qua.completion_tokens > 0
+
+
+def test_priced_false_khi_chi_co_prompt_token() -> None:
+    """`Σprompt > 0`, `Σcompletion == 0`, `Σcost == 0` ⇒ vẫn **chưa nối giá**, `priced is False`.
+
+    ## Đây là ca miền THẬT, không phải ca biên
+
+    Đo ở `engine` `origin/main` (`bfa19cc`, `executors.py:362-364`):
+
+        "tokens":  Tokens(prompt=len(prompt.split()), completion=len(answer.split())),
+        "refused": not citations,
+
+    `answer` rỗng ⇒ `len("".split()) == 0` ⇒ **`completion = 0`**. Và `answer` rỗng ⇒ không trích được
+    citation nào ⇒ **`refused = True`**. Tức `(prompt > 0, completion = 0)` chính là **nhánh từ-chối
+    với câu trả lời rỗng** — không phải một giá trị biên bịa ra cho test, mà là nhánh trung tâm của
+    bộ chấm này (D17 đo: 8/30 case golden là case từ-chối).
+
+    ## Lỗ nó bịt — finding review chéo của @DongAnh2704 (`evalhub#22`)
+
+    Mutation vét cạn tìm ra ba mutant sống qua **cả 219 bài**, cùng một gốc:
+
+        priced drop-completion   `prompt_tokens > 0`
+        priced drop-prompt       `completion_tokens > 0`
+        priced (+ → -)           `prompt_tokens - completion_tokens > 0`
+
+    Chúng sống vì **mọi** fixture `priced=False` trước đây có **cả hai** nửa token khác 0 (`37/12`,
+    `211/63`) — đối xứng nên nuốt câm việc mất một nửa. Bài này bất đối xứng theo đúng chiều còn
+    thiếu, và nó giết `drop-prompt` cùng `(+ → -)` phía dương.
+
+    Đây là nửa mà `DEC-D19-05` tự gọi là *"dễ mất nhất, hỏng đúng ngày emit nối giá"* — nên một
+    mutant sống ở đây không phải vệ sinh, nó là lỗ ở đúng chỗ đắt nhất.
+    """
+    ket_qua = run_cost_from_trace([_event(seq=1, cost=0.0, tokens=Tokens(prompt=100, completion=0))])
+
+    assert ket_qua.priced is False, "run có prompt token mà chưa áp giá vẫn là *chưa nối giá*"
+    assert ket_qua.prompt_tokens == 100
+    assert ket_qua.completion_tokens == 0
+
+
+def test_priced_false_khi_chi_co_completion_token() -> None:
+    """`Σprompt == 0`, `Σcompletion > 0`, `Σcost == 0` ⇒ `priced is False`.
+
+    ## Nói thẳng: bài này là VỆ SINH MUTATION, không phải ca miền tới được
+
+    Khác bài trên. `prompt` dựng từ câu hỏi + chunk đã truy xuất, nên `len(prompt.split()) == 0`
+    thực tế **không xảy ra** trong flow hiện tại — một run có completion mà không có prompt là trạng
+    thái không tới được.
+
+    Giữ nó vì nó là bài **duy nhất** giết mutant `priced drop-completion`
+    (`prompt_tokens > 0`): với fixture chỉ-prompt ở trên, mutant đó vẫn cho `priced=False` đúng, nên
+    không bị bắt. Cần đúng chiều còn lại mới bịt được.
+
+    Ghi rõ nhãn *vệ sinh* thay vì để trống, vì một bài canh trạng thái không tới được mà **trông
+    như** ca vận hành sẽ khiến người sau đọc sai miền đầu vào của hàm — và nếu ngày nào đó `prompt`
+    thật sự có thể bằng 0 thì đó là một thay đổi đáng phải nhận ra, không phải một bài test đã lo hộ.
+    """
+    ket_qua = run_cost_from_trace([_event(seq=1, cost=0.0, tokens=Tokens(prompt=0, completion=100))])
+
+    assert ket_qua.priced is False
+    assert ket_qua.prompt_tokens == 0
+    assert ket_qua.completion_tokens == 100
 
 
 def test_priced_true_khi_tokens_bang_0_la_do_that_bang_khong() -> None:
