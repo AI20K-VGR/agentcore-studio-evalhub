@@ -19,12 +19,37 @@ hỏng không nằm ở probe, nằm ở **bước từ "8/10" sang "80%"**.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from studio_contracts import Scorecard
 
 from studio_evalhub.harness import SmokeResult
 
+if TYPE_CHECKING:  # `run_report` import ngược lại module này ⇒ import thật sẽ thành vòng.
+    # Chỉ cần cho annotation: hàm chỉ **đọc thuộc tính** của `RunCost`, không dựng nó.
+    from studio_evalhub.run_report import RunCost
+
 _TODO = "todo:"
 _LABEL_W = 22
+
+_COST_DISPLAY_NDIGITS = 6
+"""Số chữ số thập phân của dòng cost — **bằng đúng** `_COST_ROUND_NDIGITS` của luật cộng.
+
+`DEC-D19-04` chốt phép so *"cùng-1-số"* là so `float` **sau `round(·, 6)`**, không so chuỗi in ra.
+Bề mặt này in đủ 6 chữ số nên chuỗi của nó **là** giá trị — không phải một bản rút gọn, và vì thế
+không cần nhãn rút gọn.
+
+Vì sao không in ít hơn: `f"{0.000291:<6.2f}"` → `"0.00  "`. Một run có cost thật in ra số 0.
+`DEC-D12-02` cấm in `0.00` cho ô **chưa đo**; đây là chiều ngược — in `0.00` cho ô **đã đo** — và
+hại ngang nhau vì người đọc nhận cùng một chuỗi (`E-1`, đang có thật ở
+`apps/studio/scripts/e2e_smoke_eval.py:250`)."""
+
+_WHY_COST_PRECISION = (
+    "* Vì sao cost in đủ 6 chữ số (DEC-D19-04): tầng so `cùng-1-số` là GIÁ TRỊ sau round(·,6), không "
+    "phải chuỗi in ra. Hai mặt in `0.0120` có thể mang hai số khác nhau (0.011994 vs "
+    "0.011994000000000001) mà nhìn giống hệt; in `.2f` thì một cost thật 0.000291 hiện thành `0.00`. "
+    "Bề mặt này không rút gọn nên chuỗi ở trên LÀ giá trị."
+)
 
 _WHY_EMPTY = (
     "Vì sao trống: chưa có golden-set thật (kit#88; golden-30 về D15–16, phải sinh SAU corpus "
@@ -95,6 +120,7 @@ def render_run_cases(
     run_id: str,
     golden_set_ref: str,
     trace_source: str,
+    run_cost: RunCost | None = None,
 ) -> str:
     """Bảng per-case với số **THẬT** của một run có thật — deliverable D15 (`kit#103`, dòng 🎯).
 
@@ -156,12 +182,46 @@ def render_run_cases(
             "citation (k/n thô)",
             _count_or_not_estimable(k_citation, n_citation) + "  — mẫu số đã loại refusal",
         ),
+    ]
+
+    if run_cost is not None:
+        lines += [
+            _row("cost (Σ, USD)", _cost_value(run_cost)),
+            _row("mẫu số cost", f"{run_cost.event_count} event"),
+        ]
+
+    lines += [
         rule,
         _FIXED_SET_CAVEAT,
         _WHY_RAW_COUNT,
         _WHY_NA,
     ]
+    if run_cost is not None:
+        lines.append(_WHY_COST_PRECISION)
     return "\n".join(lines)
+
+
+def _cost_value(run_cost: RunCost) -> str:
+    """Hai trạng thái của số 0, hai chuỗi khác nhau — `DEC-D19-05`.
+
+    | Trạng thái | Điều kiện | In ra |
+    |---|---|---|
+    | **chưa nối giá** | `Σcost == 0` **và** `Σtokens > 0` | `chưa-nối-giá (Σtokens=N, cost=0)` + chỗ đang tắc |
+    | **đã đo, bằng 0** | `Σcost == 0` **và** `Σtokens == 0` | `0.000000` |
+
+    Phân loại đã làm ở `run_cost_from_trace` (`priced`); ở đây chỉ **chọn chuỗi**, không quyết lại —
+    một renderer tự phân loại là nguồn sự thật thứ hai cho cùng một run (`DEC-D15-01`).
+
+    Nhánh *chưa nối giá* **phải** mang `Σtokens` và chỗ đang tắc: thiếu `Σtokens` thì người đọc không
+    phân biệt được với *"chưa chạy gì"*, thiếu chỗ tắc thì họ phải tự đi tìm chủ.
+    """
+    if not run_cost.priced:
+        tong_tokens = run_cost.prompt_tokens + run_cost.completion_tokens
+        return (
+            f"chưa-nối-giá (Σtokens={tong_tokens}, cost=0) — emit chưa áp giá "
+            "(engine:interpreter.py:438 `_NO_COST`); chặn ở kit#121 + Q-A (`cost_of` → contracts)"
+        )
+    return f"{run_cost.cost:.{_COST_DISPLAY_NDIGITS}f}"
 
 
 def _row(label: str, value: str) -> str:
