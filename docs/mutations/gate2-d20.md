@@ -153,15 +153,56 @@ chứ không được khẳng định.
 **Sau khi dọn sạch bytecode** (`find . -name "*.pyc" | wc -l` → từ **752** về **0**), gộp cả hai
 suite: **8/8 xanh**, và không tái hiện được nữa.
 
-**Giả thuyết CHƯA xác nhận:** `.pyc` cũ của `workbench@6badd84` — con trỏ workbench được bump lên
-`04ca988` **sáng nay** ở T0a, và `create_recipe_d4` là hàm nằm trong `builder.py` của chính repo đó.
-Bytecode cũ nạp lẫn với source mới cho ra một recipe thiếu khoá `section_roles`. Khớp hình với sự cố
-`.pyc` D19 (*state chạy ≠ state khai*), chỉ khác tầng: ở đó runtime lệch file, ở đây bytecode lệch
-commit.
+### ❌ Giả thuyết đầu tiên đã bị BÁC BỎ — ghi lại thay vì sửa lặng
 
-**Không tự sửa** — `test_eval_adapter.py` và `builder.py` đều ngoài lane AIE-2, và `DEC-D20-01` giới
-hạn AIE-2 ở **file test mới** trong `apps/studio`. Chủ: **AIE-1** (adapter/test) + **SWE**
-(`builder.py`). Điều kiện lật: tái hiện được với `__pycache__` sạch ⇒ là bug thật, không phải bytecode.
+**Bản đầu của mục này viết:** *"`.pyc` cũ của `workbench@6badd84` — con trỏ bump lên `04ca988` sáng
+nay, bytecode cũ nạp lẫn source mới cho ra recipe thiếu khoá `section_roles`."* Đo lại:
+
+```console
+$ git show 6badd84:src/studio_workbench/builder.py | grep -n "section_roles"
+216:                "section_roles": section_roles,     ← BẢN CŨ VẪN CÓ
+$ git show 04ca988:src/studio_workbench/builder.py | grep -c "section_roles"
+9
+```
+
+⇒ **cả hai bản `builder.py` đều có `section_roles` trong `node.params`.** Bytecode của `6badd84`
+không thể tạo ra `KeyError` đó. Giả thuyết **sai**, và nó sai theo kiểu dễ tin nhất: đúng *hình dạng*
+(bump con trỏ + `.pyc` cũ) nên nghe rất hợp lý, mà không ai kiểm cái tiền đề *"bản cũ thiếu khoá"*.
+
+### ✅ Nguyên nhân thật — và nó là một finding LIÊN REPO, không phải sự cố máy cá nhân
+
+`workbench#23` (**OPEN**, bút SWE — *"Day19/20 hardening: dọn `builder.py` params thừa"*) **bỏ**
+`tenant_id`/`section_roles` khỏi `node.params`:
+
+```diff
+-    section_roles = _parse_kb_scope(scope, t_id)
++    # trả về không còn cần đưa vào `node.params` nữa: `interpreter.run()` luôn ghi đè
++    # `tenant_id`/`section_roles` của node `kb-retrieve` bằng `session_context` (D8/D17, #111)
+-                "section_roles": section_roles,
+```
+
+Bytecode còn sót trên máy khớp **đúng shape của nhánh đó**, không phải của `6badd84` — đó là thứ tạo
+ra `KeyError`. Dọn `.pyc` xong thì hết.
+
+**Nhưng finding thật nằm ở chỗ khác, và nó chưa được ai xử:** `workbench#23` đã tự cập nhật test
+**trong repo của nó** (`tests/test_wiring_d4.py`: `assert "section_roles" not in n1.params`), nhưng
+`apps/studio/tests/test_eval_adapter.py` — **repo khác, bút AIE-1** — vẫn khẳng định chiều ngược lại:
+
+```python
+assert kb_node.params["section_roles"] == ["public", "finance"]   # :349
+```
+
+⇒ **Ngày `workbench#23` merge, hai bài của `apps/studio` đỏ**, và đỏ ở một repo mà PR đó không chạm
+tới nên CI của nó không thấy. Máy tôi hôm nay đã **xem trước** đúng lỗi đó qua bytecode sót.
+
+**Không tự sửa** — `test_eval_adapter.py` (AIE-1) và `builder.py` (SWE) đều ngoài lane AIE-2, và
+`DEC-D20-01` giới hạn AIE-2 ở **file test mới** trong `apps/studio`. Chủ: **SWE** (`workbench#23`) +
+**AIE-1** (test). Điều kiện lật: `workbench#23` merge **cùng lượt** với bản vá `test_eval_adapter.py`,
+hoặc PR đó khai rõ breaking-change liên repo.
+
+**Ảnh hưởng tới D20: không.** Hai bài test mới của D20 **không đọc `node.params`** — `_runner_tot`
+khoá theo `(query, tenant_id, tuple(case.section_roles))` lấy từ **`GoldenCase`**, và bài live đi qua
+`interpreter.run()` vốn ghi đè hai khoá đó từ `session_context`.
 
 **Ảnh hưởng tới evidence D20: không.** Mọi số của T3/T5 đã được **chạy lại sau khi dọn sạch 752 file
 `.pyc`**, với `PYTHONDONTWRITEBYTECODE=1`, và **trùng khít** bản đầu:
