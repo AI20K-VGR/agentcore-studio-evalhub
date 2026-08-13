@@ -60,6 +60,17 @@ CREATE TABLE IF NOT EXISTS eval.scorecards (
 
 -- Đường thứ hai cho DB đã tồn tại trước T6: `CREATE TABLE IF NOT EXISTS` ở trên là no-op trên bảng
 -- đã có, nên không có hai câu này thì cột chỉ xuất hiện ở fresh clone.
+--
+-- ⚠️ FAILURE MODE, cố ý KHÔNG vá hôm nay (finding review AIE-1, evalhub#23): `ADD COLUMN … NOT NULL`
+-- **không có `DEFAULT`** sẽ **raise** nếu bảng đã có row. Hôm nay rủi ro đo được = **0** — hai bảng
+-- này chưa có writer thật nào ngoài test (`grep -rn "INSERT INTO eval" */src` → rỗng; producer
+-- `recipe_hash` là `DEC-03`, chưa tồn tại). Land NOT NULL trần lúc bảng còn rỗng là đúng chỗ rẻ nhất.
+--
+-- Ngày có writer thật + môi trường nào đó đã có row: câu này **fail loud**, và đó là hành vi ĐÚNG —
+-- nó buộc người migrate trả lời *"row cũ thuộc tenant nào"* thay vì lấp bằng một `DEFAULT` bịa ra.
+-- Một `DEFAULT gen_random_uuid()` hay `DEFAULT '00000000-…'` ở đây sẽ gán tenant SAI cho dữ liệu
+-- thật mà không ai biết — đúng lớp lỗi `DEC-D20-05` viết ra để tránh. Đường vá đúng lúc đó là
+-- backfill có chủ đích, không phải nới DDL này.
 ALTER TABLE eval.golden_sets ADD COLUMN IF NOT EXISTS tenant_id UUID NOT NULL;
 ALTER TABLE eval.scorecards ADD COLUMN IF NOT EXISTS tenant_id UUID NOT NULL;
 
