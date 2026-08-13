@@ -471,6 +471,7 @@ class EvalHarness:
         threshold_success: float,
         threshold_citation_accuracy: float,
         judge: LLMJudge | None = None,
+        recipe_hash: str | None = None,
     ) -> Scorecard:
         """Chạy **mọi** case của `golden_set_ref` qua `agent_id` rồi trả `Scorecard` có verdict thật.
 
@@ -528,6 +529,26 @@ class EvalHarness:
         kênh đúng cho một tín hiệu vận hành, và một run tụt nấc mà trông y hệt run không tụt là một
         scorecard **nói dối về phương pháp của chính nó**.
 
+        ## `recipe_hash` — mắt GIỮA của đường ống, vá ở D20
+
+        `T2` mở đường nhận ở `compute_scorecard(recipe_hash=…)`, nhưng **đoạn này không xuyên nó qua**,
+        nên đường ống thật vẫn đứt:
+
+            routes/publish.py:105  EvalHarness().run(agent_id, golden_set_ref, …)   ← không có tham số
+                    ↓
+            harness.py             compute_scorecard(…)                            ← không truyền
+                    ↓
+            compute.py             recipe_hash: str | None = None                  ← T2 mở ở ĐÂY
+
+        Hệ quả đo được: caller **duy nhất** trên đường thật là `routes/publish.py`, và nó gọi
+        `EvalHarness.run` chứ không gọi thẳng `compute_scorecard` ⇒ kể cả khi có hash trong tay,
+        **không có đường nào đưa nó tới `Scorecard`**. Lỗ này là của chính T2: khoá bất biến ở
+        `compute_scorecard` rồi coi như xong, không kiểm caller thật.
+
+        Additive, keyword-only, default `None` ⇒ mọi call-site đang có không đổi một dòng. Và **truyền
+        thẳng**, không băm — `DEC-D20-02` giữ nguyên ở đây y như ở `compute_scorecard`: evalhub
+        **nhận** giá trị, tuyệt đối không tự dẫn xuất.
+
         **`CaseResult.judge` vẫn `None` kể cả với case đã qua judge** — hạn chế phải nói ra, không
         phải sơ suất: `Judge` (contract) đòi `agreement: float`, mà agreement là phép so với **nhãn
         tay** trên một **tập** kết quả (`DEC-D18-04`); `judge()` không nhận nhãn tay nên mọi số điền
@@ -570,6 +591,7 @@ class EvalHarness:
             threshold_success,
             threshold_citation_accuracy,
             scored_case_ids=scored_case_ids,
+            recipe_hash=recipe_hash,
         )
 
     async def run_smoke(
