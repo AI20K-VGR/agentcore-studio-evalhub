@@ -26,6 +26,7 @@ def compute_scorecard(
     threshold_citation_accuracy: float,
     *,
     scored_case_ids: Collection[str],
+    recipe_hash: str | None = None,
 ) -> Scorecard:
     """Gộp `results` (một phần tử/case) thành `Scorecard` + quyết `gate.verdict`.
 
@@ -55,6 +56,20 @@ def compute_scorecard(
 
     Caller **biết** nhánh vì nó cầm `GoldenCase`: `{c.case_id for c in golden.cases if not
     c.expects_refusal}`.
+
+    **`recipe_hash` — hàm này NHẬN, tuyệt đối không tự dẫn xuất** (`DEC-D20-02`). Additive,
+    keyword-only, default `None` ⇒ 11 call-site đang có không đổi một dòng, và không truyền vẫn ra
+    `None` y như trước.
+
+    Vì sao không tự băm, kể cả khi hai dòng là đủ: băm **cái gì** chính là câu *"scorecard này chứng
+    nhận cái gì"*, mà `Recipe` là bút SWE (`DEC-03`, quá hạn từ D12). Hai cạnh sắc đo được —
+    (a) `Edge.from_` mang `Field(alias="from")` ⇒ `model_dump_json()` và `model_dump_json(by_alias=
+    True)` cho **hai chuỗi byte khác nhau cho cùng một recipe**; (b) ngày `Recipe` thêm một field
+    tuỳ chọn, **mọi scorecard đã lưu mất hiệu lực trong im lặng**. Chọn ở đây là chọn thay bút khác.
+
+    Cùng luật với `DEC-D19-01` (*đọc, không tính lại*), khác trục. Bất biến được cưỡng chế bằng
+    `test_src_khong_tu_dan_xuat_recipe_hash` — quét AST cấm `hashlib`/`model_dump_json()` trong
+    `src/studio_evalhub/`, tức chặn cả vi phạm **tương lai**, không chỉ hôm nay.
 
     **Tử số và mẫu số lấy từ CÙNG một danh sách đã lọc** — `n_scored = len(scored)`, tuyệt đối không
     `len(scored_case_ids)`. Hai nguồn khác nhau cho hai vế của một phép chia là đúng chỗ một mutant
@@ -114,6 +129,8 @@ def compute_scorecard(
             threshold=GateThreshold(success=threshold_success, citation_accuracy=threshold_citation_accuracy),
             verdict="PASS" if (dat_success and dat_citation) else "FAIL",
         ),
-        # `recipe_hash` chưa có producer (`DEC-03`) ⇒ `None` là giá trị trung thực duy nhất hôm nay.
-        # Fail-closed nằm ở consumer publish, không ở đây.
+        # Truyền THẲNG giá trị caller đưa — không băm, không chuẩn hoá, không thay `None` bằng một
+        # chuỗi tự sinh. `DEC-03` vẫn chưa có producer, nên `None` (mặc định) vẫn là giá trị trung
+        # thực của mọi call-site hôm nay; fail-closed nằm ở consumer `publish.py:72`, không ở đây.
+        recipe_hash=recipe_hash,
     )
