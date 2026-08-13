@@ -184,9 +184,20 @@ không thể tạo ra `KeyError` đó. Giả thuyết **sai**, và nó sai theo 
 Bytecode còn sót trên máy khớp **đúng shape của nhánh đó**, không phải của `6badd84` — đó là thứ tạo
 ra `KeyError`. Dọn `.pyc` xong thì hết.
 
-**Nhưng finding thật nằm ở chỗ khác, và nó chưa được ai xử:** `workbench#23` đã tự cập nhật test
-**trong repo của nó** (`tests/test_wiring_d4.py`: `assert "section_roles" not in n1.params`), nhưng
-`apps/studio/tests/test_eval_adapter.py` — **repo khác, bút AIE-1** — vẫn khẳng định chiều ngược lại:
+**Đính chính thứ hai — món này ĐÃ CÓ CHỦ trước khi tôi viết dòng trên.** Bản đầu ghi *"finding liên
+repo chưa ai xử"*. Sai: `workbench#23` đã có review `CHANGES_REQUESTED` của AIE-2 lúc **`07:18:52Z`**,
+tức **trước** cả trả lời ask ① của SWE (`07:44`) lẫn ask ②/③ (`07:45`/`07:46`). Review đó đã bắt §1
+kèm số đo ba cấu hình, **cộng một mục nặng hơn mà phép đo ở đây không thấy**: bài
+`test_inv1_recipe_khai_tenant_khac_thi_session_thang` **mất răng** — mutant M3 (đẩy `**node.params`
+xuống *sau* hai override ⇒ client params thắng session) **chết** ở `04ca988` nhưng **SỐNG** ở
+`1b19a8c`, vì không còn params nào để mà "thắng". Hỏng mà vẫn xanh.
+
+Giữ mục dưới đây vì nó là **đường độc lập** dẫn tới cùng một chỗ — bytecode sót vô tình dựng lại
+đúng trạng thái sau-merge — nhưng công đầu và mức chặn thuộc về review kia, không thuộc phép đo này.
+
+`workbench#23` đã tự cập nhật test **trong repo của nó** (`tests/test_wiring_d4.py`:
+`assert "section_roles" not in n1.params`), nhưng `apps/studio/tests/test_eval_adapter.py` — **repo
+khác** — vẫn khẳng định chiều ngược lại:
 
 ```python
 assert kb_node.params["section_roles"] == ["public", "finance"]   # :349
