@@ -7,6 +7,7 @@ docstrings cho hợp đồng của từng seam.
 """
 
 from studio_evalhub.agent_runner import AgentAnswer, AgentRunner, CaseRun, StubAgentRunner
+from studio_evalhub.agreement import AgreementResult, agreement, nhan_tu_golden_set
 from studio_evalhub.compute import compute_scorecard
 from studio_evalhub.golden_case import GoldenCase, GoldenSet
 from studio_evalhub.golden_loader import load_golden_set
@@ -19,28 +20,53 @@ from studio_evalhub.harness import (
     score_case,
     tenant_scope_ok,
 )
-from studio_evalhub.judge import LLMJudge
-from studio_evalhub.render import render_scorecard
-from studio_evalhub.run_report import RunCost, run_cost_from_trace
+from studio_evalhub.judge import JudgeUnavailable, JudgeUnavailableReason, LLMJudge
+from studio_evalhub.render import render_run_cases, render_scorecard
+from studio_evalhub.run_report import (
+    TRACE_SOURCE_POSTGRES,
+    RunCost,
+    RunCostError,
+    TraceAnswerError,
+    answer_from_trace,
+    list_runs,
+    read_run,
+    run_cost_from_trace,
+    score_run_from_trace,
+)
+from studio_evalhub.schema import ddl
 
 __all__ = [
+    "TRACE_SOURCE_POSTGRES",
     "AgentAnswer",
     "AgentRunner",
+    "AgreementResult",
     "CaseRun",
     "EvalHarness",
     "GoldenCase",
     "GoldenSet",
+    "JudgeUnavailable",
+    "JudgeUnavailableReason",
     "LLMJudge",
+    "RetrievedChunk",
     "RunCost",
+    "RunCostError",
     "SmokeResult",
     "StubAgentRunner",
-    "RetrievedChunk",
+    "TraceAnswerError",
+    "agreement",
+    "answer_from_trace",
     "chunks_from_trace",
     "citations_from_trace",
     "compute_scorecard",
+    "ddl",
+    "list_runs",
     "load_golden_set",
+    "nhan_tu_golden_set",
+    "read_run",
+    "render_run_cases",
     "render_scorecard",
     "run_cost_from_trace",
     "score_case",
+    "score_run_from_trace",
     "tenant_scope_ok",
 ]
