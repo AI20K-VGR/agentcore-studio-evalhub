@@ -108,6 +108,41 @@ def test_tokens_khong_he_tham_gia_vao_con_so_cost() -> None:
     assert run_cost_from_trace(it_token).cost == run_cost_from_trace(nhieu_token).cost == 0.75
 
 
+def test_prompt_va_completion_khong_bi_hoan_vi() -> None:
+    """`prompt_tokens` và `completion_tokens` phải về **đúng field của nó**.
+
+    ## Finding của người ngoài, không phải của tôi
+
+    @DongAnh2704 gieo mutation chéo khi review `evalhub#22` và tìm ra: hoán vị hai dòng
+
+        prompt_tokens     = sum(e.tokens.prompt ...)
+        completion_tokens = sum(e.tokens.completion ...)
+
+    thì **toàn bộ 218 bài vẫn xanh**. Đã gieo lại độc lập để xác nhận thay vì tin bảng — mutant
+    **SỐNG** thật.
+
+    Lý do lưới hụt, và nó đúng lớp lỗi PR này lấy làm luận đề: hai field chỉ lộ ra dưới dạng
+    **tổng** (`Σtokens` ở renderer), còn chỗ duy nhất assert riêng từng field —
+    `test_cost_doc_tu_trace_khong_tinh_lai_tu_tokens` — lại dùng fixture `1000/1000`. **Đối xứng
+    nên nuốt câm hoán vị.** Cùng họ với bốn lần xanh-giả khác của ngày: bài xanh vì thứ nó đi tìm
+    tình cờ trùng ở chỗ khác.
+
+    Đáng vá chứ không phải nit thẩm mỹ: `RunCost` là **export công khai**, và `DEC-D19-02` lấy
+    *"tên field khớp `RunCost` của `kb#22` nên review chéo nhận ra ngay"* làm lý lẽ. Field bị chéo
+    đúng là loại **lệch âm thầm** mà lý lẽ đó sinh ra để chặn.
+
+    Fixture **bất đối xứng** `37/12` — cùng kỹ thuật `DEC-D19-01` dùng khắp bộ này: một cặp số mà
+    hoán vị cho ra kết quả khác.
+    """
+    ket_qua = run_cost_from_trace([_event(seq=1, cost=0.5, tokens=Tokens(prompt=37, completion=12))])
+
+    assert ket_qua.prompt_tokens == 37
+    assert ket_qua.completion_tokens == 12
+
+    # Đối chứng: tổng vẫn đúng ở CẢ HAI chiều, nên một bài chỉ assert tổng không thay được bài này.
+    assert ket_qua.prompt_tokens + ket_qua.completion_tokens == 49
+
+
 # ── 2 · conformance luật cộng (DEC-D19-03) ──────────────────────────────────────────────────────
 
 
