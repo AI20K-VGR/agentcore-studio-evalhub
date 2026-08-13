@@ -151,6 +151,61 @@ bao giờ là một phép kiểm** — phải neo vào **dòng** hoặc **vị t
 giá trị ⇒ chuỗi phải đổi). Điều này áp thẳng vào lớp **C** của T4 (*"output UI-test thật sự chứa giá
 trị đó"*), nơi cám dỗ viết `assert str(cost) in out` là lớn nhất.
 
-## §5 · Kết quả — T4
+## §5 · Kết quả — T4 (bài "cùng-1-số" ba lớp, cần Postgres)
 
-Chưa chạy. `M-C7` khai ở §1, kết quả điền khi T4 chạy.
+Baseline: `203 → 210 passed` (có DB; 6 bài T4 + 1 bài DB cũ hết skip). Không DB: `203 passed,
+7 skipped`.
+
+| # | Mutation áp vào `tests/test_cost_cung_1_so.py` | Dự đoán | **Thực tế** | Kết quả |
+|---|---|---|---|---|
+| `M-C7` | `_mat_B_sql_tho` → `run_cost_from_trace(await read_run(...)).cost` | bài đối trọng T4 | **lượt 1: SỐNG** · lượt 2 (sau vá bài): 1 bài | **SURVIVED → DIE** |
+
+Bài giết (sau vá): `test_doi_trong_mat_B_KHONG_di_qua_code_evalhub`.
+
+### `M-C7` SỐNG ở lượt gieo đầu — và đó chính là việc nó sinh ra để làm
+
+Plan viết về `M-C7`: *"nếu `M-C7` **sống**, finding gửi DE ở T1 tự động áp cho chính mình"*. Nó đã
+sống thật, ở lượt gieo đầu, với **5/5 bài xanh**.
+
+Bài đối trọng bản đầu dựng theo hình plan gợi ý (*"sửa một `cost` ở một mặt rồi khẳng định bài chính
+đỏ"*):
+
+```text
+1. A đọc events vào RAM              → A = 0.011994
+2. UPDATE obs.trace_events (e1)      → DB nay mang 1.011994
+3. B = SQL thô                       → 1.011994
+4. assert A != B                     → xanh ✅
+```
+
+Gieo `M-C7` ⇒ `_mat_B_sql_tho` thành `run_cost_from_trace(await read_run(...))` — bản thay thế
+**cũng đọc lại DB**, nên cũng thấy `1.011994` ⇒ `A != B` vẫn đúng ⇒ **mutant sống**.
+
+**Chẩn đoán:** phép thử đó đo *"B có đọc lại DB không"*, trong khi bất biến cần đo là *"B có đi qua
+code `studio_evalhub` không"*. Hai câu khác nhau, và chỉ câu thứ hai mới làm bài "cùng-1-số" hết
+vacuous. Một bài đối trọng đo nhầm câu là **đúng lớp lỗi** mà `M-C7` được khai để bắt.
+
+**Vá:** bẻ chính đường đọc evalhub trong module test (`monkeypatch.setitem(globals(), ...)`) rồi
+khẳng định mặt B **không đổi**:
+
+- B thật sự độc lập (SQL thô + `sum` của Postgres) ⇒ không đổi ⇒ vẫn ra `0.011994` ⇒ xanh;
+- B đi qua `run_cost_from_trace` (`M-C7`) ⇒ nhận giá trị đã bẻ ⇒ **đỏ**.
+
+Gieo lại ⇒ **DIE**.
+
+Bài cũ **giữ lại**, đổi tên thành `test_doi_trong_phep_so_do_duoc_khi_DB_doi` và ghi rõ nó **không**
+giết `M-C7`. Nó canh một bất biến khác — *phép so có răng* — và tách bạch hai bất biến vào hai bài
+thay vì gộp, vì gộp là cách nhanh nhất để mất một trong hai.
+
+### Tổng kết bốn lượt mutation của ngày
+
+`M-C1…M-C5` (T2) chết ngay lượt đầu. `M-C6` (T3) và `M-C7` (T4) **đều phải gieo hai lượt**, và cả
+hai lần lý do giống nhau: **bài test đo nhầm thứ nó tưởng nó đo**.
+
+| Mutant | Lượt 1 | Bệnh của bài | Lượt 2 |
+|---|---|---|---|
+| `M-C6` | giết 1/3 bài đáng lẽ phải đỏ | `assert <chuỗi> in out` khớp nhầm khối caveat tự viết | 3 bài, DIE |
+| `M-C7` | **SỐNG** | bài đối trọng đo *"B có đọc lại DB"* thay vì *"B có đi qua code evalhub"* | 1 bài, DIE |
+
+Cả hai chỉ lộ ra vì mutant được **gieo thật**. Suite xanh ở baseline không nói gì về chuyện này —
+đúng câu §0: việc của mutation hôm nay không phải chứng minh test có chạy, mà chứng minh test **có
+thể đỏ**.
