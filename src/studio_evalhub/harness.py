@@ -500,8 +500,23 @@ class EvalHarness:
         *"subjective (non-exact-match) cases"*, và mô tả của chính lớp này *"exact-match cases score
         directly"*).
 
-        Hệ quả đo được: golden-30 với runner tốt ⇒ **0 case** đi qua judge, khớp phép đo *"0/30 case
-        cần judge"* của nền D18. **Không** có selector production nào được dựng cho một tập rỗng.
+        **Số case đi qua judge phụ thuộc RUNNER, và đoạn này từng khai thiếu vế đó** (sửa D20, finding
+        của DE trên `kit#125`). Hai phép đo, cả hai đúng, khác nhau ở runner:
+
+        | Runner | Case đi judge | Đo ở |
+        |---|---|---|
+        | `StubAgentRunner` sinh từ chính golden-set (đúng **theo định nghĩa**) | **0/30** | nền D18 |
+        | `ExtractiveFakeLLM` qua engine thật + `PgKbSearch` + Postgres | **17/22** nhánh trả-lời | D20 `DEC-D20-04` |
+
+        Bản trước chỉ ghi vế đầu kèm kết luận *"không có selector production nào được dựng cho một tập
+        rỗng"* — và câu đó **đã được dùng làm căn cứ hoãn việc**. Nó **chỉ đúng trên đường stub**: trên
+        đường thật tập đó có **17 phần tử**, và cả 17 hôm nay bị tính `success=False` mà bộ chấm
+        exact-match **không kết luận được** — nó chỉ biết *"không khớp chuỗi"*, không biết *"sai"*.
+
+        Con số `17` **không** nói judge sẽ cứu được bao nhiêu case (`ExtractiveFakeLLM` trả câu canned
+        nên phần lớn nhiều khả năng vẫn sai). Nó nói đúng một điều: **mẫu số của quyết định descope là
+        17, không phải 0.** Điều kiện lật để đo lại: một LLM **sinh prose thật, không biết trước nhãn**,
+        trên ≥30 case — cùng điều kiện lật của `DEC-D17-04`.
 
         **Judge chỉ được hỏi ở nhánh trả-lời-được.** Nhánh từ-chối chấm bằng luật hàng rào (`refused`
         + `no_leak`), không bằng so khớp văn bản — không có gì *subjective* để hỏi, và hỏi LLM ở đó là

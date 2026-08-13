@@ -60,6 +60,29 @@ CREATE TABLE IF NOT EXISTS eval.scorecards (
 
 -- Đường thứ hai cho DB đã tồn tại trước T6: `CREATE TABLE IF NOT EXISTS` ở trên là no-op trên bảng
 -- đã có, nên không có hai câu này thì cột chỉ xuất hiện ở fresh clone.
+--
+-- ⚠️ FAILURE MODE, cố ý KHÔNG vá hôm nay (finding review AIE-1, evalhub#23): `ADD COLUMN … NOT NULL`
+-- **không có `DEFAULT`** sẽ **raise** nếu bảng đã có row. Hôm nay rủi ro đo được = **0** — hai bảng
+-- này chưa có writer thật nào ngoài test, và `recipe_hash` (`DEC-03`) chưa tồn tại. Land NOT NULL
+-- trần lúc bảng còn rỗng là đúng chỗ rẻ nhất.
+--
+-- Kiểm lại từ **gốc kit**, và đọc kết quả cho đúng (finding review DE, evalhub#24):
+--
+--     grep -rn "INSERT INTO eval" packages/*/src apps/*/src
+--
+-- Kết quả sạch = **đúng 1 hit, và hit đó là CHÍNH DÒNG NÀY**. Nhiều hơn 1 ⇒ đã có writer thật ⇒
+-- `ADD COLUMN … NOT NULL` bên dưới không còn an toàn trên môi trường có dữ liệu.
+--
+-- Bản trước viết `*/src` — **glob 1 cấp, không với tới `packages/*/src`** (sâu 2 cấp) nên nó trả
+-- rỗng vì **hụt đường dẫn**, không vì "không có writer", và sẽ **vẫn rỗng kể cả sau khi có writer
+-- thật**. Một lệnh verify chỉ-trông-có-vẻ-verify thì tệ hơn không có lệnh nào: nó mời người sau tin
+-- vào một phép đo không chạy. Đúng lớp lỗi mà chính commit kia đang vá ở premise judge-routing.
+--
+-- Ngày có writer thật + môi trường nào đó đã có row: câu này **fail loud**, và đó là hành vi ĐÚNG —
+-- nó buộc người migrate trả lời *"row cũ thuộc tenant nào"* thay vì lấp bằng một `DEFAULT` bịa ra.
+-- Một `DEFAULT gen_random_uuid()` hay `DEFAULT '00000000-…'` ở đây sẽ gán tenant SAI cho dữ liệu
+-- thật mà không ai biết — đúng lớp lỗi `DEC-D20-05` viết ra để tránh. Đường vá đúng lúc đó là
+-- backfill có chủ đích, không phải nới DDL này.
 ALTER TABLE eval.golden_sets ADD COLUMN IF NOT EXISTS tenant_id UUID NOT NULL;
 ALTER TABLE eval.scorecards ADD COLUMN IF NOT EXISTS tenant_id UUID NOT NULL;
 
