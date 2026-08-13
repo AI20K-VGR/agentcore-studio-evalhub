@@ -21,9 +21,23 @@ bằng số ở trace"* sẽ xanh khi mặt đọc **đọc đúng**, xanh khi n
 
 ## §1 · Bảy mutant khai TRƯỚC khi viết bài test nào
 
-Bảng này được viết **trước** commit test đầu tiên của D19. Thứ tự đó là điều kiện để con số có
-nghĩa — một bộ mutant viết sau khi nhìn test là bộ mutant kiểm lại danh sách của chính người viết
-(luật rút từ D17 §1).
+Thứ tự khai-trước là điều kiện để con số có nghĩa: một bộ mutant viết **sau** khi nhìn test là bộ
+mutant kiểm lại danh sách của chính người viết (luật rút từ D17 §1).
+
+**Và thứ tự đó phải kiểm được từ repo, không phải tin lời người viết.** Bảng dưới đây khai ở
+`docs/plans/day-19-aie2.md` §T7a — một artifact **riêng**, land ở commit `e8c74f4`, trước mọi commit
+mang test:
+
+```bash
+git log -1 --format='%ad %h' --date=format:'%H:%M:%S' e8c74f4   # 00:07:43  plan (bảng M-C1…M-C7)
+git log -1 --format='%ad %h' --date=format:'%H:%M:%S' 2f55d67   # 00:35:05  commit test đầu tiên
+git show e8c74f4:docs/plans/day-19-aie2.md | grep -c '^| `M-C'  # 7
+```
+
+*(Bản trước của dòng này viết "bảng này được viết trước commit test đầu tiên" và trỏ vào **chính file
+sổ** — mà sổ với test nằm **cùng một commit** `2f55d67`, nên câu đó không kiểm được từ repo. Sửa ở
+T7a khi rà lại; ghi cả vết sửa vì một sổ mutation mà chính nó không kiểm được là đúng lớp lỗi nó
+sinh ra để bắt.)*
 
 | # | Mutation | Bất biến nó canh | Bài **dự đoán** đỏ | Chạy ở |
 |---|---|---|---|---|
