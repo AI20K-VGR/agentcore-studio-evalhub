@@ -13,7 +13,7 @@ buộc**: khác 0, bất đối xứng, và `cost` **mâu thuẫn có chủ đí
 ghi bằng chính sink apps/studio (PgTraceWriter)  ──▶  obs.trace_events
               ┌───────────────────────────────────────┼──────────────────────────────┐
               ▼                                       ▼                              ▼
- A: run_cost_from_trace(read_run(...))   B: SELECT round(sum(cost),6)     C: render_run_cases(...)
+ A: run_cost_from_trace(read_run_unscoped(...))   B: SELECT round(sum(cost),6)     C: render_run_cases(...)
     đường đọc evalhub, qua _row_to_event    SQL thô, KHÔNG qua code mình     chuỗi UI-test in ra
 ```
 
@@ -45,7 +45,7 @@ from studio_contracts.nodes import NodeType
 from studio_contracts.trace import Tokens, TraceEvent
 from studio_evalhub.harness import SmokeResult
 from studio_evalhub.render import render_run_cases
-from studio_evalhub.run_report import TRACE_SOURCE_POSTGRES, read_run, run_cost_from_trace
+from studio_evalhub.run_report import TRACE_SOURCE_POSTGRES, read_run_unscoped, run_cost_from_trace
 
 _RUN_ID = "run-d19-cung-1-so"
 _TENANT = UUID("a0000000-0000-0000-0000-000000000001")
@@ -160,8 +160,8 @@ async def test_cost_cung_1_so_ba_lop_A_B_C(admin_pool: Pool, pool: Pool) -> None
     del admin_pool  # thứ tự thôi — schema/grant phải có trước DML của app-role
     await _ghi_trace(pool)
 
-    # A — đường đọc evalhub, qua read_run → _row_to_event (NUMERIC → Decimal → float)
-    events = await read_run(pool, _RUN_ID)
+    # A — đường đọc evalhub, qua read_run_unscoped → _row_to_event (NUMERIC → Decimal → float)
+    events = await read_run_unscoped(pool, _RUN_ID)
     mat_a = run_cost_from_trace(events)
 
     # B — SQL thô, đường độc lập
@@ -195,7 +195,7 @@ async def test_lop_C_doi_chung_am_doi_so_thi_chuoi_phai_doi(admin_pool: Pool, po
     """
     del admin_pool
     await _ghi_trace(pool)
-    events = await read_run(pool, _RUN_ID)
+    events = await read_run_unscoped(pool, _RUN_ID)
     mat_a = run_cost_from_trace(events)
 
     khac = render_run_cases(
@@ -221,7 +221,7 @@ async def test_doi_trong_mat_B_KHONG_di_qua_code_evalhub(
     ## Bản đầu của bài này KHÔNG giết được `M-C7`, giữ vết vì đó là bài học
 
     Bản đầu dựng theo kiểu: A đọc `events` vào RAM, `UPDATE` DB sau lưng nó, rồi khẳng định
-    `A ≠ B`. Gieo `M-C7` (`_mat_B_sql_tho` → `run_cost_from_trace(await read_run(...))`) ⇒ mutant
+    `A ≠ B`. Gieo `M-C7` (`_mat_B_sql_tho` → `run_cost_from_trace(await read_run_unscoped(...))`) ⇒ mutant
     **SỐNG**, vì bản thay thế cũng **đọc lại DB** nên cũng thấy giá trị mới ⇒ `A ≠ B` vẫn đúng.
 
     Phép thử đó đo *"B có đọc lại DB không"*, trong khi bất biến cần đo là *"B có đi qua code
@@ -269,7 +269,7 @@ async def test_doi_trong_phep_so_do_duoc_khi_DB_doi(admin_pool: Pool, pool: Pool
     del admin_pool
     await _ghi_trace(pool)
 
-    events = await read_run(pool, _RUN_ID)
+    events = await read_run_unscoped(pool, _RUN_ID)
     mat_a = run_cost_from_trace(events)
     assert mat_a.cost == _TONG_KY_VONG
 
@@ -297,7 +297,7 @@ async def test_doi_trong_lop_C_bat_duoc_render_lam_tron_mat(admin_pool: Pool, po
     """
     del admin_pool
     await _ghi_trace(pool)
-    events = await read_run(pool, _RUN_ID)
+    events = await read_run_unscoped(pool, _RUN_ID)
     mat_a = run_cost_from_trace(events)
 
     dong = _dong_cost(
@@ -351,7 +351,7 @@ async def test_trace_THAT_hom_nay_cho_ra_chua_noi_gia_chu_khong_phai_do_that_ban
             )
         )
 
-    ket_qua = run_cost_from_trace(await read_run(pool, run_id))
+    ket_qua = run_cost_from_trace(await read_run_unscoped(pool, run_id))
     dong = _dong_cost(
         render_run_cases(
             _results(),

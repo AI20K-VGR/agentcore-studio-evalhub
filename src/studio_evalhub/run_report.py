@@ -408,7 +408,7 @@ def _row_to_event(row: tuple[Any, ...]) -> TraceEvent:
     )
 
 
-async def read_run(pool: Pool, run_id: str) -> list[TraceEvent]:
+async def read_run_unscoped(pool: Pool, run_id: str) -> list[TraceEvent]:
     """Mọi event của `run_id`, xếp theo `(ts, event_id)` như `studio_kb.trace_reader` làm.
 
     Khác `PgTraceReader.read_run`, hàm này **không** lọc `tenant_id`: nó là công cụ **đọc lại một run
@@ -420,6 +420,13 @@ async def read_run(pool: Pool, run_id: str) -> list[TraceEvent]:
 
     `run_id` không tồn tại ⇒ `[]`, không raise: rỗng là câu trả lời hợp lệ. Caller quyết nó có nghĩa
     gì — `answer_from_trace` sẽ raise ngay sau đó, đúng chỗ.
+
+    **Hậu tố `_unscoped` (§7 mục 5, thẩm định VinSOC `kit#129`).** Tên cũ là `read_run` — trơn, và
+    trơn thì chỗ gọi thiếu `tenant_scope_ok` trông y như chỗ gọi đủ. Thẩm định giữ nguyên **cách**
+    kiểm (Won't Fix as designed) nhưng nói thẳng chỗ yếu: *"hàm này quả thật không tự bảo vệ được —
+    nó dựa vào bên gọi nhớ gọi `tenant_scope_ok`. Đó là hợp đồng bằng lời, không phải bằng mã."* Hậu
+    tố trả lời phần "bằng lời"; phần "bằng mã" là `tests/test_unscoped_reader_naming.py`, bài chặn
+    coroutine đọc `obs.trace_events` không lọc tenant mà tên không tự khai.
     """
     async with pool.connection() as conn:
         cursor = await conn.execute(_READ_RUN, (run_id,))
@@ -427,8 +434,19 @@ async def read_run(pool: Pool, run_id: str) -> list[TraceEvent]:
     return [_row_to_event(row) for row in rows]
 
 
-async def list_runs(pool: Pool) -> list[tuple[str, int]]:
-    """`(run_id, số event)` của mọi run trong bảng, cũ nhất trước — để `--list` chỉ ra chạy cái nào."""
+async def list_runs_all_tenants(pool: Pool) -> list[tuple[str, int]]:
+    """`(run_id, số event)` của **mọi** run trong bảng, cũ nhất trước — để `--list` chỉ ra chạy cái nào.
+
+    **Hậu tố `_all_tenants` (§7 mục 4, thẩm định VinSOC `kit#129`, AV-203742).** Tên cũ `list_runs`
+    không nói ra rằng nó vượt qua mọi tenant. Bộ quét tự ghi nhận *"giảm nhẹ do cần quyền truy cập cục
+    bộ"* — đúng: chỉ chạy qua cờ `--list`, cần chuỗi kết nối DB, và người đã có chuỗi đó thì đọc được
+    cả CSDL bằng `psql`. Nên đây không phải lỗ hổng khai thác được. Nhưng thẩm định gọi đúng tên vấn
+    đề: **"một hàm không lọc tenant là một hàm chờ bị dùng nhầm chỗ"** — hôm nay sau cờ `--list`, ngày
+    mai ai đó thấy tiện và gọi từ một route. Hậu tố làm chuyện đó phải xảy ra một cách có ý thức.
+
+    `_all_tenants` chứ không phải `_unscoped`: hàm này **cố ý** vượt mọi tenant (đó là việc của
+    `--list`), khác `read_run_unscoped` là "không lọc gì vì lọc ở tầng khác".
+    """
     async with pool.connection() as conn:
         cursor = await conn.execute(_LIST_RUNS)
         return [(row[0], row[1]) for row in await cursor.fetchall()]
@@ -473,7 +491,7 @@ async def _amain(argv: list[str] | None = None) -> int:
     await pool.open(wait=True)
     try:
         if args.list:
-            for run_id, n in await list_runs(pool):
+            for run_id, n in await list_runs_all_tenants(pool):
                 print(f"{run_id}\t{n} event")
             return 0
 
@@ -491,7 +509,7 @@ async def _amain(argv: list[str] | None = None) -> int:
             # nhân đôi ⇒ Σcost nhân đôi — đúng `F-3` (replay double-count) trong failure-mode list
             # của DE, chỉ khác là ở đây nó sinh ra từ chính vòng lặp CLI chứ không từ replay.
             if run_id not in events_by_run:
-                events_by_run[run_id] = await read_run(pool, run_id)
+                events_by_run[run_id] = await read_run_unscoped(pool, run_id)
             results.append(score_run_from_trace(_case_by_id(case_id), events_by_run[run_id]))
             run_ids.append(run_id)
     finally:
@@ -513,7 +531,7 @@ def _run_cost_cho_cli(events_by_run: dict[str, list[TraceEvent]]) -> RunCost | N
     """Cost của bảng CLI — chỉ khi lệnh nói về **đúng một** run.
 
     Đây là chỗ bề mặt UI-test đọc số từ **trace đã bền hoá trong Postgres**, không từ RAM: `events`
-    đi qua `read_run` → `_row_to_event` (`NUMERIC → Decimal → float`), tức cùng đường mà một người
+    đi qua `read_run_unscoped` → `_row_to_event` (`NUMERIC → Decimal → float`), tức cùng đường mà một người
     khác đọc lại run của mình ngày mai sẽ đi.
 
     **Nhiều run trong một lệnh ⇒ `None`, không phải một tổng gộp.** `RunCost` là cost **của một
