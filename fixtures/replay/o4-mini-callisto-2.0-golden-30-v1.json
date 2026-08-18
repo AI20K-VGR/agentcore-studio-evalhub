@@ -1,0 +1,288 @@
+{
+  "calls": {
+    "0b7d05a36dd842a01ab02e4c925832c1a4ff05dde83db61f4eeb5ae4600bf0dc": {
+      "response": "FAIL"
+    },
+    "0bf7cb6e138347ee479fc70994450e3c23264884bbcad2761f467182b29401ca": {
+      "response": "50 triệu VNĐ"
+    },
+    "0fb2551626b8cf7d6338a246db2bd9fd30223150966544726968a4c1d40e46f1": {
+      "response": "Nhân viên được nghỉ 3 ngày (từ 1 đến 3/9). [borea-public-holidays#c2]"
+    },
+    "15e85b74645173baf5042515668d1253073abe578c1453df3b529df3597ade6f": {
+      "response": "Lương được trả vào ngày 5 hằng tháng [ankor-hr-payroll#c2]."
+    },
+    "18abffeec65d34efd306f93177afcafec7ac929ca1adfc60cf50a050de8feadd": {
+      "response": "FAIL"
+    },
+    "1cbefa2abaec37b482e91f7e041faabb46f597a03564fc8bff9112c858c6bc5c": {
+      "response": "10.000.000 VNĐ"
+    },
+    "1d787c557d6607d2e2af91c9d62596fe6107a33ebce4244604f425f454b9a35e": {
+      "response": "15 phút"
+    },
+    "1ea1c2bb2b0949e53629e6bd0a7b1175dd7f1519bdd2eccfc1450ff521a228cd": {
+      "response": "Phụ cấp trực on-call ngày thường là 1.500.000 VNĐ/tuần [ankor-engineering-oncall#c3]."
+    },
+    "2202eb444555db5102f506ccb7f005b7ee80b27b74a0d8b2945bdabaf3557b59": {
+      "response": "PASS"
+    },
+    "283fe8a13a479f716fdd998a7d776bcb8a8b9bea74c85b921f3caef8e1686520": {
+      "response": "12 ngày"
+    },
+    "2ab62a34dcb67d37545f5a29daef9a629814382aa7c86876f63dcbb228e16a6c": {
+      "response": "FAIL"
+    },
+    "2ba6ac0db55745d1fcf4eb8d3eba4aeca8cfe0ef306eb43cfb0e3ec3c56c394e": {
+      "response": "FAIL"
+    },
+    "2d4b5b30a619cab81d91863a72a107c3020b93a4af28cc0d8c3b2b38cee7148c": {
+      "response": "1.500.000 VNĐ/tuần [ankor-engineering-oncall#c3]"
+    },
+    "2e1059edfc8abb67c5df94e63d252600fd3d7f6bbb0a7f7879f44f0e8bb51163": {
+      "response": "15 ngày [borea-hr-leave#c1]"
+    },
+    "2e1c4e1c76c0c33fcd01dfc220048e4beb7b1444179b2f30539d9b20c1ffa419": {
+      "response": "Chi phí ăn uống công tác nội thành được hoàn ứng tối đa 200.000 VNĐ/bữa. [ankor-finance-reimbursement#c2]"
+    },
+    "31502839997c07a2b3cf6af38f9e60d3120b64c3dcb1e34bffc9e80e97ef578a": {
+      "response": "7 ngày"
+    },
+    "326785d19ea1d98924fbd86e0851da727977adf8ab7bd0359adf89c23fd67764": {
+      "response": "5.000.000 VNĐ [ankor-finance-procurement#c1]"
+    },
+    "3641b337c21d55496c57445d855e4be88f495de57d8f888ca0e3afab07ff0e35": {
+      "response": "FAIL"
+    },
+    "3963e6ec92475e47e867719d474558f687b550da7e3bdb8d358ec678a24d1222": {
+      "response": "Đơn xin nghỉ phép phải nộp trước 5 ngày làm việc [borea-hr-leave#c4]."
+    },
+    "3a23056c855be29643841c6642dbd0524423a95abd24be673632e145844e0ccb": {
+      "response": "PASS"
+    },
+    "3ac61f42115c5ce195bc944eb102b1d4a0bad569d266ebb20d5ff62320b0860d": {
+      "response": "FAIL"
+    },
+    "3ae7079b05f3b2680962108a45ec01d93ef972104b024cb308c9b1ee6e003b48": {
+      "response": "5 ngày"
+    },
+    "3c2fa7fe95f3205d7e94ac211cb5b8d6dc577d5852a9995d3723529e0fd997de": {
+      "response": "Không có thông tin về cơ cấu lương trong các đoạn trích đã cho."
+    },
+    "3e1dbfc8dd35903f9cd866c6fff37ceadebac5084586907fed30e473f4a21ddb": {
+      "response": "Không có thông tin về ngân sách đào tạo của Borea trong các tài liệu được cung cấp."
+    },
+    "453b85a2b70cb800f00eafc4a9ac8fc1f9828f186a4e1d9b5bed8ec9dc1fc144": {
+      "response": "Không có thông tin"
+    },
+    "46103419bc0d445075ebd9a3a9ad6e1f47e5251249156fbfcd756a1c842862f3": {
+      "response": "PASS"
+    },
+    "4693a11f90ef9d4c1e9c94a266ca2b682bab262c1d7983344dcceb19c098e85a": {
+      "response": "Không có thông tin về cơ cấu lương của công ty trong các đoạn trích đã cho."
+    },
+    "4ac17cb277b92872fca2e3d5e7111e7b034f5c8adc2778476080adf12ca5fb7a": {
+      "response": "PASS"
+    },
+    "4d176d1755fdc069d7febff265aeb3527c4cc0a6f92a3aab1b8bb30206ff4d99": {
+      "response": "Team Lead được phê duyệt chi phí vận hành dưới 10.000.000 VNĐ/giao dịch. [ankor-finance-approval-limits#c2]"
+    },
+    "56fb92d621b9839301f2306b2340058026c9ebb6b80bfee977d8c2ae65e079aa": {
+      "response": "FAIL"
+    },
+    "5df5aad8ad4d9d85fd19ae0c637544fee6fec343a9b3aaeb44542c55daf1fe70": {
+      "response": "FAIL"
+    },
+    "5e43cee80a78fce5d31a836cd15f4c5dacad4fe11c37c60515f821fbb94c3532": {
+      "response": "Không có thông tin."
+    },
+    "5f5a5206fcac826dc96dad5ee80b3d11cb642cbc3f9dc582d4dcd0cfc700eeb7": {
+      "response": "FAIL"
+    },
+    "60bcad7d80e6dffa75232b235dc8b02718d118634956841f91adc7a019bc52a6": {
+      "response": "Nhân viên chính thức Borea được 15 ngày phép có lương mỗi năm [borea-hr-leave#c1]."
+    },
+    "635caf228f8c38049985a32a573252766b3cde783326928f1d5014a428096f32": {
+      "response": "PASS"
+    },
+    "6625f6398bd7d14db3df408271bc57300ddb3ac707d7c30f3cae716df2b149db": {
+      "response": "14 ngày [c2]"
+    },
+    "665f1fe28715d87f054862eab1c777676dac7f7dc2206196d20b9d74dd90d95a": {
+      "response": "4 lần [c1]"
+    },
+    "6c67c74b5ffe394ee7b3798e5e366085eb4615ba809b1cd4b9c38e51498465cf": {
+      "response": "Không có thông tin"
+    },
+    "73e2a5fb4b41e1d93981cb6946c48192c5f9a57b2a34b90368eb2a4d5e79173b": {
+      "response": "FAIL"
+    },
+    "74a242475712e076cf4cd4877ad0411163eefb504c5e22158e3685e619bb201a": {
+      "response": "Hạn mức bảo hiểm sức khoẻ cho nội trú là 50.000.000 VNĐ/năm [ankor-hr-benefits#c1]."
+    },
+    "75d5e602a5d3d8d147204ca269b84e3e0f960a1a98bdd3f739d4acc3e52ad752": {
+      "response": "Dưới 10.000.000 VNĐ [c2]"
+    },
+    "7b3c60ad0fdca965902094715e10b34dcf3eb04a1c89c2c9e5355515a1549f09": {
+      "response": "9 ngày"
+    },
+    "7bd3963bcaa0c1cefbea1d86a778ec1757e9436a29aed6a1f02a589f973c072c": {
+      "response": "PASS"
+    },
+    "85ebce8273ec512b4f0fd02c5f27687abd8e0bf40b4d1efe83cd6c1107f695d2": {
+      "response": "Không có thông tin."
+    },
+    "8935391986e57d2ce1e3a272672093eefc9778e9fc076f345601dd6638902e34": {
+      "response": "Không có thông tin."
+    },
+    "893c48b4860500117f3f6a48eb7719838df0a9fb40140cae6081dcf6321ab303": {
+      "response": "Sự cố P1 cần bắt đầu xử lý trong 15 phút. [ankor-engineering-oncall#c4]"
+    },
+    "8c9a81902fc21dd10d960177dc13c18da146463bb1741344333418ab76be346e": {
+      "response": "Không có thông tin."
+    },
+    "931845b4e2c1fe7191e54c09956d1d0dde3323f7313d3891baf79054d10977a3": {
+      "response": "Quy trình mua sắm áp dụng cho giao dịch từ 3.000.000 VNĐ trở lên. [borea-finance-procurement#c1]"
+    },
+    "94f5e92f99fd4225c80ba76cfd733379db8d93c258890b0d4263f3d3261b1583": {
+      "response": "FAIL"
+    },
+    "9a2a5764a71027c1ae5b458bde6f258afdb73a673a3f1efc273259b6e2d5ce2f": {
+      "response": "FAIL"
+    },
+    "9ab846e9a190ab2a5b94eece806a3c9f3e73941c5927a06aa708612ba911e0c6": {
+      "response": "FAIL"
+    },
+    "9ac82ca1c361e83002044a4287abea6aab2b10e67272ebd61aa07e5424cc6e0f": {
+      "response": "Nhân viên chính thức được 12 ngày phép có lương mỗi năm, cộng dồn tối đa 6 ngày sang năm sau. [ankor-hr-leave#c1]"
+    },
+    "9ea724935c86a8ad2abe1a179d99f9f98a079183c40487ea0b495826067affd4": {
+      "response": "3 ngày"
+    },
+    "a17901b2de7d1dcdc370bee7c412ec5aafbac33adbd22cac3b5d3ba48387f13c": {
+      "response": "Nhân viên được nghỉ 9 ngày liên tục trong dịp Tết Nguyên Đán [borea-public-holidays#c1]."
+    },
+    "a189ee18f3aac49c8c582fe799260266f262a6c953f86aef95d1ff3ef3489271": {
+      "response": "FAIL"
+    },
+    "a2fa459c2e47734f3a18d333ee9bfe2048e3900c0b0820d940114d28647956a5": {
+      "response": "Tin tuyển dụng phải đăng tối thiểu 14 ngày. [ankor-hr-recruitment#c2]"
+    },
+    "a3413cc575a2054916e20a3c6af6d4e9c50381926a3371a95a3cb4c0a1fc8760": {
+      "response": "200.000 VNĐ [ankor-finance-reimbursement#c2]"
+    },
+    "a7b1c21ba63388204355702ca09502809e4e0f22d7a1b68a03dd19e267f895a3": {
+      "response": "FAIL"
+    },
+    "a8524e8bdfbf8960b131de132b7e33d7062cb518b8c64e8b48eec70f45251d75": {
+      "response": "Hạn mức bảo hiểm sức khỏe nội trú là 100.000.000 VNĐ/năm. [borea-hr-benefits#c1]"
+    },
+    "a9eb9797c2dd13064ebb332ab20026f3fada91f1ff5bc078e2a826b61c4ee4e4": {
+      "response": "5 ngày   "
+    },
+    "aa67288cfe3eb5915fbd4e9b7460f4a968cfef972d0d8442394e649a0b3daad2": {
+      "response": "PASS"
+    },
+    "aeb8097f43b72afcee883438b86b6285c5acfd1e1fba7c29829e5dbd75cd30e5": {
+      "response": "Không có thông tin."
+    },
+    "b2f4f1e0e60f82b03f1062adabda31f04e7043483e91203668738c1082b92cd6": {
+      "response": "Ngân sách đào tạo mỗi nhân viên một năm là 10.000.000 VNĐ [ankor-hr-training#c1]."
+    },
+    "b46cf1a7a1a9e1f7c94f0c2acd76d2b8a59509e4151b2884739841d80c01e004": {
+      "response": "Không có thông tin."
+    },
+    "b591438e54687705ed6079a525ad8c6f1683e1904b00cd4acdbf855bd1144e7b": {
+      "response": "Không có thông tin."
+    },
+    "b61dff0d3fe05643e96d3a99afea58717ef8370a93694c1855f3583007de4788": {
+      "response": "Không có"
+    },
+    "b8adef9bc3349f8dbeced1e405c0796fe0e9c817a6059cd0600e9e28b1f5b421": {
+      "response": "Không có."
+    },
+    "b91f28fe393c2e894b9cbb2d16189f3c2c0fac1931bf8c094240da9486b5e456": {
+      "response": "FAIL"
+    },
+    "c3d27450175d4f39438c02713ec9d8b253a50f38633f56b788ffb99007c88792": {
+      "response": "Đánh giá hiệu suất diễn ra 2 lần một năm. [ankor-hr-performance#c1]"
+    },
+    "c507c5da14e6805c82c29261daa1ef241dcc14ca84eae19a7f339a170cd6eb5e": {
+      "response": "FAIL"
+    },
+    "c5d562694dff5bef708b7a398b3eb91cdc846e798b3f827294c7035cb5a2d63a": {
+      "response": "2 lần [c1]"
+    },
+    "c8260c58d5a196501c0f96a15ab77dbd95f0e9d0f491f55f0c1a7b663af3464d": {
+      "response": "3.000.000 VNĐ [c1]"
+    },
+    "c97a9fb9f7e143cad06ca6abf0a75e497f0815d30c1df63c1fa7e3efbc0d06e2": {
+      "response": "FAIL"
+    },
+    "cec3d4ffdcce3c15f932012cd9ec9fbf8961a96e4cfd6f5d423228c7f77fea69": {
+      "response": "FAIL"
+    },
+    "d15d743bc7366579c0d4bd6ebdb4e3b4ae0c6704117e2ee18a369d2a1b9c72d2": {
+      "response": "FAIL"
+    },
+    "d40d2af8639e96b72d4333c6d7782fe1ca56214ce10278fbae61aab52e5d932a": {
+      "response": "Không có thông tin về quy trình mua sắm của Ankor trong các đoạn trích được cung cấp."
+    },
+    "d65fbe3603bd8d2ec3366902e1b67314292e1b5f03a1846be77e9ec9d4e7a279": {
+      "response": "FAIL"
+    },
+    "db601236a1a2df337ba78e8f419ba8b0bfa98a6b6a02b6bca8d656047c934060": {
+      "response": "Ngày 5."
+    },
+    "dcf0642ca4d7e8ec358fcbf8c48c82c07b3fcf7c7b78d24defe869b37e85768a": {
+      "response": "Đánh giá hiệu suất được thực hiện hàng quý, tức 4 lần mỗi năm [borea-hr-performance#c1]."
+    },
+    "e7d531384275f4cee5fc8afe8229745f2c1fd2297a88fe66d5f1c6ec49160fbc": {
+      "response": "Không có thông tin."
+    },
+    "e913b017552152877a752800a9310fd5a2dd431d2ff8e88454ceef2a18c8b27c": {
+      "response": "PASS"
+    },
+    "ebbcda2c47de0293b81cbb4296836aa5fd693a5e2a2380a3781b65cb37bed358": {
+      "response": "Đơn xin nghỉ phép phải nộp trước ít nhất 3 ngày làm việc qua hệ thống HR Portal. [ankor-hr-leave#c4]"
+    },
+    "ecbe43985c2877132e8dfa38f2cedeed4d1b8c56ffe98c2b48a7a131a7f6871b": {
+      "response": "Sự cố P1 (mức Critical) cần được Security team bắt đầu xử lý trong vòng 15 phút kể từ khi phát hiện [borea-engineering-security#c7]."
+    },
+    "edd55b0b304af660950ca9de9c4ed62794d963e79c121f13aa7ebf537a9a25f3": {
+      "response": "PASS"
+    },
+    "ee8bc1284c6d07cb13f101b30362f1b6645a70e6c80e5620d65c7c8daca9aa17": {
+      "response": "Không có thông tin"
+    },
+    "eedfa1dd1bddbedb6f2be19bab93bbab4b78a037115bdf83b7bfd1db0421a0da": {
+      "response": "FAIL"
+    },
+    "ef84f472c710cea5399d889c108101bb0c7119b6ed0dea114662c123d072fcc2": {
+      "response": "không có thông tin"
+    },
+    "efaf9e5843184e21a6d7b5cede98a30cdd2914a8c315a9a9c289af14d3771aec": {
+      "response": "FAIL"
+    },
+    "f41976b9448e8796f4eb9313e8022bd99273b2df187f0f8e89e89d22607e39b1": {
+      "response": "3 ngày [ankor-hr-leave#c4]"
+    },
+    "f49c52e71920a3a00dddd4decd879431230a8b555f58ac5b4854437d1d86a015": {
+      "response": "100.000.000 VNĐ [c1]"
+    },
+    "f626c9941f63276bbb6ab283d9c0f1ae50947d4b64dfb1124c9d7119e9c5f65d": {
+      "response": "15 ngày"
+    },
+    "f899c8bc813640f4d6947da43f6f59199355560e385c8bfbeb6e4fe2236de5b0": {
+      "response": "Quy trình mua sắm áp dụng cho mọi giao dịch mua hàng hóa, dịch vụ có giá trị từ 5.000.000 VNĐ trở lên. [ankor-finance-procurement#c1]"
+    },
+    "fce23f5c44438ee8d7a5e88ae2a5a857eb399bb55c06fd263403bf45cece3517": {
+      "response": "PASS"
+    }
+  },
+  "meta": {
+    "golden_set_ref": "callisto-2.0-golden-30-v1",
+    "model": "o4-mini",
+    "recorded_at": "2026-08-18T08:21:00.669580+00:00"
+  }
+}

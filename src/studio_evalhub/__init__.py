@@ -22,6 +22,14 @@ from studio_evalhub.harness import (
 )
 from studio_evalhub.judge import JudgeUnavailable, JudgeUnavailableReason, LLMJudge
 from studio_evalhub.render import render_run_cases, render_scorecard
+from studio_evalhub.replay import (
+    FixtureUnreadable,
+    RecordingLLM,
+    ReplayError,
+    ReplayLLM,
+    ReplayMiss,
+    call_key,
+)
 from studio_evalhub.run_report import (
     TRACE_SOURCE_POSTGRES,
     RunCost,
@@ -37,6 +45,7 @@ from studio_evalhub.schema import ddl
 
 __all__ = [
     "TRACE_SOURCE_POSTGRES",
+    "FixtureUnreadable",
     "AgentAnswer",
     "AgentRunner",
     "AgreementResult",
@@ -47,6 +56,10 @@ __all__ = [
     "JudgeUnavailable",
     "JudgeUnavailableReason",
     "LLMJudge",
+    "RecordingLLM",
+    "ReplayError",
+    "ReplayLLM",
+    "ReplayMiss",
     "RetrievedChunk",
     "RunCost",
     "RunCostError",
@@ -55,6 +68,7 @@ __all__ = [
     "TraceAnswerError",
     "agreement",
     "answer_from_trace",
+    "call_key",
     "chunks_from_trace",
     "citations_from_trace",
     "compute_scorecard",

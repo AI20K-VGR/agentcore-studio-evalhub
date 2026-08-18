@@ -136,6 +136,14 @@ def test_src_khong_tu_dan_xuat_recipe_hash() -> None:
     cam_import = {"hashlib", "blake3", "xxhash"}
     cam_goi = {"model_dump_json", "sha256", "sha1", "md5", "blake2b", "blake2s"}
 
+    # `replay.py` (D22) băm `(prompt, kwargs)` làm khoá cache phát lại — KHÔNG băm `Recipe`, nên
+    # nó không thể vi phạm điều `DEC-D20-02` bảo vệ. Miễn trừ **hẹp và có bảo vệ**, không phải lỗ:
+    #   · chỉ miễn phần HASHING; `model_dump_json` vẫn cấm ở MỌI file (nửa Recipe-serialization);
+    #   · `test_file_duoc_mien_bam_khong_cham_recipe` bên dưới khoá chặt hơn một miễn trừ trần:
+    #     file được miễn phải KHÔNG chạm `Recipe` — không có vật để băm sai, chứ không phải
+    #     'tin là nó không băm sai'.
+    MIEN_TRU_HASH = {"replay.py"}
+
     vi_pham: list[str] = []
     for file in files:
         tree = ast.parse(file.read_text(encoding="utf-8"))
@@ -144,17 +152,18 @@ def test_src_khong_tu_dan_xuat_recipe_hash() -> None:
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     goc = alias.name.split(".")[0]
-                    if goc in cam_import:
+                    if goc in cam_import and file.name not in MIEN_TRU_HASH:
                         vi_pham.append(f"{file.name}:{node.lineno} import {alias.name}")
             elif isinstance(node, ast.ImportFrom):
                 goc = (node.module or "").split(".")[0]
-                if goc in cam_import:
+                if goc in cam_import and file.name not in MIEN_TRU_HASH:
                     vi_pham.append(f"{file.name}:{node.lineno} from {node.module} import …")
             elif isinstance(node, ast.Call):
                 ten = node.func.attr if isinstance(node.func, ast.Attribute) else None
                 if ten is None and isinstance(node.func, ast.Name):
                     ten = node.func.id
-                if ten in cam_goi:
+                bi_cam = cam_goi if file.name not in MIEN_TRU_HASH else {"model_dump_json"}
+                if ten in bi_cam:
                     vi_pham.append(f"{file.name}:{node.lineno} gọi {ten}()")
 
     assert not vi_pham, (
@@ -163,3 +172,31 @@ def test_src_khong_tu_dan_xuat_recipe_hash() -> None:
         "(DEC-03). Nếu cần một giá trị để publish qua cổng, đường đúng là caller truyền vào — "
         "không phải evalhub tự sinh."
     )
+
+
+def test_file_duoc_mien_bam_khong_cham_recipe() -> None:
+    """Vế thứ hai của bản thu hẹp ở `test_src_khong_tu_dan_xuat_recipe_hash`.
+
+    Một allowlist trần là **lời hứa**; bài này là **phép kiểm**. `replay.py` được miễn kiểm hashing
+    với đúng một lý do — nó băm `(prompt, kwargs)` chứ không băm `Recipe`. Ngày ai đó import `Recipe`
+    vào file đó rồi băm, `DEC-D20-02` bị vi phạm thật, và bài này đỏ mà không cần ai nhớ ra allowlist
+    đang mở cho file nào.
+
+    Kiểm theo **cây cú pháp**, không theo chuỗi: docstring của `replay.py` có nhắc `Recipe` khi giải
+    thích `Node.params`, nên một phép `"Recipe" in text` sẽ đỏ oan và bị ai đó vô hiệu hoá cho xong.
+    """
+    src = Path(__file__).resolve().parent.parent / "src" / "studio_evalhub"
+    for ten in ("replay.py",):
+        tree = ast.parse((src / ten).read_text(encoding="utf-8"))
+        ten_dinh_danh: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Name):
+                ten_dinh_danh.add(node.id)
+            elif isinstance(node, ast.Attribute):
+                ten_dinh_danh.add(node.attr)
+            elif isinstance(node, ast.ImportFrom):
+                ten_dinh_danh.update(alias.name for alias in node.names)
+        assert "Recipe" not in ten_dinh_danh, (
+            f"{ten} được miễn kiểm hashing với lý do 'không băm Recipe' — nhưng nó vừa chạm `Recipe`. "
+            "Hoặc bỏ chỗ chạm đó, hoặc rút file khỏi `MIEN_TRU_HASH` và tìm đường khác."
+        )
