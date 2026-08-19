@@ -9,9 +9,18 @@ file-ownership").
 `harness.py`): `cases` is a JSONB array of the 30 `{case_id, expected}` pairs the eval-harness
 runs against an agent recipe.
 
-`eval.scorecards` — one row per eval run, shaped to match the `Scorecard` contract (P2, R-SPEC
-A1#4): `results` (per-case `CaseResult`s), `aggregate` (success_rate/citation_accuracy), `gate`
-(threshold + verdict — the field SWE's publish/rollback pipeline reads, INV-6).
+`eval.scorecards` — one row per **successful publish**, shaped to match the `Scorecard` contract
+(P2, R-SPEC A1#4): `results` (per-case `CaseResult`s), `aggregate` (success_rate/citation_accuracy),
+`gate` (threshold + verdict — the field SWE's publish/rollback pipeline reads, INV-6), plus
+`recipe_hash` + `recipe_version` để nối ngược về hàng `wb.recipes` mà scorecard này chứng nhận.
+
+**Sửa lại từ *"one row per eval run"* (review `workbench#28` mục 🟡3).** Câu cũ tả một bảng không
+tồn tại: writer duy nhất (`studio_workbench.publish`) chỉ ghi trên **đường PASS**, và route
+`/api/agents/{id}/evaluate` chạy đủ một eval run rồi trả `Scorecard` mà **không** gọi `publish()` ⇒
+phần lớn eval run không để lại hàng nào, còn publish bị chặn (`verdict=FAIL`, hash lệch, graph-lint)
+cũng không. Lựa chọn "chỉ PASS" là hợp lý — một publish bị chặn không sinh ra bản certify nào để
+audit — nhưng khi đó **mô tả phải nói đúng thứ bảng chứa**, không thì người đọc `count(*)` ở đây sẽ
+đọc thành số lần chấm.
 
 ## RLS trên cả hai bảng — `DEC-D20-05` (D20)
 
@@ -56,6 +65,7 @@ CREATE TABLE IF NOT EXISTS eval.scorecards (
     aggregate JSONB NOT NULL,
     gate JSONB NOT NULL,
     recipe_hash TEXT,
+    recipe_version INT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -100,6 +110,23 @@ ALTER TABLE eval.scorecards ADD COLUMN IF NOT EXISTS tenant_id UUID NOT NULL;
 -- một hash vắng mặt, vì `NULL` đọc được thành *"scorecard này không khai recipe nào"* còn một chuỗi
 -- rác thì đọc thành *"khai một recipe không tồn tại"*.
 ALTER TABLE eval.scorecards ADD COLUMN IF NOT EXISTS recipe_hash TEXT;
+
+-- `recipe_version` — vế thứ hai của khoá audit, và một mình `recipe_hash` KHÔNG thay được nó.
+-- Đo được (review `workbench#28`): publish lại một recipe **nội dung y nguyên** cho ra version mới
+-- nhưng **cùng** `recipe_hash` ⇒ nối `eval.scorecards → wb.*` bằng hash là **một-nhiều**, và câu mà
+-- `evalhub#28` mở ra để hỏi — *"scorecard nào đã chứng nhận VERSION nào của agent này"* — vẫn treo.
+--
+-- Nối vào `wb.recipes`, KHÔNG phải `wb.recipe_versions`: `wb.recipes` có `UNIQUE (agent_id,
+-- tenant_id, version)` còn `wb.recipe_versions` **không có** (`workbench/schema.py:61` vs `:64-70`,
+-- và `publish.py` tự khai điều đó khi giải thích vì sao `rollback()` phải đọc theo NỘI DUNG). Nên
+-- khoá nối duy nhất đúng là `(agent_id, tenant_id, recipe_version)` **cộng** điều kiện `agent_id` của
+-- hàng audit khớp `agent_id` của recipe được publish — vế sau là finding riêng ở `workbench#28`, và
+-- thiếu nó thì cột này chỉ là trang trí.
+--
+-- NULLABLE, cùng lý do `recipe_hash`: hàng ghi trước khi writer biết truyền version (và mọi hàng của
+-- một writer tương lai chọn không truyền) phải ghi được. `NOT NULL` ở đây vừa chặt hơn cần thiết vừa
+-- raise trên bảng đã có row.
+ALTER TABLE eval.scorecards ADD COLUMN IF NOT EXISTS recipe_version INT;
 
 ALTER TABLE eval.golden_sets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE eval.golden_sets FORCE ROW LEVEL SECURITY;
