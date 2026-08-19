@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS eval.scorecards (
     results JSONB NOT NULL,
     aggregate JSONB NOT NULL,
     gate JSONB NOT NULL,
+    recipe_hash TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -63,8 +64,14 @@ CREATE TABLE IF NOT EXISTS eval.scorecards (
 --
 -- ⚠️ FAILURE MODE, cố ý KHÔNG vá hôm nay (finding review AIE-1, evalhub#23): `ADD COLUMN … NOT NULL`
 -- **không có `DEFAULT`** sẽ **raise** nếu bảng đã có row. Hôm nay rủi ro đo được = **0** — hai bảng
--- này chưa có writer thật nào ngoài test, và `recipe_hash` (`DEC-03`) chưa tồn tại. Land NOT NULL
--- trần lúc bảng còn rỗng là đúng chỗ rẻ nhất.
+-- này chưa có writer thật nào ngoài test. Land NOT NULL trần lúc bảng còn rỗng là đúng chỗ rẻ nhất.
+--
+-- Bản trước còn viện thêm lý do *"`recipe_hash` (`DEC-03`) chưa tồn tại"* — **hết đúng từ D22/D23**:
+-- producer là `studio_workbench.publish.recipe_hash()` (`workbench#27`), call-site là
+-- `apps/studio/routes/publish.py::_evaluate` (`app#26`). Vế còn đứng là vế *"chưa có writer"*, và
+-- chính nó giữ cho `ADD COLUMN` bên dưới còn rẻ — nên khi mục 2 của `evalhub#28` land (SWE ghi
+-- `INSERT INTO eval.scorecards` trong `publish()`), lý do này mất, và luật đọc tripwire ở dưới
+-- (*"đúng 1 hit"*) phải được sửa **trong cùng PR đó**.
 --
 -- Kiểm lại từ **gốc kit**, và đọc kết quả cho đúng (finding review DE, evalhub#24):
 --
@@ -85,6 +92,14 @@ CREATE TABLE IF NOT EXISTS eval.scorecards (
 -- backfill có chủ đích, không phải nới DDL này.
 ALTER TABLE eval.golden_sets ADD COLUMN IF NOT EXISTS tenant_id UUID NOT NULL;
 ALTER TABLE eval.scorecards ADD COLUMN IF NOT EXISTS tenant_id UUID NOT NULL;
+
+-- `recipe_hash` NULLABLE, và đó là chỗ khác `tenant_id` ngay trên: kiểu Python là
+-- `Scorecard.recipe_hash: str | None` (`DEC-03` cho phép `None`, consumer `publish()` fail-closed
+-- trên `None` chứ không cấm nó tồn tại), nên `NOT NULL` ở đây sẽ **chặt hơn hợp đồng** — và cũng là
+-- thứ raise trên bảng đã có row mà không cần bàn migration. Không `DEFAULT`: một hash bịa ra tệ hơn
+-- một hash vắng mặt, vì `NULL` đọc được thành *"scorecard này không khai recipe nào"* còn một chuỗi
+-- rác thì đọc thành *"khai một recipe không tồn tại"*.
+ALTER TABLE eval.scorecards ADD COLUMN IF NOT EXISTS recipe_hash TEXT;
 
 ALTER TABLE eval.golden_sets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE eval.golden_sets FORCE ROW LEVEL SECURITY;
