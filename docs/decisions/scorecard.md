@@ -302,6 +302,13 @@ no-trace. Không chặn ở `DEC-D23-01` vì hai lý do: đo được **0/22** c
 chính docstring `score_case`, nên chặn nó là một quyết định MỚI chứ không phải bảo vệ một quyết định
 có sẵn. Điều kiện lật: một runner làm `refused` lên >1/22, hoặc một judge được cho xem `events`.
 
+**Số `0/22` đo trên bộ mặc định production, và chỉ bộ đó.** `callisto-golden-30-v1` + corpus
+`docs/callisto/` — đúng mặc định ở `workbench/builder.py` (4 chỗ, đều `callisto-golden-30-v1`) và
+`load_callisto()`. **Chưa đo** trên `callisto-2.0-golden-30-v1` (corpus 2.0, 80 doc / 800 chunk, `kb#32`
+đã pin, và `evalhub#29` là replay fixture cho chính bộ đó) ⇒ thêm một điều kiện lật cho **cả** `DEC-D23-01`
+và trục `refused`: **ngày `golden_set_ref` mặc định cutover sang 2.0, đo lại `17/0/0`**. Ghi ra vì cutover
+đang đi, không phải một khả năng xa.
+
 ## Còn mở — chặn `FROZEN` thật sự
 
 | # | Nội dung | Chờ ai | Hạn |
