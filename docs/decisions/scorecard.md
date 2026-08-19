@@ -285,6 +285,30 @@ vẫn xanh, và không ai biết. ⇒ Bài đối chứng không phải phần t
 **3/6 mutant lộ ra lỗi trong bài test của chính mình, 0/6 lộ bug trong code sản phẩm** — nặng nhất là
 `match="verdict"` khớp vào `agent_id` mà `publish()` nội suy vào thông điệp, chứ không vào lý do chặn.
 
+## D23 · 2026-08-19
+
+> Hai quyết định, cả hai sinh ra từ việc `apps/studio#20` sắp nối `judge=` vào đường production —
+> tức từ chỗ một tham số đã có từ D18 lần đầu có caller thật. Bằng chứng là nhánh
+> `aie-2/d22-judge-no-trace-fence` (evalhub) tại thời điểm ghi, **chưa merge**.
+
+| # | Quyết định | Lý do | PR / bằng chứng | Trạng thái |
+|---|---|---|---|---|
+| **DEC-D23-01** | Judge **không được hỏi** khi case trượt vì một cổng fail-closed **cấu trúc** — cụ thể `case_run.events == []` (`DEC-05`). Cổng ở `_duoc_hoi_judge`, đặt **trước** lời gọi, không phải bỏ verdict sau | `_hoi_judge` chỉ đưa judge `expected` + `actual`; judge **không quan sát `events`**, nên nó không có cơ sở nào để nói về một luật nói về **trace**. Trước cổng: case nhánh trả-lời có `events == []` mà `answer` **chứa đúng cụm** `expected` sẽ trượt nấc 1 đúng theo `DEC-05` ⇒ được hỏi judge ⇒ text khớp ⇒ `PASS` ⇒ `DEC-05` bị lật, **tất định**, không cần judge phán sai lần nào. *Trước* chứ không *sau* vì `cap ≤100/ngày` (`INV-4`, `DEC-D18-05`) là quota chia sẻ bền ngoài tiến trình: hỏi rồi bỏ verdict cho cùng một `Scorecard` nhưng tiêu mất một lần gọi | `harness.py::_duoc_hoi_judge` · `tests/test_judge_khong_lat_duoc_no_trace.py` (3 bài) · mutation **`M-T1`…`M-T4` 4/4 DIE** ([`judge-no-trace-d23.md`](../mutations/judge-no-trace-d23.md)); `M-T4` (hỏi-rồi-bỏ) chỉ bị **1** bài giết ⇒ vế "không hỏi" có lưới riêng | ✅ quyết · **khai đúng phạm vi: fence, KHÔNG phải bug-fix** — đo trên golden-30 qua spine thật, no-trace = **0/22** nên bản vá không đổi một con số nào hôm nay; nó chặn ca `DEC-05` **có việc** (runner hỏng, trace writer chết) |
+| **DEC-D23-02** | Assumption **single-writer** của `DEC-D18-05` **không còn giữ** khi call-site là HTTP route. Nhận cuộc đua ở S2, **không** thêm lock/quota phân tán | `_doc_counter`/`_ghi_counter` là đọc-sửa-ghi một file JSON không lock, `_ghi_cache` ghi lại **toàn bộ** file. `apps/studio#20` đặt `LLMJudge` vào `_evaluate`, gọi từ **cả** `/evaluate` lẫn `/publish` — 2 request đồng thời đan xen read→modify→write ⇒ cap vượt trong im lặng, cache entry bị ghi đè. Không ném gì, không trả gì lạ. Luận cứ bảo vệ cũ (*"`pyproject.toml` không khai `pytest-xdist`"*) nói về **tiến trình test**, không nói gì về tiến trình server. Chưa vá vì `DEC-D18-05` ranh giới không-over-engineer vẫn đúng: chưa có bằng chứng >1 admin dùng `/publish` đồng thời | `judge.py:239-274` (`_doc_counter`/`_ghi_counter`) · `judge.py:236` (`_ghi_cache` ghi cả file) · `apps/studio#20` | 🟡 nợ có **điều kiện lật**: >1 admin bấm Publish/Evaluate đồng thời, hoặc app chạy >1 worker (uvicorn `--workers`) |
+
+**Trục còn mở, có số đỡ chứ không phải bỏ sót:** `answer.refused is True` cũng bị judge lật được y như
+no-trace. Không chặn ở `DEC-D23-01` vì hai lý do: đo được **0/22** case golden-30 trượt vì `refused`
+(runner thật, `ExtractiveFakeLLM`); và `refused is False` là **một phần của phán quyết nội dung** theo
+chính docstring `score_case`, nên chặn nó là một quyết định MỚI chứ không phải bảo vệ một quyết định
+có sẵn. Điều kiện lật: một runner làm `refused` lên >1/22, hoặc một judge được cho xem `events`.
+
+**Số `0/22` đo trên bộ mặc định production, và chỉ bộ đó.** `callisto-golden-30-v1` + corpus
+`docs/callisto/` — đúng mặc định ở `workbench/builder.py` (4 chỗ, đều `callisto-golden-30-v1`) và
+`load_callisto()`. **Chưa đo** trên `callisto-2.0-golden-30-v1` (corpus 2.0, 80 doc / 800 chunk, `kb#32`
+đã pin, và `evalhub#29` là replay fixture cho chính bộ đó) ⇒ thêm một điều kiện lật cho **cả** `DEC-D23-01`
+và trục `refused`: **ngày `golden_set_ref` mặc định cutover sang 2.0, đo lại `17/0/0`**. Ghi ra vì cutover
+đang đi, không phải một khả năng xa.
+
 ## Còn mở — chặn `FROZEN` thật sự
 
 | # | Nội dung | Chờ ai | Hạn |

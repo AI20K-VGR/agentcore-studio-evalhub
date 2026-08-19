@@ -418,6 +418,35 @@ def _score_case_run(case: GoldenCase, case_run: CaseRun, tenant_ids: Mapping[str
     return result
 
 
+def _duoc_hoi_judge(case: GoldenCase, case_run: CaseRun, scored: SmokeResult) -> bool:
+    """Case này **có được hỏi judge** hay không. Cổng tồn tại vì judge chỉ nhìn thấy `expected` và
+    `actual` (`_hoi_judge` dưới đây) — nó **không quan sát `events`**, nên có những lý do trượt mà nó
+    không có cơ sở nào để nói gì về.
+
+    **Cổng `DEC-05` (`no-trace-no-proof`) judge KHÔNG được lật.** `_score_case_run` hạ `success` khi
+    `case_run.events == []`, và luật đó nói *"không có trace quan sát được ⇒ FAIL, **bất kể `answer`
+    nói gì**"*. Nhưng thứ duy nhất judge cân là `answer` — nên trước cổng này, một case nhánh trả-lời
+    có `events == []` mà `answer` **chứa đúng cụm `expected`** sẽ: trượt nấc 1 đúng theo `DEC-05` ⇒
+    được hỏi judge ⇒ judge thấy text khớp ⇒ trả `PASS` ⇒ `success=True`. Tức `DEC-05` bị lật, và lật
+    **tất định**, không cần judge phán sai lần nào. Chưa nổ trên production chỉ vì chưa caller nào
+    truyền `judge=` (`apps/studio#20`); nối dây trước khi đóng cổng này là bật một fail-open lên.
+
+    **Không hỏi, chứ không phải hỏi rồi bỏ verdict.** Hai cách cho cùng một `Scorecard`, nhưng cách
+    sau tiêu quota `cap ≤100/ngày` (`INV-4`, `DEC-D18-05`) cho một verdict không dùng được — và một
+    bài chỉ assert `success` vẫn xanh với nó, nên bất biến này cần lưới riêng đếm số lần gọi.
+
+    **Còn mở — trục `answer.refused`.** Nhánh trả-lời của `score_case` trượt vì đúng hai lý do:
+    `answer.refused is True` (agent tự từ chối một case đáng trả lời) hoặc `_contains_phrase` không
+    khớp. Cổng này **chỉ** chặn `DEC-05`, nên ca `refused` vẫn được hỏi judge và vẫn lật được. Khác
+    `DEC-05` ở chỗ: `refused is False` là **một phần của phán quyết nội dung** theo chính docstring
+    `score_case`, nên chặn nó là một quyết định MỚI chứ không phải bảo vệ một quyết định có sẵn — cần
+    số đo trước (bao nhiêu case golden-30 trượt vì `refused` chứ không vì content), xem `DEC-D23-01`.
+    """
+    if case.expects_refusal or scored.success:
+        return False
+    return bool(case_run.events)
+
+
 async def _hoi_judge(judge: LLMJudge, case: GoldenCase, scored: SmokeResult) -> SmokeResult:
     """Hỏi judge cho một case đã trượt exact-match; `JudgeUnavailable` ⇒ **giữ nguyên** kết quả cũ.
 
@@ -501,6 +530,12 @@ class EvalHarness:
         *"subjective (non-exact-match) cases"*, và mô tả của chính lớp này *"exact-match cases score
         directly"*).
 
+        **Trừ đúng một ca, và đó là một cổng chứ không phải một ngoại lệ** (`DEC-D23-01`, D23): case
+        có `case_run.events == []` **không** được hỏi judge. `_score_case_run` hạ `success` cho ca đó
+        theo `DEC-05` (*no-trace-no-proof*), mà judge chỉ cân `expected`/`actual` nên không có cơ sở
+        nào để lật một cổng nói về **trace**. Điều kiện đầy đủ nằm ở `_duoc_hoi_judge` — đọc docstring
+        hàm đó để biết ca khai thác tất định mà cổng này bịt, và trục `refused` còn để mở.
+
         **Số case đi qua judge phụ thuộc RUNNER, và đoạn này từng khai thiếu vế đó** (sửa D20, finding
         của DE trên `kit#125`). Hai phép đo, cả hai đúng, khác nhau ở runner:
 
@@ -567,7 +602,7 @@ class EvalHarness:
                 section_roles=case.section_roles,
             )
             scored = _score_case_run(case, case_run, tenant_ids)
-            if judge is not None and not case.expects_refusal and not scored.success:
+            if judge is not None and _duoc_hoi_judge(case, case_run, scored):
                 scored = await _hoi_judge(judge, case, scored)
             results.append(
                 CaseResult(
