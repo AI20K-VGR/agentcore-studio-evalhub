@@ -23,7 +23,23 @@ from studio_evalhub.golden_case import GoldenSet
 
 _WORKSPACE_ROOT = Path(__file__).resolve().parents[3]
 
-_GOLDEN_DIR = _WORKSPACE_ROOT / "packages" / "kb" / "golden"
+# HAI thư mục ứng viên, thử theo thứ tự — cùng khuôn với `_TEN_FILE_GOLDEN_30` bên dưới, và cùng lý
+# do: bộ golden vừa **dời chỗ** giữa chừng (`kb#37`, đóng phần DE của `kit#181`) và fixture này phải
+# sống qua CẢ HAI phía của lần dời.
+#
+#   - `packages/kb/src/studio_kb/golden/`  ← MỚI, sau `kb#37`: nằm trong `src/` nên vào được wheel
+#   - `packages/kb/golden/`                ← CŨ, vẫn là chỗ con trỏ `packages/kb` của kit đang trỏ tới
+#
+# KHÔNG hard-swap sang đường mới: `kb#37` đã merge ở repo kb nhưng con trỏ của kit **chưa** bump, nên
+# đổi thẳng sẽ làm 9 bài skip ngay trên kit main hôm nay. Tuple ứng viên thì đúng ở cả hai phía và
+# không tạo ràng buộc thứ tự merge nào.
+#
+# ĐIỀU KIỆN GỠ: khi con trỏ `packages/kb` của kit đã bump qua `kb#37`, xoá đường CŨ khỏi tuple.
+_GOLDEN_DIRS = (
+    _WORKSPACE_ROOT / "packages" / "kb" / "src" / "studio_kb" / "golden",
+    _WORKSPACE_ROOT / "packages" / "kb" / "golden",
+)
+_KB_SUBMODULE = _WORKSPACE_ROOT / "packages" / "kb"
 
 # HAI tên, thử theo thứ tự — vì bộ 30 đang đổi tên giữa chừng và fixture này phải sống qua cả hai
 # phía của lần đổi đó:
@@ -44,8 +60,8 @@ _GOLDEN_DIR = _WORKSPACE_ROOT / "packages" / "kb" / "golden"
 _TEN_FILE_GOLDEN_30 = ("callisto-golden-30-v1.yaml", "callisto-handbook-30-draft.yaml")
 
 _GOLDEN_30 = next(
-    (p for p in (_GOLDEN_DIR / ten for ten in _TEN_FILE_GOLDEN_30) if p.is_file()),
-    _GOLDEN_DIR / _TEN_FILE_GOLDEN_30[0],
+    (p for p in (d / ten for d in _GOLDEN_DIRS for ten in _TEN_FILE_GOLDEN_30) if p.is_file()),
+    _GOLDEN_DIRS[0] / _TEN_FILE_GOLDEN_30[0],
 )
 
 
@@ -69,11 +85,23 @@ def golden_30_path() -> Path:
     ⇒ `M-L3` sống mà không ai biết. Vì thế môi trường chạy mutation phải được ghi lại — cùng lớp với
     chuyện `77 passed` của D15 đo trong shell không có `STUDIO_DATABASE_URL_ADMIN`."""
     if not _GOLDEN_30.is_file():
-        pytest.skip(
-            f"golden-30 của DE không có ở {_GOLDEN_30} — cần `git submodule update --init "
-            "packages/kb` (chạy từ workspace root). Bài integration này nạp file thật, không dựng "
-            "fixture thay thế."
+        if not _KB_SUBMODULE.is_dir():
+            pytest.skip(
+                f"submodule `packages/kb` chưa được init ({_KB_SUBMODULE} không tồn tại) — chạy "
+                "`git submodule update --init packages/kb` từ workspace root. Bài integration này "
+                "nạp file thật, không dựng fixture thay thế."
+            )
+        # `packages/kb` CÓ mặt mà không tìm thấy golden ⇒ ĐỎ, không skip. Skip ở đây là đúng thứ
+        # docstring trên cảnh báo: bộ golden dời chỗ (`kb#37`) làm 9 bài lặng lẽ rời suite mà nó vẫn
+        # "xanh" — đo được: `254 passed` -> `245 passed, 9 skipped`. Một môi trường CÓ kb nhưng
+        # không có golden là layout đã đổi, không phải môi trường thiếu submodule.
+        msg = (
+            f"`packages/kb` có mặt nhưng không tìm thấy golden-30 ở bất kỳ đường nào đã biết: "
+            f"{[str(d) for d in _GOLDEN_DIRS]} (tên thử: {list(_TEN_FILE_GOLDEN_30)}). Layout bộ "
+            "golden của DE đã đổi — thêm đường mới vào `_GOLDEN_DIRS`. KHÔNG chuyển thành skip: "
+            "skip ở đây làm 9 bài integration rời suite mà suite vẫn xanh."
         )
+        raise AssertionError(msg)
     return _GOLDEN_30
 
 
