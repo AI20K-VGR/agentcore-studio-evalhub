@@ -51,6 +51,7 @@ CREATE SCHEMA IF NOT EXISTS eval;
 CREATE TABLE IF NOT EXISTS eval.golden_sets (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL,
+    kb_id UUID,
     golden_set_ref TEXT NOT NULL UNIQUE,
     cases JSONB NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -102,6 +103,22 @@ CREATE TABLE IF NOT EXISTS eval.scorecards (
 -- backfill có chủ đích, không phải nới DDL này.
 ALTER TABLE eval.golden_sets ADD COLUMN IF NOT EXISTS tenant_id UUID NOT NULL;
 ALTER TABLE eval.scorecards ADD COLUMN IF NOT EXISTS tenant_id UUID NOT NULL;
+
+-- `kb_id` — nối ngược golden-set này tới đúng KB phòng ban đã sinh ra nó (ERD
+-- `G:\\My Drive\\ERD.drawio`, target schema `agentcore-studio-kit#DATABASE-DESIGN-DAY30.md` chưa vẽ,
+-- land SỚM dưới dạng cột shell — cùng lý do `kb.knowledge_bases`/`kb.documents`/`kb.chunk_pointers`
+-- phía `agentcore-studio-kb` land shell trước, chưa có writer).
+--
+-- NULLABLE (khác `tenant_id` ngay trên, GIỐNG `recipe_hash`/`recipe_version` bên dưới): `kb_id` trỏ
+-- sang `kb.knowledge_bases` — bảng đó CHÍNH NÓ cũng vừa land dạng shell, chưa ai ghi được `kb_id`
+-- thật. `NOT NULL` trần ở đây sẽ khoá cứng writer tương lai phải biết KB trước khi biết `tenant_id`
+-- có sẵn hay không — chặt hơn cần thiết cho một liên kết chưa ai tiêu thụ. `NULL` đọc đúng nghĩa
+-- "golden-set này chưa gắn KB nào" — không phải giá trị bịa.
+--
+-- KHÔNG `REFERENCES kb.knowledge_bases(id)`: cross-schema FK (eval → kb) vi phạm luật "không FK
+-- xuyên schema" đã áp dụng cho mọi `tenant_id` trong file này (Decision #4) — `kb_id` theo đúng
+-- khuôn đó, một cột UUID trần, ràng buộc join ở tầng ứng dụng khi có writer thật.
+ALTER TABLE eval.golden_sets ADD COLUMN IF NOT EXISTS kb_id UUID;
 
 -- `recipe_hash` NULLABLE, và đó là chỗ khác `tenant_id` ngay trên: kiểu Python là
 -- `Scorecard.recipe_hash: str | None` (`DEC-03` cho phép `None`, consumer `publish()` fail-closed
