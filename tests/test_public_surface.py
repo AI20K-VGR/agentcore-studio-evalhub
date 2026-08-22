@@ -39,6 +39,13 @@ import pathlib
 import studio_evalhub
 
 KHONG_XUAT: dict[str, str] = {
+    "dsn_bo_cham": (
+        "helper của CLI `python -m studio_evalhub.run_report` (`evalhub#37` — ưu tiên "
+        "$STUDIO_DATABASE_URL_SCORER, fallback $STUDIO_DATABASE_URL). Không xuất vì nó là quy ước "
+        "đọc biến môi trường của MỘT entrypoint, không phải hợp đồng của gói: caller trong tiến "
+        "trình khác (apps/studio) tự dựng pool của họ và không được phép thừa hưởng lựa chọn DSN "
+        "của bộ chấm. Test import thẳng từ module."
+    ),
     "Pool": (
         "alias kiểu của psycopg (`run_report.py:53` — `AsyncConnectionPool[AsyncConnection[Any]]`), "
         "không phải API của evalhub. Xuất nó là hứa một kiểu bên thứ ba qua bề mặt của mình."

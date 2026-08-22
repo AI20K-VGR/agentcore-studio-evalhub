@@ -12,11 +12,15 @@ nhất được biết đường dẫn cụ thể. File này là composition roo
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+import os
+from collections.abc import AsyncIterator, Callable, Mapping
 from pathlib import Path
+from typing import Any
 from uuid import NAMESPACE_DNS, UUID, uuid5
 
 import pytest
+import pytest_asyncio
+from psycopg_pool import AsyncConnectionPool
 from studio_contracts import NodeType, Tokens, TraceEvent
 from studio_evalhub.agent_runner import AgentAnswer, CaseRun, StubAgentRunner
 from studio_evalhub.golden_case import GoldenSet
@@ -203,3 +207,72 @@ def runner_tot() -> Callable[[GoldenSet, Mapping[str, UUID]], StubAgentRunner]:
         return StubAgentRunner(fixtures)
 
     return _dung
+
+
+# ---------------------------------------------------------------------------------------------
+# `scorer_pool` — pool của role `studio_scorer` (`evalhub#37`, GAP-1)
+# ---------------------------------------------------------------------------------------------
+
+
+@pytest_asyncio.fixture
+async def scorer_pool(admin_pool: Any) -> AsyncIterator[Any]:
+    """Pool của `studio_scorer` — role DUY NHẤT đọc được `obs.trace_events` KHÔNG lọc tenant.
+
+    Vì sao cần fixture riêng thay vì dùng `pool` (studio_app) như trước: sau GAP-1 (`app#40` bật
+    `ENABLE`+`FORCE ROW LEVEL SECURITY`), mọi câu SELECT không set `app.tenant_id` khớp 0 dòng. Điều
+    đó đúng cho `studio_app` VÀ cho `studio_owner` — `FORCE` cắn cả owner, có chủ đích và có bài
+    khoá (`packages/kb/tests/test_rls_framework.py::test_force_rls_and_with_check`). `studio_scorer`
+    (`kit#202` tạo role `BYPASSRLS`, `app#42` cấp đúng `SELECT` trên đúng một bảng) là đường duy nhất.
+
+    Áp cho **cả hai mặt** của bài đối chứng cost: mặt A đi `read_run_unscoped`, mặt B đi SQL thô
+    `SELECT … FROM obs.trace_events WHERE run_id = %s` — cũng không lọc tenant, nên cũng cần role này.
+    Mặt GHI thì **không** đổi: `PgTraceWriter.write()` tự `SET LOCAL app.tenant_id` trên chính
+    connection của nó, nên nó ghi được dưới RLS bằng role app như cũ.
+
+    **Fixture tự cấp quyền, không giả định ai đã cấp hộ** (finding @DongAnh2704, review PR#39).
+    `grant_scorer_privileges()` chỉ có 2 call site trong toàn workspace: `studio_app.app::_lifespan`
+    (boot app thật) và test riêng của `app#42`. Không có gì trong luồng test của evalhub chạm tới nó,
+    và `reusable-domain-ci.yml` KHÔNG boot `apps/studio` khi chạy suite của quadrant khác — nó chỉ
+    `uv sync` + `pytest <domain>/tests`. Nếu fixture này chỉ mở pool rồi kết nối, nó đang dựa vào một
+    bước boot bằng tay không ai ghi lại; ngày con trỏ `apps/studio` được bump, CI đổi từ *skip 6 bài*
+    sang **`InsufficientPrivilege: permission denied for schema obs`** — đã tái hiện được.
+
+    Nên fixture tự cấp quyền, cùng khuôn `admin_pool` gốc kit tự gọi `ensure_all_schemas` +
+    `grant_app_privileges` thay vì đòi người chạy test tự bootstrap.
+
+    **Cấp bằng SQL thẳng, KHÔNG import `studio_app.core.schema.grant_scorer_privileges`.** Hàm đó chỉ
+    tồn tại từ `app#42`; con trỏ `apps/studio` mà kit đang ghim còn TRƯỚC nó, nên một `import` thẳng
+    làm 6 bài `ERROR: cannot import name` ở đúng trạng thái CI hôm nay — đã đo. Fixture này phải chạy
+    đúng ở **cả hai phía** lần bump con trỏ, đó chính là tính chất PR này khẳng định, nên nó không được
+    phụ thuộc một symbol chỉ có ở một phía. Hai câu GRANT ở đây trùng nội dung `grant_scorer_privileges()`
+    có chủ đích; nguồn sự thật của hàng rào (*"chỉ SELECT, chỉ 1 bảng"*) vẫn là bài khoá của `app#42`
+    (`test_scorer_chi_co_SELECT_va_chi_tren_obs_trace_events`), không phải hai dòng bootstrap này.
+
+    Thiếu `STUDIO_DATABASE_URL_SCORER` ⇒ skip có thông điệp chỉ đúng cách sửa, cùng khuôn
+    `_require_dsn` ở conftest gốc kit. CI có sẵn biến này (`.github/workflows/ci.yml`, `kit#202`),
+    nên độ phủ ở CI không mất.
+    """
+    dsn = os.environ.get("STUDIO_DATABASE_URL_SCORER")
+    if not dsn:
+        pytest.skip(
+            "STUDIO_DATABASE_URL_SCORER chưa đặt — cần role studio_scorer (BYPASSRLS) để đọc "
+            "obs.trace_events không lọc tenant sau GAP-1. Đặt "
+            "postgresql://studio_scorer:changeme@localhost:5433/studio_test, và nếu volume Postgres "
+            "có trước kit#202 thì áp tay một lần: docker exec -i <pg> psql -U postgres -d "
+            "studio_test < docker/postgres-init/00-roles.sql"
+        )
+    async with admin_pool.connection() as conn:
+        cur = await conn.execute("SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'studio_scorer'")
+        if await cur.fetchone() is None:
+            pytest.skip(
+                "DB test chưa có role studio_scorer — volume Postgres tạo trước kit#202 thì initdb "
+                "KHÔNG chạy lại. Áp tay một lần (file idempotent): docker exec -i <pg> psql "
+                "-U postgres -d studio_test < docker/postgres-init/00-roles.sql"
+            )
+        await conn.execute("GRANT USAGE ON SCHEMA obs TO studio_scorer")
+        await conn.execute("GRANT SELECT ON obs.trace_events TO studio_scorer")
+
+    sp: Any = AsyncConnectionPool(dsn, min_size=1, max_size=4, open=False)
+    await sp.open(wait=True, timeout=10)
+    yield sp
+    await sp.close()

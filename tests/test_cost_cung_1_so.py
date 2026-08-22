@@ -39,6 +39,7 @@ from dataclasses import replace
 from uuid import UUID
 
 import pytest
+from psycopg import sql
 from studio_app.core._db import Pool
 from studio_app.obs.trace_writer import PgTraceWriter
 from studio_contracts.nodes import NodeType
@@ -148,7 +149,7 @@ def _results() -> list[SmokeResult]:
 # ── ô DoD: ba lớp cùng một số ───────────────────────────────────────────────────────────────────
 
 
-async def test_cost_cung_1_so_ba_lop_A_B_C(admin_pool: Pool, pool: Pool) -> None:
+async def test_cost_cung_1_so_ba_lop_A_B_C(admin_pool: Pool, pool: Pool, scorer_pool: Pool) -> None:
     """`run_cost_from_trace` ↔ `SELECT round(sum(cost),6)` ↔ chuỗi UI-test — **cùng một số**.
 
     Ba vế, ba con đường, một số kỳ vọng viết tay `0.011994`.
@@ -161,11 +162,11 @@ async def test_cost_cung_1_so_ba_lop_A_B_C(admin_pool: Pool, pool: Pool) -> None
     await _ghi_trace(pool)
 
     # A — đường đọc evalhub, qua read_run_unscoped → _row_to_event (NUMERIC → Decimal → float)
-    events = await read_run_unscoped(pool, _RUN_ID)
+    events = await read_run_unscoped(scorer_pool, _RUN_ID)
     mat_a = run_cost_from_trace(events)
 
     # B — SQL thô, đường độc lập
-    mat_b = await _mat_B_sql_tho(pool, _RUN_ID)
+    mat_b = await _mat_B_sql_tho(scorer_pool, _RUN_ID)
 
     # C — chuỗi UI-test thật sự in ra
     out = render_run_cases(
@@ -187,7 +188,7 @@ async def test_cost_cung_1_so_ba_lop_A_B_C(admin_pool: Pool, pool: Pool) -> None
     assert f"{_SO_EVENT} event" in out
 
 
-async def test_lop_C_doi_chung_am_doi_so_thi_chuoi_phai_doi(admin_pool: Pool, pool: Pool) -> None:
+async def test_lop_C_doi_chung_am_doi_so_thi_chuoi_phai_doi(admin_pool: Pool, pool: Pool, scorer_pool: Pool) -> None:
     """Lớp C không được xanh bằng một hằng số in cứng.
 
     Bài trên khẳng định chuỗi **chứa** `0.011994`. Một renderer in hằng số `"0.011994"` cũng thoả.
@@ -195,7 +196,7 @@ async def test_lop_C_doi_chung_am_doi_so_thi_chuoi_phai_doi(admin_pool: Pool, po
     """
     del admin_pool
     await _ghi_trace(pool)
-    events = await read_run_unscoped(pool, _RUN_ID)
+    events = await read_run_unscoped(scorer_pool, _RUN_ID)
     mat_a = run_cost_from_trace(events)
 
     khac = render_run_cases(
@@ -214,7 +215,7 @@ async def test_lop_C_doi_chung_am_doi_so_thi_chuoi_phai_doi(admin_pool: Pool, po
 
 
 async def test_doi_trong_mat_B_KHONG_di_qua_code_evalhub(
-    admin_pool: Pool, pool: Pool, monkeypatch: pytest.MonkeyPatch
+    admin_pool: Pool, pool: Pool, scorer_pool: Pool, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Bài đối trọng **canh chính mặt B** — mutant `M-C7`.
 
@@ -247,7 +248,7 @@ async def test_doi_trong_mat_B_KHONG_di_qua_code_evalhub(
     # gọi `run_cost_from_trace` thì lời gọi đó rơi vào bản đã bẻ.
     monkeypatch.setitem(globals(), "run_cost_from_trace", _duong_doc_bi_be)
 
-    mat_b = await _mat_B_sql_tho(pool, _RUN_ID)
+    mat_b = await _mat_B_sql_tho(scorer_pool, _RUN_ID)
 
     assert mat_b == _TONG_KY_VONG, (
         f"mặt B đổi theo khi bẻ đường đọc evalhub (ra {mat_b}) ⇒ nó KHÔNG độc lập — đúng mutant "
@@ -255,7 +256,7 @@ async def test_doi_trong_mat_B_KHONG_di_qua_code_evalhub(
     )
 
 
-async def test_doi_trong_phep_so_do_duoc_khi_DB_doi(admin_pool: Pool, pool: Pool) -> None:
+async def test_doi_trong_phep_so_do_duoc_khi_DB_doi(admin_pool: Pool, pool: Pool, scorer_pool: Pool) -> None:
     """Bài đối trọng thứ hai — chứng minh phép so **đỏ được**, không phải luôn khớp.
 
     Thiếu nó thì *"cùng-1-số"* không phân biệt được **khớp** với **cả hai cùng rỗng**. Cách dựng: A
@@ -269,18 +270,30 @@ async def test_doi_trong_phep_so_do_duoc_khi_DB_doi(admin_pool: Pool, pool: Pool
     del admin_pool
     await _ghi_trace(pool)
 
-    events = await read_run_unscoped(pool, _RUN_ID)
+    events = await read_run_unscoped(scorer_pool, _RUN_ID)
     mat_a = run_cost_from_trace(events)
     assert mat_a.cost == _TONG_KY_VONG
 
     # Sửa cost của MỘT event sau lưng A: 0.000291 → 1.000291 (chênh đúng 1.0, số viết tay)
-    async with pool.connection() as conn:
-        await conn.execute(
+    #
+    # `SET LOCAL app.tenant_id` trong CÙNG transaction là bắt buộc sau GAP-1, không phải trang trí:
+    # `obs.trace_events` bật `FORCE ROW LEVEL SECURITY`, nên một `UPDATE` không bind tenant khớp
+    # **0 dòng** và **no-op IM LẶNG** — không lỗi, không cảnh báo, `rowcount = 0`. Bài này sẽ đỏ ở
+    # assert dưới với thông điệp *"mặt B không thấy thay đổi"*, trỏ sai hoàn toàn vào mặt B trong
+    # khi lỗi thật là câu UPDATE chưa từng chạy. Cùng idiom `PgTraceWriter.write()` đang dùng cho
+    # đường ghi thật (`SET LOCAL` là phạm vi transaction ⇒ phải có `conn.transaction()` bọc ngoài).
+    async with pool.connection() as conn, conn.transaction():
+        await conn.execute(sql.SQL("SET LOCAL app.tenant_id = {}").format(sql.Literal(str(_TENANT))))
+        cur = await conn.execute(
             "UPDATE obs.trace_events SET cost = %s WHERE event_id = %s",
             (1.000291, f"{_RUN_ID}-e1"),
         )
+        assert cur.rowcount == 1, (
+            f"UPDATE khớp {cur.rowcount} dòng, kỳ vọng 1 — nếu 0 thì RLS đang giấu dòng khỏi role "
+            "này và cả bài dưới đây đo nhầm thứ khác"
+        )
 
-    mat_b_sau_khi_sua = await _mat_B_sql_tho(pool, _RUN_ID)
+    mat_b_sau_khi_sua = await _mat_B_sql_tho(scorer_pool, _RUN_ID)
 
     assert mat_b_sau_khi_sua == 1.011994, "mặt B không thấy thay đổi trong DB — nó không đọc DB"
     assert mat_a.cost != mat_b_sau_khi_sua, (
@@ -289,7 +302,7 @@ async def test_doi_trong_phep_so_do_duoc_khi_DB_doi(admin_pool: Pool, pool: Pool
     )
 
 
-async def test_doi_trong_lop_C_bat_duoc_render_lam_tron_mat(admin_pool: Pool, pool: Pool) -> None:
+async def test_doi_trong_lop_C_bat_duoc_render_lam_tron_mat(admin_pool: Pool, pool: Pool, scorer_pool: Pool) -> None:
     """Lớp C phải đỏ được khi renderer làm mất chữ số — `E-1` dựng thành phép đo.
 
     A≡B vẫn xanh khi renderer in `.2f`, vì cả hai đều ở tầng giá trị. Bài này là chỗ duy nhất trong
@@ -297,7 +310,7 @@ async def test_doi_trong_lop_C_bat_duoc_render_lam_tron_mat(admin_pool: Pool, po
     """
     del admin_pool
     await _ghi_trace(pool)
-    events = await read_run_unscoped(pool, _RUN_ID)
+    events = await read_run_unscoped(scorer_pool, _RUN_ID)
     mat_a = run_cost_from_trace(events)
 
     dong = _dong_cost(
@@ -321,7 +334,7 @@ async def test_doi_trong_lop_C_bat_duoc_render_lam_tron_mat(admin_pool: Pool, po
 
 @pytest.mark.parametrize("cost_that", [0.0])
 async def test_trace_THAT_hom_nay_cho_ra_chua_noi_gia_chu_khong_phai_do_that_bang_0(
-    admin_pool: Pool, pool: Pool, cost_that: float
+    admin_pool: Pool, pool: Pool, scorer_pool: Pool, cost_that: float
 ) -> None:
     """Trace **như emit thật hôm nay** (`cost=_NO_COST`, `tokens` thật) ⇒ `priced is False`.
 
@@ -351,7 +364,7 @@ async def test_trace_THAT_hom_nay_cho_ra_chua_noi_gia_chu_khong_phai_do_that_ban
             )
         )
 
-    ket_qua = run_cost_from_trace(await read_run_unscoped(pool, run_id))
+    ket_qua = run_cost_from_trace(await read_run_unscoped(scorer_pool, run_id))
     dong = _dong_cost(
         render_run_cases(
             _results(),

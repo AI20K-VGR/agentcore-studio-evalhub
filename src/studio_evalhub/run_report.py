@@ -534,6 +534,38 @@ def _case_by_id(case_id: str) -> GoldenCase:
     raise LookupError(f"không có case {case_id!r} trong callisto-smoke-5-v0 (có: {known})")
 
 
+_DSN_ENV_SCORER = "STUDIO_DATABASE_URL_SCORER"
+_DSN_ENV_APP = "STUDIO_DATABASE_URL"
+
+
+def dsn_bo_cham(env: Mapping[str, str] | None = None) -> str | None:
+    """DSN cho CLI chấm điểm — ưu tiên role bộ chấm, fallback về DSN app (`evalhub#37`).
+
+    **Vì sao cần role riêng.** Hai hàm dưới CLI này (`list_runs_all_tenants`, `read_run_unscoped`)
+    CỐ Ý không set `app.tenant_id`: chúng phải thấy event của MỌI tenant thì `tenant_scope_ok`
+    (`harness.py`) mới bắt được run có node đầu mang tenant A còn node sau mang tenant B. Sau GAP-1
+    (`app#40` bật `ENABLE`+`FORCE ROW LEVEL SECURITY` trên `obs.trace_events`), mọi role không
+    `BYPASSRLS` khớp 0 dòng ⇒ `_assert_doc_xuyen_tenant_duoc` chặn và raise
+    `UnscopedReadUnavailable`. `studio_scorer` (`kit#202` tạo role, `app#42` cấp quyền) là role duy
+    nhất đọc được.
+
+    Quyền của role đó là `SELECT` trên ĐÚNG `obs.trace_events` — và đúng bằng nhu cầu: toàn bộ SQL
+    của module này là `_READ_RUN` + `_LIST_RUNS`, cả hai chỉ chạm bảng đó. Không cần nới thêm gì.
+
+    **Fallback về `STUDIO_DATABASE_URL` là có chủ đích, không phải lười.** `docker/postgres-init/
+    00-roles.sql` chỉ chạy ở initdb, nên máy có volume Postgres tạo trước `kit#202` sẽ chưa có role.
+    Bắt buộc biến mới sẽ làm CLI chết trên những máy đó kể cả khi RLS chưa bật (con trỏ `apps/studio`
+    ở kit còn trước GAP-1) — tức phá một thứ đang chạy được để phòng một thứ chưa xảy ra. Với
+    fallback, máy cũ chạy y như trước; và nếu RLS đã áp thì nó dừng ở `UnscopedReadUnavailable` với
+    thông điệp chỉ đúng cách sửa, không im lặng.
+
+    `or` chứ không `in`: `STUDIO_DATABASE_URL_SCORER=` (khai nhưng để trống) đọc là **chưa đặt**.
+    Nếu không, `AsyncConnectionPool("")` sẽ nổ ở một chỗ xa nguồn lỗi.
+    """
+    src = os.environ if env is None else env
+    return src.get(_DSN_ENV_SCORER) or src.get(_DSN_ENV_APP) or None
+
+
 async def _amain(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m studio_evalhub.run_report",
@@ -541,8 +573,11 @@ async def _amain(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--dsn",
-        default=os.environ.get("STUDIO_DATABASE_URL"),
-        help="DSN Postgres (mặc định $STUDIO_DATABASE_URL)",
+        default=dsn_bo_cham(),
+        help=(
+            f"DSN Postgres. Mặc định ${_DSN_ENV_SCORER} (role bộ chấm, BYPASSRLS — bắt buộc khi "
+            f"obs.trace_events đã bật RLS), fallback ${_DSN_ENV_APP}"
+        ),
     )
     parser.add_argument("--list", action="store_true", help="liệt kê run_id có trong bảng rồi thoát")
     parser.add_argument(
@@ -555,7 +590,10 @@ async def _amain(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if not args.dsn:
-        parser.error("thiếu DSN: đặt $STUDIO_DATABASE_URL hoặc truyền --dsn")
+        parser.error(
+            f"thiếu DSN: đặt ${_DSN_ENV_SCORER} (ưu tiên — role bộ chấm có BYPASSRLS, "
+            f"evalhub#37) hoặc ${_DSN_ENV_APP}, hoặc truyền --dsn"
+        )
 
     pool: Pool = AsyncConnectionPool(args.dsn, open=False)
     await pool.open(wait=True)
