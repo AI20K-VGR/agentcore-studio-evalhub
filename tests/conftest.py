@@ -215,7 +215,7 @@ def runner_tot() -> Callable[[GoldenSet, Mapping[str, UUID]], StubAgentRunner]:
 
 
 @pytest_asyncio.fixture
-async def scorer_pool(admin_pool: object) -> AsyncIterator[Any]:
+async def scorer_pool(admin_pool: Any) -> AsyncIterator[Any]:
     """Pool của `studio_scorer` — role DUY NHẤT đọc được `obs.trace_events` KHÔNG lọc tenant.
 
     Vì sao cần fixture riêng thay vì dùng `pool` (studio_app) như trước: sau GAP-1 (`app#40` bật
@@ -229,14 +229,29 @@ async def scorer_pool(admin_pool: object) -> AsyncIterator[Any]:
     Mặt GHI thì **không** đổi: `PgTraceWriter.write()` tự `SET LOCAL app.tenant_id` trên chính
     connection của nó, nên nó ghi được dưới RLS bằng role app như cũ.
 
-    Phụ thuộc `admin_pool` chỉ để **xếp thứ tự** — schema + `grant_scorer_privileges()` phải chạy
-    trước khi role này kết nối, giống cách `pool` phụ thuộc `admin_pool`.
+    **Fixture tự cấp quyền, không giả định ai đã cấp hộ** (finding @DongAnh2704, review PR#39).
+    `grant_scorer_privileges()` chỉ có 2 call site trong toàn workspace: `studio_app.app::_lifespan`
+    (boot app thật) và test riêng của `app#42`. Không có gì trong luồng test của evalhub chạm tới nó,
+    và `reusable-domain-ci.yml` KHÔNG boot `apps/studio` khi chạy suite của quadrant khác — nó chỉ
+    `uv sync` + `pytest <domain>/tests`. Nếu fixture này chỉ mở pool rồi kết nối, nó đang dựa vào một
+    bước boot bằng tay không ai ghi lại; ngày con trỏ `apps/studio` được bump, CI đổi từ *skip 6 bài*
+    sang **`InsufficientPrivilege: permission denied for schema obs`** — đã tái hiện được.
+
+    Nên fixture tự cấp quyền, cùng khuôn `admin_pool` gốc kit tự gọi `ensure_all_schemas` +
+    `grant_app_privileges` thay vì đòi người chạy test tự bootstrap.
+
+    **Cấp bằng SQL thẳng, KHÔNG import `studio_app.core.schema.grant_scorer_privileges`.** Hàm đó chỉ
+    tồn tại từ `app#42`; con trỏ `apps/studio` mà kit đang ghim còn TRƯỚC nó, nên một `import` thẳng
+    làm 6 bài `ERROR: cannot import name` ở đúng trạng thái CI hôm nay — đã đo. Fixture này phải chạy
+    đúng ở **cả hai phía** lần bump con trỏ, đó chính là tính chất PR này khẳng định, nên nó không được
+    phụ thuộc một symbol chỉ có ở một phía. Hai câu GRANT ở đây trùng nội dung `grant_scorer_privileges()`
+    có chủ đích; nguồn sự thật của hàng rào (*"chỉ SELECT, chỉ 1 bảng"*) vẫn là bài khoá của `app#42`
+    (`test_scorer_chi_co_SELECT_va_chi_tren_obs_trace_events`), không phải hai dòng bootstrap này.
 
     Thiếu `STUDIO_DATABASE_URL_SCORER` ⇒ skip có thông điệp chỉ đúng cách sửa, cùng khuôn
     `_require_dsn` ở conftest gốc kit. CI có sẵn biến này (`.github/workflows/ci.yml`, `kit#202`),
     nên độ phủ ở CI không mất.
     """
-    del admin_pool  # ràng buộc thứ tự thôi — schema/grant phải có trước khi role này kết nối
     dsn = os.environ.get("STUDIO_DATABASE_URL_SCORER")
     if not dsn:
         pytest.skip(
@@ -246,6 +261,17 @@ async def scorer_pool(admin_pool: object) -> AsyncIterator[Any]:
             "có trước kit#202 thì áp tay một lần: docker exec -i <pg> psql -U postgres -d "
             "studio_test < docker/postgres-init/00-roles.sql"
         )
+    async with admin_pool.connection() as conn:
+        cur = await conn.execute("SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'studio_scorer'")
+        if await cur.fetchone() is None:
+            pytest.skip(
+                "DB test chưa có role studio_scorer — volume Postgres tạo trước kit#202 thì initdb "
+                "KHÔNG chạy lại. Áp tay một lần (file idempotent): docker exec -i <pg> psql "
+                "-U postgres -d studio_test < docker/postgres-init/00-roles.sql"
+            )
+        await conn.execute("GRANT USAGE ON SCHEMA obs TO studio_scorer")
+        await conn.execute("GRANT SELECT ON obs.trace_events TO studio_scorer")
+
     sp: Any = AsyncConnectionPool(dsn, min_size=1, max_size=4, open=False)
     await sp.open(wait=True, timeout=10)
     yield sp
