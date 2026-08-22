@@ -248,9 +248,12 @@ def test_tron_run_id_thi_raise_RunCostError() -> None:
 def test_tron_tenant_id_thi_raise_RunCostError() -> None:
     """Trộn `tenant_id` ⇒ hở `INV-1`.
 
-    `obs.trace_events` **không có RLS** (`kb#24` hạng mục B, chưa ký đủ), nên `tenant_id` trên từng
-    event là hàng rào **duy nhất**. Một tổng trộn tenant là số của tenant này rò sang tenant kia, và
-    nó rò dưới dạng một con số trông hoàn toàn bình thường.
+    `obs.trace_events` nay có RLS thật ở tầng DB (GAP-1, mini-RFC hạng mục B đã ký đủ 4/4) — nhưng
+    hàm THUẦN này (không `pool`, không DB) vẫn phải tự canh: `run_cost_from_trace` nhận `list[
+    TraceEvent]` đã đọc sẵn (kể cả qua `read_run_unscoped`, cố ý không lọc tenant), nên RLS ở tầng DB
+    không giúp gì ở đây — lưới của hàm thuần là lưới **duy nhất** cho input đã ở trong RAM. Một tổng
+    trộn tenant là số của tenant này rò sang tenant kia, và nó rò dưới dạng một con số trông hoàn
+    toàn bình thường.
     """
     events = [
         _event(seq=1, cost=0.5),
