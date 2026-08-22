@@ -309,6 +309,19 @@ có sẵn. Điều kiện lật: một runner làm `refused` lên >1/22, hoặc 
 và trục `refused`: **ngày `golden_set_ref` mặc định cutover sang 2.0, đo lại `17/0/0`**. Ghi ra vì cutover
 đang đi, không phải một khả năng xa.
 
+## D26 · 2026-08-22
+
+> Hai quyết định, cùng sinh ra từ việc `apps/studio` đã land **GAP-1** (`app#40`, 2026-08-21) —
+> `ENABLE`+`FORCE ROW LEVEL SECURITY` trên `obs.trace_events`. Con trỏ `apps/studio` ở kit tại thời
+> điểm ghi vẫn là `898504c` (**trước** GAP-1), nên hai quyết định dưới đây nói về một trạng thái
+> **sẽ đến ở lần bump con trỏ**, chưa phải trạng thái của workspace hôm nay. Đó cũng chính là lý do
+> phải chốt bây giờ chứ không đợi: ngòi nổ là lần bump, không phải ngày `app#40` merge.
+
+| # | Quyết định | Lý do | PR / bằng chứng | Trạng thái |
+|---|---|---|---|---|
+| **DEC-D26-01** | `read_run_unscoped`/`list_runs_all_tenants` **từ chối trả lời** (`UnscopedReadUnavailable`) khi `row_security_active('obs.trace_events')` đúng, thay vì trả `[]`. **KHÔNG** vá bằng cách set `app.tenant_id` rồi lặp từng tenant | Policy GAP-1 là `tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid`. Hai hàm này **cố ý** không set biến đó ⇒ phép so trả `NULL` ⇒ mọi dòng bị lọc ⇒ SELECT **thành công**, trả `[]`, không cảnh báo. `[]` là chế độ hỏng tệ nhất vì không phân biệt được với *"bảng chưa có run nào"*; đi thêm một bước, `run_cost_from_trace` biến nó thành `RunCostError("events rỗng")` — đúng ngữ pháp, **sai nguyên nhân**. Hướng "lặp từng tenant" bị loại **không phải vì tốn công**: `read_run_unscoped` tồn tại để `tenant_scope_ok` (`harness.py:187`) bắt run mà node đầu mang `ankor` còn node sau mang `borea` — lọc theo một tenant khiến RLS giấu **đúng những event lạ mà phép kiểm đó đi tìm** ⇒ `tenant_scope_ok` trả `True` cho run hỏng thật. Đó là hồi quy bảo mật, không phải bản vá | `evalhub#37` · `run_report.py::_assert_doc_xuyen_tenant_duoc` (dùng built-in `row_security_active`, gộp sẵn 4 biến số: `ENABLE`/`FORCE`/owner/`BYPASSRLS`) · `tests/test_unscoped_read_fail_closed.py` (3 bài, tự dựng + tự khôi phục tiền đề RLS nên tất định ở **cả hai** phía lần bump con trỏ) · đo đỏ-trước: 2 bài `DID NOT RAISE`; mutation gỡ guard ⇒ đúng 1 bài đỏ · tái hiện sống: 6 bài `test_cost_cung_1_so.py` đỏ với `RunCostError("events rỗng")` khi DB test có RLS | ✅ quyết · vế **thứ hai** (từ chối trả lời) đã land · vế **thứ nhất** (role Postgres riêng có `BYPASSRLS` cho bộ chấm) là nợ có chủ — chạm `docker/postgres-init/00-roles.sql` + `docker-compose*.yml` ở **kit** và `grant_app_privileges()` ở **apps/studio**, PR riêng, **chặn lần bump con trỏ `apps/studio`** |
+| **DEC-D26-02** | Ghi nhận: sau `app#41`, dispatcher tool ở đường chấm **phân đôi theo `self._recipe`** — nhánh (a) `recipe=` được tiêm (`routes/publish.py::_evaluate`) dùng `RealToolDispatch` thật; nhánh (b) `recipe=None` (eval-harness rời route, vd `scripts/smoke_eval_d6.py:231`) vẫn rơi về `WhitelistToolDispatch` stub. **Không** đòi `app#41` sửa | Nhánh (b) dựng `create_recipe_d4(...)` với `tool_whitelist=["kb_search"]` mặc định, mà `RealToolDispatch` không hỗ trợ `kb_search` (tool đó đi `KbRetrieveExecutor`, không qua `ToolDispatch`) ⇒ tiêm vào sẽ đổi `unsupported tool: kb_search` thành lỗi cứng cho mọi test hiện có, và đổi cả recipe được băm (`certified_recipe()`, D16 golden-batch determinism). Lý do hợp lý, nhưng hệ quả phải ghi ra: **cùng một recipe, chấm qua nhánh (b) cho kết quả khác chạy qua `/chat`** nếu golden set có node `tool-call` dùng `calculator`/`current_datetime` | `apps/studio#41::eval_adapter.py` · `engine#35` (seam `dispatch(tool, params)`) · fixture `create_recipe_d4` là bút **SWE** (`packages/workbench`) | 🟡 nợ có **điều kiện lật**: ngày golden set thêm case dùng `calculator`/`current_datetime`. Chưa vỡ hôm nay vì golden hiện **0** case như vậy — nhưng đó là thuộc tính của **fixture hôm nay**, không phải bất biến được khoá |
+
 ## Còn mở — chặn `FROZEN` thật sự
 
 | # | Nội dung | Chờ ai | Hạn |

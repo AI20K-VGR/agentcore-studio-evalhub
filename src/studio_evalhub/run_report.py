@@ -299,8 +299,11 @@ def run_cost_from_trace(events: list[TraceEvent]) -> RunCost:
 
     - `events` rỗng ⇒ không có run nào để nói về;
     - trộn `run_id` ⇒ "cost của run này" mất nghĩa;
-    - trộn `tenant_id` ⇒ hở `INV-1`. `obs.trace_events` **không có RLS**, `tenant_id` trên từng event
-      là hàng rào **duy nhất**; một tổng trộn tenant là một con số của tenant này rò sang tenant kia.
+    - trộn `tenant_id` ⇒ hở `INV-1`. `obs.trace_events` nay CÓ RLS ở tầng DB (GAP-1, `app#40`),
+      nhưng hàm này là hàm **thuần** — nó nhận `list[TraceEvent]` đã đọc sẵn trong RAM, trong đó có
+      đường `read_run_unscoped` cố ý đọc xuyên tenant để `tenant_scope_ok` bắt được run trộn. RLS ở
+      tầng DB không với tới đây, nên lưới của hàm thuần vẫn là lưới **duy nhất** cho đầu vào này;
+      một tổng trộn tenant là một con số của tenant này rò sang tenant kia.
 
     ## `priced` trả lời ĐÚNG MỘT CÂU: *"cost của run này đã được đo chưa"*
 
@@ -339,9 +342,11 @@ def run_cost_from_trace(events: list[TraceEvent]) -> RunCost:
     tenants = sorted({e.tenant_id for e in events}, key=str)
     if len(tenants) > 1:
         raise RunCostError(
-            f"trộn tenant_id trong cùng một run: {[str(t) for t in tenants]}. `obs.trace_events` "
-            "KHÔNG có RLS nên `tenant_id` trên từng event là hàng rào duy nhất (`INV-1`) — một tổng "
-            "trộn tenant là số của tenant này rò sang tenant kia, dưới dạng một con số trông bình thường."
+            f"trộn tenant_id trong cùng một run: {[str(t) for t in tenants]}. RLS ở tầng DB "
+            "(GAP-1) không với tới hàm thuần này — nó chấm trên event đã đọc sẵn, kể cả qua "
+            "`read_run_unscoped` (cố ý xuyên tenant), nên `tenant_id` trên từng event là hàng rào "
+            "duy nhất còn lại ở đây (`INV-1`) — một tổng trộn tenant là số của tenant này rò sang "
+            "tenant kia, dưới dạng một con số trông bình thường."
         )
 
     tong_cost = round(sum(e.cost for e in events), _COST_ROUND_NDIGITS)
@@ -361,6 +366,69 @@ def run_cost_from_trace(events: list[TraceEvent]) -> RunCost:
         cost=tong_cost,
         event_count=len(events),
         priced=priced,
+    )
+
+
+class UnscopedReadUnavailable(RuntimeError):
+    """Đường đọc-xuyên-tenant không đáng tin trên connection này — raise thay vì trả rỗng.
+
+    Fail-closed cùng họ với `RunCostError`/`TraceAnswerError`: nhánh không chứng minh được thì
+    raise, không đoán. Khác ở chỗ hai lớp kia nói về *dữ liệu*, lớp này nói về *quyền đọc* — và đó
+    đúng là chỗ trước đây bị nhập nhằng, xem `_assert_doc_xuyen_tenant_duoc`."""
+
+
+# `row_security_active(regclass)` là built-in Postgres trả lời đúng câu cần hỏi — "RLS có đang áp
+# lên CHÍNH role của connection này không" — và nó gộp sẵn cả 4 biến số: bảng đã `ENABLE` chưa, có
+# `FORCE` không, role có phải owner không, role có `BYPASSRLS`/superuser không. Tự tra
+# `pg_class`/`pg_roles` rồi ghép tay là dựng lại một bản sao kém hơn của hàm này.
+#
+# `to_regclass(...) IS NULL` bọc ngoài: `row_security_active` RAISE nếu bảng chưa tồn tại, mà "chưa
+# chạy `ensure_all_schemas()`" không phải chuyện của guard này — để câu SELECT thật bên dưới báo
+# `relation does not exist` như thường lệ, đừng đổi nó thành một lỗi về quyền.
+_ROW_SECURITY_ACTIVE = """
+SELECT CASE
+           WHEN to_regclass('obs.trace_events') IS NULL THEN false
+           ELSE row_security_active('obs.trace_events')
+       END
+"""
+
+
+async def _assert_doc_xuyen_tenant_duoc(conn: AsyncConnection[Any], ten_ham: str) -> None:
+    """Chặn trước khi SELECT: RLS đang áp lên role này ⇒ đường đọc-xuyên-tenant vô nghĩa.
+
+    **Vì sao phải raise chứ không trả rỗng** (`evalhub#37`, GAP-1 / `app#40`). Policy của
+    `obs.trace_events` là `tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid`.
+    Hai hàm dưới đây CỐ Ý không set `app.tenant_id` — đọc xuyên tenant là việc của chúng. Dưới
+    policy đó `current_setting(..., true)` trả `NULL`, phép so trả `NULL`, và **mọi** dòng bị lọc:
+    câu SELECT thành công, trả `[]`, không một cảnh báo nào.
+
+    Cái `[]` đó là chế độ hỏng tệ nhất có thể, vì nó không phân biệt được với câu trả lời hợp lệ
+    *"bảng chưa có run nào"*. Đi thêm một bước thì `run_cost_from_trace` biến nó thành
+    `RunCostError("events rỗng")` — đúng ngữ pháp, sai nguyên nhân, đẩy người đọc đi tìm ở phía dữ
+    liệu trong khi lỗi nằm ở phía quyền.
+
+    **Vì sao không sửa bằng cách set `app.tenant_id` rồi lặp từng tenant.** `read_run_unscoped` tồn
+    tại để `tenant_scope_ok` (`harness.py:187`) bắt được run mà node đầu mang `ankor` còn node sau
+    mang `borea`. Lọc theo một tenant khiến RLS giấu đi **đúng những event lạ mà phép kiểm đó đi
+    tìm** ⇒ `tenant_scope_ok` trả `True` cho một run hỏng thật. Đó là hồi quy bảo mật, không phải
+    bản vá — nên hàm phải đọc được mọi dòng, hoặc phải từ chối trả lời. Guard này là vế thứ hai.
+
+    Vế thứ nhất (một role Postgres riêng có `BYPASSRLS` cho bộ chấm) chạm `docker/postgres-init` +
+    `docker-compose*.yml` ở repo kit và `grant_app_privileges()` ở `apps/studio` — ngoài package
+    này, PR riêng. Cho tới lúc đó, guard này biến một lỗi im lặng thành một lỗi kêu to, và câu lỗi
+    nói thẳng cần làm gì.
+    """
+    cursor = await conn.execute(_ROW_SECURITY_ACTIVE)
+    row = await cursor.fetchone()
+    if row is None or not row[0]:
+        return
+    raise UnscopedReadUnavailable(
+        f"`{ten_ham}` đọc `obs.trace_events` KHÔNG lọc tenant, nhưng RLS đang áp lên role hiện tại "
+        "⇒ mọi dòng bị policy lọc và hàm sẽ trả rỗng IM LẶNG, không phân biệt được với `bảng chưa "
+        "có run nào`. Từ chối trả lời thay vì trả một câu sai (`evalhub#37`, GAP-1 / `app#40`). "
+        "Cách chạy được: dùng DSN của một role có `BYPASSRLS` cho bộ chấm. KHÔNG vá bằng cách set "
+        "`app.tenant_id` rồi lặp từng tenant — làm vậy RLS sẽ giấu đúng những event lạ mà "
+        "`tenant_scope_ok` đi tìm, biến phép kiểm trộn-tenant thành vô nghĩa."
     )
 
 
@@ -429,6 +497,7 @@ async def read_run_unscoped(pool: Pool, run_id: str) -> list[TraceEvent]:
     coroutine đọc `obs.trace_events` không lọc tenant mà tên không tự khai.
     """
     async with pool.connection() as conn:
+        await _assert_doc_xuyen_tenant_duoc(conn, "read_run_unscoped")
         cursor = await conn.execute(_READ_RUN, (run_id,))
         rows = await cursor.fetchall()
     return [_row_to_event(row) for row in rows]
@@ -448,6 +517,7 @@ async def list_runs_all_tenants(pool: Pool) -> list[tuple[str, int]]:
     `--list`), khác `read_run_unscoped` là "không lọc gì vì lọc ở tầng khác".
     """
     async with pool.connection() as conn:
+        await _assert_doc_xuyen_tenant_duoc(conn, "list_runs_all_tenants")
         cursor = await conn.execute(_LIST_RUNS)
         return [(row[0], row[1]) for row in await cursor.fetchall()]
 
