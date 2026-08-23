@@ -16,9 +16,13 @@ và không nối được vào playground của `#102`.
 
 ## Fail-closed ở mọi nhánh không chứng minh được
 
-Trace thiếu `llm-step`, thiếu key `answer`, hoặc có **nhiều** `llm-step` ⇒ **raise**, không đoán.
-Chọn đại một event khi có nhiều ứng viên là đúng lớp lỗi breakpoint `#14`: một giá trị được suy ra
-im lặng rồi được chấm như thể đã đo.
+Trace thiếu `llm-step`, không `llm-step` nào mang `answer`, hoặc có **nhiều** `llm-step` **cùng
+mang `answer`** ⇒ **raise**, không đoán. Chọn đại một event khi có nhiều ứng viên là đúng lớp lỗi
+breakpoint `#14`: một giá trị được suy ra im lặng rồi được chấm như thể đã đo.
+
+**Sửa luật ở D23** (`evalhub#42`): trước đó là *"nhiều `llm-step` ⇒ raise"*, đếm trên **số** event
+thay vì trên **key `answer`**, và nó chặn nhầm `run_agent_loop()` — vòng lặp phát một `llm-step` mỗi
+lượt nên mọi run nhiều lượt đều raise. Xem `test_answer_from_trace_doc_duoc_trace_nhieu_luot_cua_agent_loop`.
 """
 
 from __future__ import annotations
@@ -178,12 +182,19 @@ def test_answer_from_trace_thieu_key_refused_thi_raise_chu_khong_doan_False() ->
         answer_from_trace(events)
 
 
-def test_answer_from_trace_nhieu_llm_step_thi_raise_chu_khong_chon_bua() -> None:
-    """Nhiều `llm-step` ⇒ raise, KHÔNG tự chọn cái đầu hay cái cuối.
+def test_answer_from_trace_nhieu_llm_step_CUNG_MANG_ANSWER_thi_raise_chu_khong_chon_bua() -> None:
+    """Nhiều `llm-step` **cùng mang `answer`** ⇒ raise, KHÔNG tự chọn cái đầu hay cái cuối.
 
     Một recipe nhiều bước LLM là chuyện sẽ tới (`#102` playground dựng recipe tự do). Lúc đó *"câu
     trả lời của run"* là cái nào phải do hợp đồng nói, không do thứ tự dòng trong bảng nói. Chọn im
-    lặng sẽ cho ra một bảng điểm trông vẫn đúng trong khi nó đang chấm nhầm bước."""
+    lặng sẽ cho ra một bảng điểm trông vẫn đúng trong khi nó đang chấm nhầm bước.
+
+    **Đổi tên + làm rõ ở D23** (`evalhub#42`): luật cũ là *"nhiều `llm-step` ⇒ raise"*, và nó chặn
+    nhầm cả `run_agent_loop()` — nơi **mỗi lượt** phát một `llm-step` nhưng chỉ lượt cuối mang
+    `answer`. Luật mới đếm trên `llm-step` **mang `answer`**, nên ca thật sự nhập nhằng (bài này)
+    vẫn raise y như cũ, còn ca có đúng một câu trả lời thì đọc được. Tên cũ nói *"nhiều llm-step"*
+    sẽ thành một tên khẳng định sai sau bản vá — đúng lớp trôi vừa phải sửa ở tripwire `schema.py`,
+    nên đổi tên chứ không để lại."""
     events = [
         _event(node_type=NodeType.LLM_STEP, seq=0, outputs={"answer": "bước 1", "refused": False}),
         _event(node_type=NodeType.LLM_STEP, seq=1, outputs={"answer": "bước 2", "refused": False}),
@@ -191,6 +202,88 @@ def test_answer_from_trace_nhieu_llm_step_thi_raise_chu_khong_chon_bua() -> None
     ]
 
     with pytest.raises(TraceAnswerError, match="2"):
+        answer_from_trace(events)
+
+
+def _loop_run() -> list[TraceEvent]:
+    """Trace đúng hình `run_agent_loop()` phát ra (engine#33/#36), đọc thẳng từ `agent_loop.py`:
+
+        lượt 1 (gọi tool) → llm-step  outputs={"tool_call": …, "raw": …, "signal": "tool-call"}
+                            kb-retrieve outputs={"chunks": [...]}
+        lượt 2 (trả lời)  → llm-step  outputs={"answer": …, "citations": …, "refused": …}
+
+    Điểm mấu chốt và là thứ bài dưới khoá: **lượt tool-call KHÔNG có key `answer`** — chính
+    `agent_loop.py` cưỡng chế điều đó và ghi lý do (*"a tool-call turn must never have one"*), vì
+    `eval_adapter._llm_answer` nhặt entry ĐẦU TIÊN có key `answer`."""
+    return [
+        _event(
+            node_type=NodeType.LLM_STEP,
+            seq=0,
+            outputs={"tool_call": {"tool": "kb_search", "params": {"query": "q"}}, "signal": "tool-call"},
+        ),
+        _event(node_type=NodeType.KB_RETRIEVE, seq=1, outputs={"chunks": [{"chunk_id": "ankor-leave-001#c1"}]}),
+        _event(
+            node_type=NodeType.LLM_STEP,
+            seq=2,
+            outputs={
+                "answer": "Nhân viên cần báo trước tối thiểu 3 ngày làm việc.",
+                "refused": False,
+                "citations": ["ankor-leave-001#c1"],
+                "signal": "final-answer",
+            },
+            citations=["ankor-leave-001#c1"],
+        ),
+    ]
+
+
+def test_answer_from_trace_doc_duoc_trace_nhieu_luot_cua_agent_loop() -> None:
+    """**Trace của `run_agent_loop()` phải đọc được** — đây là ca vỡ THẬT, đo trước khi vá.
+
+    Chạy vòng lặp 2 lượt thật rồi đưa `events` vào hàm này (engine `65731e5`):
+
+        events: ['llm-step', 'kb-retrieve', 'llm-step']
+        → TraceAnswerError: "trace có 2 event `llm-step` — không suy ra được đâu là câu trả lời"
+
+    Tức **mọi** run nhiều lượt đều không chấm lại được từ trace đã bền hoá. Bán kính: `score_run_from_trace`
+    → `dev_playground_server.py` (số hiện trên Playground) và `run_report` CLI. Không phải
+    `EvalHarness.run()`, nên nó là vỡ **thứ cấp** — nhưng sau `app#44` (nối loop vào 3 call-site
+    thật) thì mọi run production đều nhiều lượt, và bề mặt replay/report tắt hẳn.
+
+    Luật chọn: **`llm-step` MANG key `answer`**, không phải *"lượt cuối"*. Hai lý do, và lý do thứ
+    hai mới là lý do thật:
+
+    1. positional (*"lấy cái cuối"*) là đúng thứ docstring cũ từ chối — *"chọn bừa một bước sẽ cho
+       ra bảng điểm trông đúng mà chấm nhầm bước"*;
+    2. producer **đã** cưỡng chế bất biến này (`agent_loop.py`: lượt tool-call không bao giờ có
+       `answer`), nên đây là đọc một hợp đồng có sẵn, không phải bịa một quy ước mới.
+
+    Cùng một luật phủ **cả hai** runtime, không cần rẽ nhánh: `interpreter.run()` phát đúng một
+    `llm-step` và nó mang `answer` ⇒ vẫn chọn đúng."""
+    answer = answer_from_trace(_loop_run())
+
+    assert answer.answer == "Nhân viên cần báo trước tối thiểu 3 ngày làm việc."
+    assert answer.refused is False
+    assert answer.citations == ["ankor-leave-001#c1"]
+
+
+def test_answer_from_trace_loop_het_luot_khong_co_answer_thi_raise() -> None:
+    """Vòng lặp hết `max_turns` mà chưa trả lời ⇒ mọi `llm-step` đều là tool-call ⇒ **raise**.
+
+    Fail-closed, và phải phân biệt được với ca *"không có `llm-step` nào"*: ở đây node có mặt đủ,
+    thứ thiếu là **câu trả lời**. Gộp hai lý do vỡ vào một thông điệp là biến hai hành động khác
+    nhau (trace writer chết ≠ agent chạy hết lượt) thành cùng một dòng log.
+
+    Đây là ca `AgentLoopExhausted` của engine nhìn từ phía trace đã bền hoá — engine raise ở tiến
+    trình chạy, còn bề mặt replay chỉ thấy một trace không có lượt trả lời nào."""
+    events = [
+        _event(node_type=NodeType.LLM_STEP, seq=0, outputs={"tool_call": {"tool": "kb_search"}, "signal": "tool-call"}),
+        _event(node_type=NodeType.KB_RETRIEVE, seq=1, outputs={"chunks": []}),
+        _event(
+            node_type=NodeType.LLM_STEP, seq=2, outputs={"tool_call": {"tool": "calculator"}, "signal": "tool-call"}
+        ),
+    ]
+
+    with pytest.raises(TraceAnswerError, match="answer"):
         answer_from_trace(events)
 
 
