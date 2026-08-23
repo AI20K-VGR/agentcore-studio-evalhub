@@ -34,6 +34,7 @@ tay** trên một **tập** kết quả (`DEC-D18-04`), không phải thứ mộ
 
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -102,6 +103,34 @@ def _ghi_json(path: Path, noi_dung: dict[str, Any]) -> None:
     path.write_text(json.dumps(noi_dung, ensure_ascii=False, sort_keys=True), encoding="utf-8")
 
 
+_LOCKS: dict[tuple[Path, Path], asyncio.Lock] = {}
+"""Lock dùng chung theo **cặp đường dẫn**, không theo instance `LLMJudge` (`DEC-D23-02`, `evalhub#33`).
+
+`routes/publish.py::_evaluate` dựng một `LLMJudge` MỚI mỗi lần route chạy — hai request `/evaluate`
+hoặc `/publish` chồng nhau không bao giờ chia sẻ một object `LLMJudge`, chúng chỉ chia sẻ CẶP FILE
+(`cache_path`/`cap_path`, cố định trong `Settings` cho cả tiến trình). Một `asyncio.Lock` gắn `self`
+trong `__init__` sẽ không chặn được gì: mỗi instance giữ lock RIÊNG, y hệt như không có lock. Khoá
+phải theo tài nguyên bị tranh chấp (file), không theo object đang tranh chấp nó.
+
+Khoá theo cặp path, không phải MỘT lock module-level duy nhất, để test dùng `tmp_path` riêng không
+vô tình chờ lock của test khác — mỗi cặp file độc lập là một buồng khoá độc lập, đúng phạm vi
+`DEC-D23-02` đóng (single-process, khớp `Dockerfile` hiện tại không có `--workers`), không lan sang
+nhiều tiến trình (đó là phạm vi `DEC-D23-02` để lại cho lần lật sau, nếu deploy đổi sang đa tiến trình
+thì cần đổi hẳn sang file lock hoặc Postgres, không phải chỉnh dict này).
+
+Dict lớn dần theo số cặp path phân biệt từng dùng qua — không dọn lại. Chấp nhận được: số cặp path
+trong một tiến trình thật là hằng số nhỏ (một cặp production + N cặp `tmp_path` test), `asyncio.Lock`
+gần như không tốn bộ nhớ; thêm cơ chế dọn là over-engineer cho một rủi ro không tồn tại
+(`DEC-D18-05` ranh giới không-over-engineer, cùng tinh thần)."""
+
+
+def _lay_lock(cache_path: Path, cap_path: Path) -> asyncio.Lock:
+    khoa = (cache_path, cap_path)
+    if khoa not in _LOCKS:
+        _LOCKS[khoa] = asyncio.Lock()
+    return _LOCKS[khoa]
+
+
 class JudgeUnavailableReason(StrEnum):
     """Vì sao judge không chấm được — **danh tính** của trigger, không chỉ sự tồn tại của nó.
 
@@ -166,6 +195,10 @@ class LLMJudge:
         self._cache_path = cache_path
         self._cap_path = cap_path
         self._cap = cap
+        # Lock theo cặp (cache_path, cap_path), KHÔNG phải `asyncio.Lock()` riêng của instance này —
+        # xem docstring `_LOCKS` ở trên vì sao một lock cấp instance không khoá được gì ở call-site
+        # thật (`DEC-D23-02`, `evalhub#33`).
+        self._lock = _lay_lock(cache_path, cap_path)
 
     async def judge(self, case_id: str, expected: str, actual: str) -> bool:
         """Chấm một case: `actual` có thoả `expected` không.
@@ -187,29 +220,39 @@ class LLMJudge:
 
         Không nuốt lỗi thành verdict: mọi đường không-chấm-được đều `raise JudgeUnavailable` kèm
         `reason`, để `harness.py` tụt nấc **và ghi lại đã tụt vì gì** (INV-7).
+
+        **Toàn bộ thân hàm nằm trong `self._lock`** (`DEC-D23-02`, `evalhub#33`): đọc cache, đọc
+        counter, gọi provider, ghi counter, ghi cache — MỘT giao dịch nguyên tử theo cặp file, không
+        tách rời. Khoá cả cache-read chứ không chỉ đoạn ghi: nếu chỉ khoá quanh hai lệnh ghi, một
+        `judge()` khác vẫn có thể đọc cache/counter TRƯỚC khi request đang giữ lock kịp ghi xong,
+        tự làm việc trùng — không sai kết quả cuối nhưng tốn quota vô ích, đúng lớp lãng phí issue
+        mô tả. Cái giá là `judge()` chồng nhau chạy TUẦN TỰ, không song song — chấp nhận được vì cap
+        ≤100/ngày vốn đã tự giới hạn tần suất gọi, và `Dockerfile` hiện tại chỉ chạy 1 tiến trình
+        (không `--workers`) nên lock trong tiến trình là đủ phạm vi.
         """
-        cache = self._doc_cache()
-        da_cham = cache.get(case_id, {}).get(actual)
-        if da_cham is not None:
-            return da_cham
+        async with self._lock:
+            cache = self._doc_cache()
+            da_cham = cache.get(case_id, {}).get(actual)
+            if da_cham is not None:
+                return da_cham
 
-        so_da_goi = self._doc_counter()
-        if so_da_goi >= self._cap:
-            raise JudgeUnavailable(JudgeUnavailableReason.CAP_REACHED)
+            so_da_goi = self._doc_counter()
+            if so_da_goi >= self._cap:
+                raise JudgeUnavailable(JudgeUnavailableReason.CAP_REACHED)
 
-        try:
-            phan_hoi = await self._llm.complete(_dung_prompt(expected, actual))
-        except Exception as exc:
-            raise JudgeUnavailable(JudgeUnavailableReason.PROVIDER_UNAVAILABLE) from exc
+            try:
+                phan_hoi = await self._llm.complete(_dung_prompt(expected, actual))
+            except Exception as exc:
+                raise JudgeUnavailable(JudgeUnavailableReason.PROVIDER_UNAVAILABLE) from exc
 
-        # Ghi counter NGAY khi call trả về, TRƯỚC khi parse: quota đã bị tiêu ở thời điểm này rồi.
-        # Chỉ cộng khi parse thành công là tự cho mình gọi lại miễn phí mỗi lần mô hình trả rác.
-        self._ghi_counter(so_da_goi + 1)
+            # Ghi counter NGAY khi call trả về, TRƯỚC khi parse: quota đã bị tiêu ở thời điểm này rồi.
+            # Chỉ cộng khi parse thành công là tự cho mình gọi lại miễn phí mỗi lần mô hình trả rác.
+            self._ghi_counter(so_da_goi + 1)
 
-        verdict = _doc_verdict(phan_hoi)
-        cache.setdefault(case_id, {})[actual] = verdict
-        self._ghi_cache(cache)
-        return verdict
+            verdict = _doc_verdict(phan_hoi)
+            cache.setdefault(case_id, {})[actual] = verdict
+            self._ghi_cache(cache)
+            return verdict
 
     def _doc_cache(self) -> dict[str, dict[str, bool]]:
         """Cache lồng hai tầng `{case_id: {actual: verdict}}` — đó CHÍNH là khoá `(case_id, actual)`.
