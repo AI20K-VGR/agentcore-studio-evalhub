@@ -14,6 +14,7 @@ người cấp key · `STATE_UNREADABLE` ⇒ cần dọn file hỏng. Gộp lạ
 
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import UTC, datetime
 from pathlib import Path
@@ -44,6 +45,28 @@ class _BoomLLM:
     async def complete(self, prompt: str, **kwargs: object) -> str:
         self.calls.append(prompt)
         raise RuntimeError("no API key configured")
+
+
+class _SlowLLM:
+    """`LLM` double dừng ở await point cho tới khi test chủ động thả — dựng lại chính xác cửa sổ
+    hở của race (`evalhub#33`, `DEC-D23-02`): `judge()` đọc cache + counter xong rồi mới `await`
+    provider, và đúng chỗ `await` đó là nơi event loop có thể chuyển sang chạy `judge()` của một
+    request khác trên cùng cặp file.
+
+    `reached` báo cho test biết "đã đọc xong state, đang treo ở provider" — không dùng `sleep()` vì
+    đó là đoán thời gian, còn `Event` là đợi đúng sự kiện, tất định."""
+
+    def __init__(self, *, reached: asyncio.Event, release: asyncio.Event, reply: str = "PASS") -> None:
+        self.calls: list[str] = []
+        self._reached = reached
+        self._release = release
+        self._reply = reply
+
+    async def complete(self, prompt: str, **kwargs: object) -> str:
+        self.calls.append(prompt)
+        self._reached.set()
+        await self._release.wait()
+        return self._reply
 
 
 _HOM_NAY = datetime.now(UTC).date().isoformat()
@@ -102,6 +125,74 @@ async def test_counter_ben_qua_hai_instance(tmp_path: Path) -> None:
     await LLMJudge(_FakeLLM(), **paths).judge(case_id="B", expected="x", actual="b")
 
     assert json.loads(paths["cap_path"].read_text(encoding="utf-8"))["count"] == 2
+
+
+async def test_hai_request_chong_nhau_khong_vuot_cap(tmp_path: Path) -> None:
+    """Hai `LLMJudge` KHÁC INSTANCE, cùng cặp file, `judge()` chồng nhau qua await point ⇒ counter
+    cuối phải bằng đúng số lần **thành công**, không phải bị ghi đè lẫn nhau (`evalhub#33`,
+    `DEC-D23-02`).
+
+    Hai instance chứ không một, giống hệt `test_counter_ben_qua_hai_instance` ở trên — vì đó CHÍNH
+    XÁC là hình dạng thật: `routes/publish.py::_evaluate` dựng một `LLMJudge` MỚI mỗi lần route chạy
+    (`judge=LLMJudge(...)` ngay trong hàm), nên hai request `/evaluate` chồng nhau không bao giờ
+    chia sẻ một object `LLMJudge` — chúng chỉ chia sẻ CẶP FILE (`cache_path`/`cap_path` cố định
+    trong `Settings`). Một khoá gắn vào `self` (instance) sẽ không chặn được gì ở đây: hai instance
+    giữ hai lock riêng, y hệt như không có lock — đây là bẫy cụ thể mà bài này canh, không phải race
+    chung chung.
+
+    Trước khi vá: A đọc counter=0, treo ở `await` provider (`_SlowLLM`). B (instance khác, cùng
+    file) chạy trọn vẹn trong lúc A còn treo — B cũng đọc counter=0 (A chưa kịp ghi), gọi provider,
+    ghi counter=1. A tỉnh dậy, vẫn cầm giá trị counter=0 đã đọc TRƯỚC ĐÓ, ghi counter=1 — **ghi đè**
+    lên số của B. Kết quả: hai lần gọi thành công, provider bị tính tiền hai lần, nhưng counter cuối
+    chỉ còn 1 — cap ≤100/ngày bị vượt mà không dòng nào raise, không log gì bất thường."""
+    paths = _paths(tmp_path)
+    reached = asyncio.Event()
+    release = asyncio.Event()
+
+    judge_a = LLMJudge(_SlowLLM(reached=reached, release=release), **paths)
+    judge_b = LLMJudge(_FakeLLM(), **paths)
+
+    task_a = asyncio.create_task(judge_a.judge(case_id="A", expected="x", actual="a"))
+    await reached.wait()  # A đã đọc xong cache+counter, đang treo ở provider — cửa sổ hở mở ra ĐÂY
+
+    task_b = asyncio.create_task(judge_b.judge(case_id="B", expected="x", actual="b"))
+    await asyncio.sleep(0)  # cho B một lượt chạy: không lock ⇒ B chạy trọn; có lock ⇒ B treo ở lock
+
+    release.set()  # thả A tiếp tục
+    await task_a
+    await task_b
+
+    dem_cuoi = json.loads(paths["cap_path"].read_text(encoding="utf-8"))["count"]
+    assert dem_cuoi == 2, f"2 lần gọi thành công nhưng counter còn {dem_cuoi} — một lần bị ghi đè mất"
+
+
+async def test_hai_request_chong_nhau_khong_mat_entry_cache(tmp_path: Path) -> None:
+    """Cùng cửa sổ hở như bài trên, nhưng canh `_ghi_cache` — hàm này ghi lại **toàn bộ** file, không
+    merge, nên B viết xong rồi A viết đè bằng bản cache A đã đọc TỪ TRƯỚC (chưa có entry của B) sẽ
+    xoá mất entry của B (`evalhub#33`, `DEC-D23-02`).
+
+    Hệ quả của bug này khác bug counter: không lộ ngay lúc chạy, mà lộ ở **lần sau** — case B tưởng
+    đã cache lại cache-miss, tốn thêm một lượt quota vô cớ."""
+    paths = _paths(tmp_path)
+    reached = asyncio.Event()
+    release = asyncio.Event()
+
+    judge_a = LLMJudge(_SlowLLM(reached=reached, release=release), **paths)
+    judge_b = LLMJudge(_FakeLLM(), **paths)
+
+    task_a = asyncio.create_task(judge_a.judge(case_id="A", expected="x", actual="a"))
+    await reached.wait()
+
+    task_b = asyncio.create_task(judge_b.judge(case_id="B", expected="x", actual="b"))
+    await asyncio.sleep(0)
+
+    release.set()
+    await task_a
+    await task_b
+
+    cache = json.loads(paths["cache_path"].read_text(encoding="utf-8"))
+    assert cache.get("A", {}).get("a") is True
+    assert cache.get("B", {}).get("b") is True, "entry của B bị A ghi đè mất"
 
 
 async def test_goi_thu_101_raise_cap_reached(tmp_path: Path) -> None:
