@@ -73,34 +73,48 @@ CREATE TABLE IF NOT EXISTS eval.scorecards (
 -- Đường thứ hai cho DB đã tồn tại trước T6: `CREATE TABLE IF NOT EXISTS` ở trên là no-op trên bảng
 -- đã có, nên không có hai câu này thì cột chỉ xuất hiện ở fresh clone.
 --
--- ⚠️ FAILURE MODE, cố ý KHÔNG vá hôm nay (finding review AIE-1, evalhub#23): `ADD COLUMN … NOT NULL`
--- **không có `DEFAULT`** sẽ **raise** nếu bảng đã có row. Hôm nay rủi ro đo được = **0** — hai bảng
--- này chưa có writer thật nào ngoài test. Land NOT NULL trần lúc bảng còn rỗng là đúng chỗ rẻ nhất.
+-- ⚠️ FAILURE MODE (finding review AIE-1, `evalhub#23`): `ADD COLUMN … NOT NULL` **không có
+-- `DEFAULT`** sẽ **raise** nếu bảng đã có row.
 --
--- Bản trước còn viện thêm lý do *"`recipe_hash` (`DEC-03`) chưa tồn tại"* — **hết đúng từ D22/D23**:
--- producer là `studio_workbench.publish.recipe_hash()` (`workbench#27`), call-site là
--- `apps/studio/routes/publish.py::_evaluate` (`app#26`). Vế còn đứng là vế *"chưa có writer"*, và
--- chính nó giữ cho `ADD COLUMN` bên dưới còn rẻ — nên khi mục 2 của `evalhub#28` land (SWE ghi
--- `INSERT INTO eval.scorecards` trong `publish()`), lý do này mất, và luật đọc tripwire ở dưới
--- (*"đúng 1 hit"*) phải được sửa **trong cùng PR đó**.
+-- ## Tripwire ĐÃ ĐỎ — writer thật đã land (cập nhật D23, `evalhub#41`)
 --
--- Kiểm lại từ **gốc kit**, và đọc kết quả cho đúng (finding review DE, evalhub#24):
+-- Bản trước dạy: *"kết quả sạch = đúng 1 hit"* của
 --
 --     grep -rn "INSERT INTO eval" packages/*/src apps/*/src
 --
--- Kết quả sạch = **đúng 1 hit, và hit đó là CHÍNH DÒNG NÀY**. Nhiều hơn 1 ⇒ đã có writer thật ⇒
--- `ADD COLUMN … NOT NULL` bên dưới không còn an toàn trên môi trường có dữ liệu.
+-- và tự ràng buộc rằng luật đó *"phải được sửa **trong cùng PR** land writer"*. Writer đã land
+-- (`studio_workbench/publish.py`, `INSERT INTO eval.scorecards` trong `publish()`) nhưng luật đọc
+-- **không** được sửa cùng lúc ⇒ grep giờ trả **3 hit** và comment vẫn nói *"chưa có writer"*. Một
+-- phép kiểm dạy sai còn tệ hơn không có phép kiểm: nó mời người sau kết luận ngược.
 --
--- Bản trước viết `*/src` — **glob 1 cấp, không với tới `packages/*/src`** (sâu 2 cấp) nên nó trả
--- rỗng vì **hụt đường dẫn**, không vì "không có writer", và sẽ **vẫn rỗng kể cả sau khi có writer
--- thật**. Một lệnh verify chỉ-trông-có-vẻ-verify thì tệ hơn không có lệnh nào: nó mời người sau tin
--- vào một phép đo không chạy. Đúng lớp lỗi mà chính commit kia đang vá ở premise judge-routing.
+-- ## Vì sao `ADD COLUMN … NOT NULL` VẪN an toàn — lý do MỚI, không phải lý do cũ
 --
--- Ngày có writer thật + môi trường nào đó đã có row: câu này **fail loud**, và đó là hành vi ĐÚNG —
--- nó buộc người migrate trả lời *"row cũ thuộc tenant nào"* thay vì lấp bằng một `DEFAULT` bịa ra.
--- Một `DEFAULT gen_random_uuid()` hay `DEFAULT '00000000-…'` ở đây sẽ gán tenant SAI cho dữ liệu
--- thật mà không ai biết — đúng lớp lỗi `DEC-D20-05` viết ra để tránh. Đường vá đúng lúc đó là
--- backfill có chủ đích, không phải nới DDL này.
+-- Lý do cũ (*"chưa ai ghi nên bảng rỗng"*) đã hết đúng. Lý do đang đỡ hôm nay là **thứ tự land**,
+-- và nó bền hơn:
+--
+-- 1. `tenant_id` vào DDL ở **D20**, trước writer đầu tiên (**D23**);
+-- 2. `ensure_all_schemas()` chạy **mỗi lần boot**, tức `ALTER` áp trước mọi lần ghi của tiến trình đó;
+-- 3. writer khai `tenant_id` **tường minh** trong danh sách cột của `INSERT` — một DB thiếu cột thì
+--    **chính câu INSERT** đỏ, không phải chờ tới `ALTER`.
+--
+-- ⇒ Không tồn tại đường nào sinh ra **row có trước cột**. Rủi ro đo được vẫn **0**, nhưng vì tính
+-- chất (1)+(3), không vì *"bảng rỗng"*.
+--
+-- Bất biến đó được **khoá bằng bài test**, không chỉ bằng comment này — comment vừa tự chứng minh nó
+-- trôi được: `tests/test_eval_schema_rls.py::test_ddl_an_toan_tren_bang_da_co_row`.
+--
+-- ## Điều kiện lật (thứ thay cho luật "đúng 1 hit")
+--
+-- Câu `ALTER` dưới đây thành nguy hiểm khi có **một** trong hai:
+--
+-- - một writer `eval.*` **không** khai `tenant_id` trong danh sách cột (phá tính chất 3); hoặc
+-- - một cột `NOT NULL` **mới** được thêm vào đây **sau** khi bảng đã có dữ liệu thật (phá tính chất 1).
+--
+-- Ngày đó câu này **fail loud**, và đó là hành vi ĐÚNG — nó buộc người migrate trả lời *"row cũ
+-- thuộc tenant nào"* thay vì lấp bằng một `DEFAULT` bịa ra. Một `DEFAULT gen_random_uuid()` hay
+-- `DEFAULT '00000000-…'` sẽ gán tenant SAI cho dữ liệu thật mà không ai biết — đúng lớp lỗi
+-- `DEC-D20-05` viết ra để tránh. Đường vá đúng lúc đó là **backfill có chủ đích**, không phải nới
+-- DDL này.
 ALTER TABLE eval.golden_sets ADD COLUMN IF NOT EXISTS tenant_id UUID NOT NULL;
 ALTER TABLE eval.scorecards ADD COLUMN IF NOT EXISTS tenant_id UUID NOT NULL;
 
