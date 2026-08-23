@@ -1,0 +1,100 @@
+[
+  {
+    "golden_set_ref": "callisto-golden-30-v1",
+    "n_case": 30,
+    "n_query_doc_lap": 21,
+    "n_query_dung_lai": 7,
+    "query_dung_lai": [
+      [
+        "Thang lương của công ty gồm những bậc nào?",
+        4
+      ],
+      [
+        "Cảnh báo nghiêm trọng cần phản hồi trong bao lâu?",
+        2
+      ],
+      [
+        "Gói bảo hiểm sức khoẻ gồm những quyền lợi gì?",
+        2
+      ],
+      [
+        "Một năm có bao nhiêu ngày nghỉ lễ?",
+        2
+      ],
+      [
+        "Ngân sách đào tạo mỗi năm là bao nhiêu?",
+        2
+      ],
+      [
+        "Nhân viên xin nghỉ phép cần báo trước bao lâu?",
+        2
+      ],
+      [
+        "Nhân viên được làm việc từ xa tối đa mấy ngày một tuần?",
+        2
+      ]
+    ],
+    "theo_tenant": {
+      "ankor": 19,
+      "borea": 11
+    },
+    "theo_role_nguoi_hoi": {
+      "engineering": 5,
+      "finance": 6,
+      "hr": 9,
+      "public": 10
+    },
+    "n_refusal": 8,
+    "ty_le_refusal": 0.2667,
+    "n_manual_label": 10
+  },
+  {
+    "golden_set_ref": "callisto-2.0-golden-30-v1",
+    "n_case": 30,
+    "n_query_doc_lap": 22,
+    "n_query_dung_lai": 7,
+    "query_dung_lai": [
+      [
+        "Bảo hiểm sức khoẻ có hạn mức nội trú bao nhiêu?",
+        3
+      ],
+      [
+        "Nhân viên chính thức được bao nhiêu ngày phép năm?",
+        2
+      ],
+      [
+        "Quy trình mua sắm áp dụng cho giao dịch từ bao nhiêu?",
+        2
+      ],
+      [
+        "Sự cố P1 cần bắt đầu xử lý trong bao lâu?",
+        2
+      ],
+      [
+        "Tết Nguyên Đán nhân viên được nghỉ mấy ngày?",
+        2
+      ],
+      [
+        "Đánh giá hiệu suất diễn ra mấy lần một năm?",
+        2
+      ],
+      [
+        "Đơn xin nghỉ phép phải nộp trước bao lâu?",
+        2
+      ]
+    ],
+    "theo_tenant": {
+      "ankor": 19,
+      "borea": 11
+    },
+    "theo_role_nguoi_hoi": {
+      "engineering": 5,
+      "finance": 6,
+      "hr": 13,
+      "public": 6
+    },
+    "n_refusal": 8,
+    "ty_le_refusal": 0.2667,
+    "n_manual_label": 12
+  }
+]
