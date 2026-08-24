@@ -22,7 +22,7 @@ breakpoint `#14`: một giá trị được suy ra im lặng rồi được ch�
 
 **Sửa luật ở D23** (`evalhub#42`): trước đó là *"nhiều `llm-step` ⇒ raise"*, đếm trên **số** event
 thay vì trên **key `answer`**, và nó chặn nhầm `run_agent_loop()` — vòng lặp phát một `llm-step` mỗi
-lượt nên mọi run nhiều lượt đều raise. Xem `test_answer_from_trace_doc_duoc_trace_nhieu_luot_cua_agent_loop`.
+lượt nên mọi run nhiều lượt đều raise. Xem `test_reads_multi_turn_agent_loop_trace`.
 """
 
 from __future__ import annotations
@@ -182,8 +182,14 @@ def test_answer_from_trace_thieu_key_refused_thi_raise_chu_khong_doan_False() ->
         answer_from_trace(events)
 
 
-def test_answer_from_trace_nhieu_llm_step_CUNG_MANG_ANSWER_thi_raise_chu_khong_chon_bua() -> None:
+def test_answer_from_trace_nhieu_llm_step_thi_raise_chu_khong_chon_bua() -> None:
     """Nhiều `llm-step` **cùng mang `answer`** ⇒ raise, KHÔNG tự chọn cái đầu hay cái cuối.
+
+    ⚠️ **Tên hàm hẹp hơn luật thật, và giữ nguyên có chủ đích.** Tên nói *"nhiều `llm-step`"* trong
+    khi luật từ D23 là *"nhiều `llm-step` **cùng mang `answer`**"*. Không đổi tên vì bài này được
+    **trích làm bằng chứng** ở `docs/mutations/self-render-d15.md` (mutant `M6`) — đổi tên làm một
+    bản ghi đã chấm trỏ vào thứ không còn tồn tại. Phần đính chính nằm ở docstring này, là chỗ đọc
+    được mà không phá trích dẫn.
 
     Một recipe nhiều bước LLM là chuyện sẽ tới (`#102` playground dựng recipe tự do). Lúc đó *"câu
     trả lời của run"* là cái nào phải do hợp đồng nói, không do thứ tự dòng trong bảng nói. Chọn im
@@ -236,7 +242,7 @@ def _loop_run() -> list[TraceEvent]:
     ]
 
 
-def test_answer_from_trace_doc_duoc_trace_nhieu_luot_cua_agent_loop() -> None:
+def test_reads_multi_turn_agent_loop_trace() -> None:
     """**Trace của `run_agent_loop()` phải đọc được** — đây là ca vỡ THẬT, đo trước khi vá.
 
     Chạy vòng lặp 2 lượt thật rồi đưa `events` vào hàm này (engine `65731e5`):
@@ -266,7 +272,7 @@ def test_answer_from_trace_doc_duoc_trace_nhieu_luot_cua_agent_loop() -> None:
     assert answer.citations == ["ankor-leave-001#c1"]
 
 
-def test_answer_from_trace_loop_het_luot_khong_co_answer_thi_raise() -> None:
+def test_exhausted_loop_without_answer_raises() -> None:
     """Vòng lặp hết `max_turns` mà chưa trả lời ⇒ mọi `llm-step` đều là tool-call ⇒ **raise**.
 
     Fail-closed, và phải phân biệt được với ca *"không có `llm-step` nào"*: ở đây node có mặt đủ,
