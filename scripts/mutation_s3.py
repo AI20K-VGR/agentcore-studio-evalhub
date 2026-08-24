@@ -57,54 +57,54 @@ class Mutant:
     không, vì một anchor trùng nghĩa là đang sửa chỗ mình không định sửa, và kết quả đo sẽ vô nghĩa.
     """
 
-    ten: str
-    mo_ta: str
-    hang_rao: str
-    duong_dan: Path
+    name: str
+    description: str
+    fence: str
+    path: Path
     anchor: str
-    thay_bang: str
-    bat_0_nghia_la: str
+    replacement: str
+    zero_means: str
 
 
 _MUTANTS = (
     Mutant(
-        ten="M1 kb-search-lay-tenant-tu-recipe",
-        mo_ta="`kb_search` trong vòng lặp bỏ qua `session_context`, lấy tenant/roles LLM tự khai",
-        hang_rao="INV-1 Tenant-Wall (engine — AIE-1)",
-        duong_dan=_ENGINE_SRC / "agent_loop.py",
+        name="M1 kb-search-tenant-from-recipe",
+        description="`kb_search` trong vòng lặp bỏ qua `session_context`, lấy tenant/roles LLM tự khai",
+        fence="INV-1 Tenant-Wall (engine — AIE-1)",
+        path=_ENGINE_SRC / "agent_loop.py",
         anchor='            fenced_params = fenced_kb_params({**signal.params, "top_k": top_k}, session_context)',
-        thay_bang='            fenced_params = {**signal.params, "top_k": top_k}  # MUTANT M1',
-        bat_0_nghia_la="Hàng rào công ty KHÔNG được khoá — INV-1 chỉ còn là quy ước, một prompt-injection "
+        replacement='            fenced_params = {**signal.params, "top_k": top_k}  # MUTANT M1',
+        zero_means="Hàng rào công ty KHÔNG được khoá — INV-1 chỉ còn là quy ước, một prompt-injection "
         "khai tenant khác sẽ đọc được kho của họ mà không test nào đỏ.",
     ),
     Mutant(
-        ten="M2 xoa-menh-de-section-role",
-        mo_ta="Bỏ `AND section_role = ANY(%s)` khỏi câu SQL truy xuất",
-        hang_rao="T6 hàng rào phòng ban (kb — DE)",
-        duong_dan=_KB_SRC / "postgres.py",
+        name="M2 drop-section-role-clause",
+        description="Bỏ `AND section_role = ANY(%s)` khỏi câu SQL truy xuất",
+        fence="T6 hàng rào phòng ban (kb — DE)",
+        path=_KB_SRC / "postgres.py",
         anchor="  AND section_role = ANY(%s)\n",
-        thay_bang="  -- MUTANT M2: menh de section_role da bi xoa\n",
-        bat_0_nghia_la="Hàng rào phòng ban **không được DB đỡ** — nó chỉ là một mệnh đề WHERE trong "
+        replacement="  -- MUTANT M2: menh de section_role da bi xoa\n",
+        zero_means="Hàng rào phòng ban **không được DB đỡ** — nó chỉ là một mệnh đề WHERE trong "
         "câu SQL của ứng dụng. Ngày ai đó viết truy vấn mới quên mệnh đề đó, mọi phòng ban lộ hết.",
     ),
     Mutant(
-        ten="M3 bo-cong-C1-citations",
-        mo_ta="Bỏ cổng *chỉ `llm-step` mới được mang `citations`* ở interpreter",
-        hang_rao="C-1 (engine — AIE-1)",
-        duong_dan=_ENGINE_SRC / "interpreter.py",
+        name="M3 remove-c1-citations-gate",
+        description="Bỏ cổng *chỉ `llm-step` mới được mang `citations`* ở interpreter",
+        fence="C-1 (engine — AIE-1)",
+        path=_ENGINE_SRC / "interpreter.py",
         anchor='            raw_citations = raw_outputs.get("citations") if node_type is NodeType.LLM_STEP else None',
-        thay_bang='            raw_citations = raw_outputs.get("citations")  # MUTANT M3',
-        bat_0_nghia_la="Một tool tự khai `citations` sẽ đi thẳng vào trace thành trích dẫn thật và "
+        replacement='            raw_citations = raw_outputs.get("citations")  # MUTANT M3',
+        zero_means="Một tool tự khai `citations` sẽ đi thẳng vào trace thành trích dẫn thật và "
         "ăn điểm `citation_accuracy` giả — fail-open đúng vào trục chấm điểm.",
     ),
     Mutant(
-        ten="M4 chunks-from-trace-tra-rong",
-        mo_ta="`chunks_from_trace` trả `[]` thay vì `None` khi không quan sát được",
-        hang_rao="3 nghĩa `None`/`[]`/`list` (evalhub — AIE-2)",
-        duong_dan=_EVALHUB_SRC / "harness.py",
+        name="M4 chunks-from-trace-returns-empty",
+        description="`chunks_from_trace` trả `[]` thay vì `None` khi không quan sát được",
+        fence="3 nghĩa `None`/`[]`/`list` (evalhub — AIE-2)",
+        path=_EVALHUB_SRC / "harness.py",
         anchor="    if not retrieve_events:\n        return None\n",
-        thay_bang="    if not retrieve_events:\n        return []  # MUTANT M4\n",
-        bat_0_nghia_la="`None` (*không quan sát được*, fail-closed) bị đọc thành `[]` (*hàng rào chặn "
+        replacement="    if not retrieve_events:\n        return []  # MUTANT M4\n",
+        zero_means="`None` (*không quan sát được*, fail-closed) bị đọc thành `[]` (*hàng rào chặn "
         "sạch*, bằng chứng TỐT) ⇒ **mọi case từ-chối xanh giả**. Đúng lớp lỗi `evalhub#18` đã trả giá.",
     ),
     Mutant(
@@ -114,39 +114,39 @@ _MUTANTS = (
         # vi nào vì `i == max_turns` vẫn bắn. Một mutant no-op sống sót rồi được báo là *"test không
         # khoá"* chính là loại báo động giả mà cả bộ đo này sinh ra để chống. Giữ lại ghi chú vì đó
         # là bài học đọc kết quả: `bắt == 0` chỉ là phát hiện khi mutant **thật sự đổi hành vi**.
-        ten="M5 bo-cap-max-turns",
-        mo_ta="Gỡ câu raise `AgentLoopExhausted` — vòng lặp mất trần lượt thật",
-        hang_rao="Cap `max_turns` (engine — AIE-1)",
-        duong_dan=_ENGINE_SRC / "agent_loop.py",
+        name="M5 remove-max-turns-cap",
+        description="Gỡ câu raise `AgentLoopExhausted` — vòng lặp mất trần lượt thật",
+        fence="Cap `max_turns` (engine — AIE-1)",
+        path=_ENGINE_SRC / "agent_loop.py",
         anchor="        if i == max_turns:\n            raise AgentLoopExhausted(",
-        thay_bang="        if False:  # MUTANT M5\n            raise AgentLoopExhausted(",
-        bat_0_nghia_la="Một agent không bao giờ chịu dừng sẽ chạy tới khi hết tiền/hết thời gian, và "
+        replacement="        if False:  # MUTANT M5\n            raise AgentLoopExhausted(",
+        zero_means="Một agent không bao giờ chịu dừng sẽ chạy tới khi hết tiền/hết thời gian, và "
         "không bài test nào bắt được — `AgentLoopExhausted` thành code chết.",
     ),
 )
 
 
-def _dem_test_do() -> int:
+def _count_failing_tests() -> int:
     """Chạy suite **toàn workspace từ gốc kit** rồi đếm số test đỏ.
 
     Từ gốc kit chứ không phải từ repo con: CI của repo con mù với 5 repo còn lại, nên một mutant ở
     engine có thể được **test của evalhub** bắt, và ngược lại. Đó chính là thứ *"chéo"* đo."""
-    ket_qua = subprocess.run(  # noqa: S603
+    result = subprocess.run(  # noqa: S603
         [sys.executable, "-m", "pytest", "-q", "--no-header", "-p", "no:cacheprovider"],
         cwd=_ROOT,
         capture_output=True,
         text=True,
         check=False,
     )
-    dong_cuoi = [d for d in ket_qua.stdout.splitlines() if " passed" in d or " failed" in d]
-    if not dong_cuoi:
-        print(ket_qua.stdout[-2000:], file=sys.stderr)
+    summary_lines = [d for d in result.stdout.splitlines() if " passed" in d or " failed" in d]
+    if not summary_lines:
+        print(result.stdout[-2000:], file=sys.stderr)
         raise RuntimeError("không đọc được dòng tổng kết của pytest — xem stderr ở trên")
-    tong_ket = dong_cuoi[-1]
-    print(f"      {tong_ket.strip()}")
-    if " failed" not in tong_ket:
+    summary = summary_lines[-1]
+    print(f"      {summary.strip()}")
+    if " failed" not in summary:
         return 0
-    return int(tong_ket.split(" failed")[0].strip().split()[-1])
+    return int(summary.split(" failed")[0].strip().split()[-1])
 
 
 def main() -> int:
@@ -161,39 +161,42 @@ def main() -> int:
         return 2
 
     print("Đo nền (không mutant):")
-    nen = _dem_test_do()
-    if nen != 0:
-        print(f"DỪNG: suite đã đỏ sẵn {nen} bài trước khi gieo — mọi con số sau đó không đọc được.", file=sys.stderr)
+    baseline = _count_failing_tests()
+    if baseline != 0:
+        print(
+            f"DỪNG: suite đã đỏ sẵn {baseline} bài trước khi gieo — mọi con số sau đó không đọc được.",
+            file=sys.stderr,
+        )
         return 2
 
-    ket_qua: list[tuple[Mutant, int]] = []
+    result: list[tuple[Mutant, int]] = []
     for mutant in _MUTANTS:
-        goc = mutant.duong_dan.read_text(encoding="utf-8")
-        so_lan = goc.count(mutant.anchor)
-        if so_lan != 1:
-            ten_file = mutant.duong_dan.name
-            print(f"DỪNG: anchor của {mutant.ten} xuất hiện {so_lan} lần trong {ten_file}", file=sys.stderr)
+        original = mutant.path.read_text(encoding="utf-8")
+        occurrences = original.count(mutant.anchor)
+        if occurrences != 1:
+            filename = mutant.path.name
+            print(f"DỪNG: anchor của {mutant.name} xuất hiện {occurrences} lần trong {filename}", file=sys.stderr)
             return 2
-        print(f"\n{mutant.ten} — {mutant.mo_ta}")
+        print(f"\n{mutant.name} — {mutant.description}")
         try:
-            mutant.duong_dan.write_text(goc.replace(mutant.anchor, mutant.thay_bang), encoding="utf-8")
-            ket_qua.append((mutant, _dem_test_do()))
+            mutant.path.write_text(original.replace(mutant.anchor, mutant.replacement), encoding="utf-8")
+            result.append((mutant, _count_failing_tests()))
         finally:
-            mutant.duong_dan.write_text(goc, encoding="utf-8")
+            mutant.path.write_text(original, encoding="utf-8")
 
     print("\n" + "=" * 92)
     print(f"{'mutant':<38} {'hàng rào':<34} {'bắt':>5}")
     print("-" * 92)
-    for mutant, bat in ket_qua:
-        co = "  ⚠️ PHÁT HIỆN" if bat == 0 else ""
-        print(f"{mutant.ten:<38} {mutant.hang_rao:<34} {bat:>5}{co}")
+    for mutant, hits in result:
+        flag = "  ⚠️ PHÁT HIỆN" if hits == 0 else ""
+        print(f"{mutant.name:<38} {mutant.fence:<34} {hits:>5}{flag}")
     print("=" * 92)
 
-    song = [m for m, bat in ket_qua if bat == 0]
-    if song:
+    survivors = [mutant for mutant, hits in result if hits == 0]
+    if survivors:
         print("\nMutant SỐNG SÓT — mỗi cái là một hành vi không test nào khoá, phải mở issue:")
-        for mutant in song:
-            print(f"\n  {mutant.ten} ({mutant.hang_rao})\n    {mutant.bat_0_nghia_la}")
+        for mutant in survivors:
+            print(f"\n  {mutant.name} ({mutant.fence})\n    {mutant.zero_means}")
     print("\nKiểm `git status --short` ở gốc kit VÀ ở từng submodule — phải sạch.")
     return 0
 

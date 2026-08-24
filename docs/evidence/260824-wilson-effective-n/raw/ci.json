@@ -1,0 +1,130 @@
+[
+  {
+    "golden_set_ref": "callisto-golden-30-v1",
+    "n_raw": 30,
+    "n_effective": 21,
+    "scenarios": [
+      {
+        "target_pass_rate": 1.0,
+        "raw_n": {
+          "k": 30,
+          "n": 30,
+          "point": 1.0,
+          "lower": 0.8865,
+          "upper": 1.0,
+          "status": "ok"
+        },
+        "effective_n": {
+          "k": 21,
+          "n": 21,
+          "point": 1.0,
+          "lower": 0.8454,
+          "upper": 1.0,
+          "status": "ok"
+        }
+      },
+      {
+        "target_pass_rate": 0.9667,
+        "raw_n": {
+          "k": 29,
+          "n": 30,
+          "point": 0.9667,
+          "lower": 0.8333,
+          "upper": 0.9941,
+          "status": "ok"
+        },
+        "effective_n": {
+          "k": 20,
+          "n": 21,
+          "point": 0.9524,
+          "lower": 0.7733,
+          "upper": 0.9915,
+          "status": "ok"
+        }
+      },
+      {
+        "target_pass_rate": 0.9,
+        "raw_n": {
+          "k": 27,
+          "n": 30,
+          "point": 0.9,
+          "lower": 0.7438,
+          "upper": 0.9654,
+          "status": "ok"
+        },
+        "effective_n": {
+          "k": 19,
+          "n": 21,
+          "point": 0.9048,
+          "lower": 0.7109,
+          "upper": 0.9735,
+          "status": "ok"
+        }
+      }
+    ]
+  },
+  {
+    "golden_set_ref": "callisto-2.0-golden-30-v1",
+    "n_raw": 30,
+    "n_effective": 22,
+    "scenarios": [
+      {
+        "target_pass_rate": 1.0,
+        "raw_n": {
+          "k": 30,
+          "n": 30,
+          "point": 1.0,
+          "lower": 0.8865,
+          "upper": 1.0,
+          "status": "ok"
+        },
+        "effective_n": {
+          "k": 22,
+          "n": 22,
+          "point": 1.0,
+          "lower": 0.8513,
+          "upper": 1.0,
+          "status": "ok"
+        }
+      },
+      {
+        "target_pass_rate": 0.9667,
+        "raw_n": {
+          "k": 29,
+          "n": 30,
+          "point": 0.9667,
+          "lower": 0.8333,
+          "upper": 0.9941,
+          "status": "ok"
+        },
+        "effective_n": {
+          "k": 21,
+          "n": 22,
+          "point": 0.9545,
+          "lower": 0.782,
+          "upper": 0.9919,
+          "status": "ok"
+        }
+      },
+      {
+        "target_pass_rate": 0.9,
+        "raw_n": {
+          "k": 27,
+          "n": 30,
+          "point": 0.9,
+          "lower": 0.7438,
+          "upper": 0.9654,
+          "status": "ok"
+        },
+        "effective_n": {
+          "k": 20,
+          "n": 22,
+          "point": 0.9091,
+          "lower": 0.7219,
+          "upper": 0.9747,
+          "status": "ok"
+        }
+      }
+    ]
+  }
+]

@@ -43,9 +43,13 @@ from studio_evalhub.run_report import (
     score_run_from_trace,
 )
 from studio_evalhub.schema import ddl
+from studio_evalhub.wilson import Z_95, WilsonInterval, wilson
 
 __all__ = [
     "TRACE_SOURCE_POSTGRES",
+    "Z_95",
+    "WilsonInterval",
+    "wilson",
     "FixtureUnreadable",
     "AgentAnswer",
     "AgentRunner",

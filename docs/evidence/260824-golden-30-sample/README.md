@@ -3,13 +3,13 @@
 > Đo **mẫu**, không đo chất lượng agent. Câu hỏi: *30 case có phải 30 quan sát độc lập không, và
 > mẫu số thật của `Judge.agreement` là bao nhiêu?*
 >
-> Tái lập: `./run.sh` — không cần Postgres, không cần API key. Số thô: [`raw/mau.json`](raw/mau.json).
+> Tái lập: `./run.sh` — không cần Postgres, không cần API key. Số thô: [`raw/sample.json`](raw/sample.json).
 
 ## Điều kiện đo
 
 | | |
 |---|---|
-| Lệnh | `./run.sh` (gọi `do_mau.py`, đọc YAML qua `load_golden_set`) |
+| Lệnh | `./run.sh` (gọi `measure_sample.py`, đọc YAML qua `load_golden_set`) |
 | Nguồn | `packages/kb/src/studio_kb/golden/{callisto-golden-30-v1,callisto-2.0-golden-30-v1}.yaml` |
 | Con trỏ `packages/kb` | `72b6133` |
 | Con trỏ `packages/evalhub` | nhánh `fix/answer-from-trace-multi-turn` @ `24fabad` |
@@ -52,7 +52,7 @@ bộ nào là một con số không tái lập được — người chạy lạ
 | lần lặp nhiều nhất | **4×** — *"Thang lương của công ty gồm những bậc nào?"* | 3× |
 
 **Công thức:** `n_query_doc_lap = |{c.query : c ∈ cases}|`, `n_query_dung_lai = |{q : đếm(q) > 1}|`.
-Số thô đầy đủ (kèm từng query và số lần lặp) ở [`raw/mau.json`](raw/mau.json).
+Số thô đầy đủ (kèm từng query và số lần lặp) ở [`raw/sample.json`](raw/sample.json).
 
 **Vì sao đây là chuyện thống kê, không phải chuyện gọn gàng:** lặp là **cố ý** — header file ghi
 *"cặp chéo-tenant khác-số (leak-mimic)"*: cùng câu hỏi, hai công ty, hai đáp án khác nhau, để bắt rò

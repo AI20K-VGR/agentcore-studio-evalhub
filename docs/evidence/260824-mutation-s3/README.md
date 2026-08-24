@@ -11,10 +11,10 @@
 |---|---|
 | Lệnh | `./run.sh` → `packages/evalhub/scripts/mutation_s3.py` |
 | Phạm vi chạy | `pytest` **từ gốc kit** (toàn workspace), không phải suite repo con |
-| Nền (không mutant) | **1686 passed**, 7 skipped, 1 xpassed, 0 failed |
+| Nền (không mutant) | **1699 passed**, 7 skipped, 1 xpassed, 0 failed |
 | `packages/engine` | `65731e5` (`engine#36` — cần `agent_loop.py`) |
 | `packages/kb` | `72b6133` |
-| `packages/evalhub` | nhánh `fix/answer-from-trace-multi-turn` @ `24fabad` |
+| `packages/evalhub` | nhánh `docs/evidence-khuon-mutation-s3` (bao gồm `wilson.py`) |
 | Postgres | `docker-compose.test.yml`, pgvector pg17 @ `5433` |
 
 **Chạy từ gốc kit, không từ repo con** — CI repo con mù với 5 repo còn lại, nên một mutant ở `engine`
@@ -26,11 +26,11 @@ có thể được **test của evalhub** bắt và ngược lại. Đó chính 
 
 | # | Mutant | Hàng rào | Chủ `src/` | **bắt** |
 |---|---|---|---|---|
-| **M1** | `kb_search` bỏ qua `session_context`, lấy tenant/roles LLM tự khai | INV-1 Tenant-Wall | engine — AIE-1 | **26** |
-| **M2** | Xoá `AND section_role = ANY(%s)` khỏi câu SQL truy xuất | T6 hàng rào phòng ban | kb — DE | **17** |
-| **M3** | Bỏ cổng *chỉ `llm-step` mới được mang `citations`* | C-1 | engine — AIE-1 | **1** |
-| **M4** | `chunks_from_trace` trả `[]` thay vì `None` | 3 nghĩa `None`/`[]`/`list` | evalhub — AIE-2 | **3** |
-| **M5** | Gỡ câu `raise AgentLoopExhausted` | Cap `max_turns` | engine — AIE-1 | **3** |
+| **M1** | `kb-search-tenant-from-recipe` — `kb_search` bỏ qua `session_context` | INV-1 Tenant-Wall | engine — AIE-1 | **26** |
+| **M2** | `drop-section-role-clause` — xoá `AND section_role = ANY(%s)` | T6 hàng rào phòng ban | kb — DE | **17** |
+| **M3** | `remove-c1-citations-gate` — bỏ cổng *chỉ `llm-step` mang `citations`* | C-1 | engine — AIE-1 | **1** |
+| **M4** | `chunks-from-trace-returns-empty` — trả `[]` thay vì `None` | 3 nghĩa `None`/`[]`/`list` | evalhub — AIE-2 | **3** |
+| **M5** | `remove-max-turns-cap` — gỡ câu `raise AgentLoopExhausted` | Cap `max_turns` | engine — AIE-1 | **3** |
 
 **Không mutant nào `bắt == 0`.** Cả 5 hàng rào đều có ít nhất một bài khoá.
 
@@ -42,7 +42,7 @@ và nền = 0 nên `bắt` đọc thẳng từ dòng tổng kết pytest.
 ## ⚠️ M3 — khoá được, nhưng **lưới mỏng nhất** trong 5
 
 Cổng C-1 là thứ chặn một tool tự khai `citations` đi thẳng vào trace thành trích dẫn thật rồi ăn
-điểm `citation_accuracy` giả — fail-open đúng vào trục chấm điểm. Cả workspace **1686 bài** chỉ có
+điểm `citation_accuracy` giả — fail-open đúng vào trục chấm điểm. Cả workspace **1699 bài** chỉ có
 **một** bài khoá nó.
 
 Chưa phải phát hiện chặn (`bắt > 0`), nhưng đáng nêu: một bài bị xoá/đổi vì lý do không liên quan là
@@ -74,8 +74,12 @@ if i == max_turns:
 Nới cận là **no-op** — `i == max_turns` vẫn bắn, hành vi không đổi một chút nào. Gieo lại đúng câu
 raise (`if False:`) ⇒ **bắt = 3**.
 
-Số thô của cả hai vòng giữ lại: [`raw/sweep-v1-mutant-M5-sai.log`](raw/sweep-v1-mutant-M5-sai.log)
-và [`raw/sweep.log`](raw/sweep.log).
+Số thô của vòng cuối: [`raw/sweep.log`](raw/sweep.log). Vòng gieo-sai **không giữ log** — con số của
+nó ghi thẳng ở đây thay vì trỏ vào một file: nền `1686 passed / 0 failed` (vòng đó chạy **trước**
+khi thêm 13 bài `test_wilson.py`, nên nền thấp hơn bảng trên 13), mutant M5 bản cận `range(1, 10_000)`
+cho **`bắt = 0`**, bốn mutant còn lại ra đúng `26 / 17 / 1 / 3` — **không đổi** sau khi sửa M5.
+Ghi số thay vì lưu file vì đó là một phép đo **đã biết là sai**; giữ nó trong `raw/` sẽ mời người sau
+đọc như một kết quả.
 
 **Luật rút ra, đã ghi vào `mutation_s3.py`:** `bắt == 0` chỉ là phát hiện khi mutant **thật sự đổi
 hành vi**. Một mutant no-op sống sót rồi được báo là *"test không khoá"* chính là loại báo động giả

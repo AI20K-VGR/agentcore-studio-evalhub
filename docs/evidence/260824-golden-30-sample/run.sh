@@ -3,4 +3,4 @@
 # Không cần Postgres, không cần key — chỉ đọc file YAML golden set.
 set -euo pipefail
 cd "$(dirname "$0")"
-python do_mau.py | tee raw/mau.json
+python measure_sample.py | tee raw/sample.json

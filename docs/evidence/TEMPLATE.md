@@ -37,7 +37,7 @@ Thiếu ô nào thì con số đó **chưa** được tính là có bằng chứ
 (`builder.py` → `callisto-golden-30-v1`, `RunRequest` → `callisto-2.0-golden-30-v1`) và chúng cho
 **`n` hiệu dụng khác nhau** (21 vs 22) và **mẫu số nhãn tay khác nhau** (10 vs 12). Ghi `n = 22` mà
 không nói bộ nào là một con số không tái lập được. Đo được ở
-[`260824-golden-30-mau`](260824-golden-30-mau/README.md).
+[`260824-golden-30-sample`](260824-golden-30-sample/README.md).
 
 **Khoảng tin cậy — phải khai `n` hiệu dụng.** Golden-30 **không** phải 30 quan sát độc lập: 7 câu
 hỏi bị dùng lại (một câu tới 4 lần). `kit#134` chốt Wilson là **chẩn đoán, KHÔNG phải cổng** — nên
@@ -67,7 +67,8 @@ nó xuất hiện để đọc, không để chặn publish.
 
 | Thư mục | Nội dung | `run.sh` |
 |---|---|---|
-| [`260824-golden-30-mau`](260824-golden-30-mau/) | dính chùm · lệch trục · phủ nhãn tay, **hai** golden set | ✅ không cần DB |
+| [`260824-golden-30-sample`](260824-golden-30-sample/) | dính chùm · lệch trục · phủ nhãn tay, **hai** golden set | ✅ không cần DB |
+| [`260824-wilson-effective-n`](260824-wilson-effective-n/) | Wilson 95%, `n` thô vs `n` hiệu dụng | ✅ không cần DB |
 | [`260824-mutation-s3`](260824-mutation-s3/) | 5 mutant chéo trên 5 hàng rào S3 | ✅ cần Postgres + engine `65731e5` |
 | `day14/`, `day20/` | bộ cũ — có bảng SHA + console block, **chưa có** `run.sh`/`raw/` | ❌ |
 
