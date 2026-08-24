@@ -80,15 +80,27 @@ def _write(tmp_path: Path, text: str) -> Path:
     return path
 
 
-async def test_run_khong_co_golden_set_path_thi_TypeError(tenant_ids: Mapping[str, UUID]) -> None:
-    """Gọi `run()` **thiếu `golden_set_path`** ⇒ lỗi ngay ở chữ ký.
+async def test_run_khong_co_nguon_golden_set_nao_thi_raise(tenant_ids: Mapping[str, UUID]) -> None:
+    """Gọi `run()` **không truyền nguồn case nào** ⇒ raise.
 
     Bài rẻ nhất trong file và là bài dễ bị coi là thừa nhất. Nó không kiểm một hành vi — nó giữ
-    `DEC-D16-01` khỏi bị "tiện tay" thêm một default `None` ở lần sửa sau. Ngày có default đó,
-    đường dẫn kb sẽ chui vào `src/` trong vòng một PR, và bài `test_src_khong_hardcode_duong_dan_kb`
-    chỉ bắt được nếu người viết dùng đúng chuỗi bị cấm."""
-    with pytest.raises(TypeError):
-        await EvalHarness().run(  # type: ignore[call-arg]
+    `DEC-D16-01` khỏi bị "tiện tay" thêm một default ở lần sửa sau. Ngày có default đó, đường dẫn kb
+    sẽ chui vào `src/` trong vòng một PR, và bài `test_src_khong_hardcode_duong_dan_kb` chỉ bắt được
+    nếu người viết dùng đúng chuỗi bị cấm.
+
+    ## Cơ chế cưỡng chế đổi ở cutover file → DB, bảo đảm thì không
+
+    Trước cutover, `golden_set_path` là keyword-only **không default**, nên thiếu nó là `TypeError`
+    ngay ở chữ ký. Từ khi `run()` nhận thêm `golden_set: GoldenSet` (nguồn DB —
+    `golden_store.read_golden_set`), **cả hai** tham số phải default `None`, nên chữ ký không còn
+    chặn được nữa; thân hàm chặn thay, và lỗi đổi từ `TypeError` sang `ValueError`.
+
+    Bài này đổi theo **cơ chế**, không nới **bảo đảm**: thứ `DEC-D16-01` cấm là *rơi vào một nguồn
+    mặc định*, và điều đó vẫn bị cấm — chỉ khác chỗ cưỡng chế. Vế đối xứng (truyền **cả hai** nguồn
+    cũng raise) khoá ở `test_harness_golden_set_source.py`; thiếu vế đó thì "im lặng ưu tiên một
+    nguồn" cũng qua được bài này."""
+    with pytest.raises(ValueError, match="ĐÚNG MỘT"):
+        await EvalHarness().run(
             "agent-1",
             "gs-run-v1",
             runner=StubAgentRunner({}),

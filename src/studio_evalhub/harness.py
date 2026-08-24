@@ -494,7 +494,8 @@ class EvalHarness:
         agent_id: str,
         golden_set_ref: str,
         *,
-        golden_set_path: Path,
+        golden_set_path: Path | None = None,
+        golden_set: GoldenSet | None = None,
         runner: AgentRunner,
         tenant_ids: Mapping[str, UUID],
         threshold_success: float,
@@ -504,11 +505,23 @@ class EvalHarness:
     ) -> Scorecard:
         """Chạy **mọi** case của `golden_set_ref` qua `agent_id` rồi trả `Scorecard` có verdict thật.
 
-        **`golden_set_path` bắt buộc, keyword-only, KHÔNG default** (`DEC-D16-01`). `golden_set_ref`
-        vừa là khoá tra cứu vừa là **assert nội dung file**: thân hàm gọi
-        `load_golden_set(golden_set_path, expect_ref=golden_set_ref)`, nên không có chỗ nào để hai
-        thứ lệch nhau âm thầm. Một default `None` ở đây là chỗ để ai đó điền đường dẫn kb *"cho
-        tiện"* ở lần sửa sau, và khi đó `DEC-D16-01` chỉ còn là một câu chữ.
+        ## Nguồn case: **đúng một** trong `golden_set_path` / `golden_set`
+
+        Cả hai keyword-only và cả hai default `None`, nhưng **không** phải "tuỳ chọn": thân hàm raise
+        khi nhận **cả hai** hoặc **không cái nào**. Đó là cách giữ nguyên tinh thần `DEC-D16-01`
+        (*"`golden_set_path` KHÔNG default, vì một default là chỗ để ai đó điền đường dẫn kb cho tiện
+        ở lần sửa sau"*) trong khi mở thêm một nguồn hợp lệ — thứ bị cấm là **rơi vào một nguồn mặc
+        định**, không phải việc có hai nguồn.
+
+        `golden_set` (đối tượng, thường từ `golden_store.read_golden_set` — cutover file → DB) tồn
+        tại vì nguồn thật của golden set từ nay là `eval.golden_sets` **theo tenant**. Một hàm chỉ
+        nhận `Path` sẽ bắt caller ghi bộ ra file tạm rồi đọc lại — một vòng qua đĩa chỉ để thoả chữ
+        ký, và một chỗ nữa để hai bản lệch nhau.
+
+        **Cả hai nhánh chịu cùng một phép kiểm chéo `golden_set_ref`.** Nhánh path gọi
+        `load_golden_set(path, expect_ref=golden_set_ref)`; nhánh object so
+        `golden_set.golden_set_ref == golden_set_ref` rồi mới chạy. Thiếu vế thứ hai thì hai nguồn có
+        **hai mức bảo đảm khác nhau**, và cái yếu hơn sẽ là cái được dùng ở production.
 
         **Ngưỡng cũng bắt buộc, cũng không default.** `EvalHarness` **không sở hữu** `0.9/0.95` —
         ngưỡng thuộc recipe (`workbench/builder.py:169`), và một default ở đây là nguồn sự thật thứ
@@ -590,7 +603,22 @@ class EvalHarness:
         vào đó chỉ có thể là **hằng số**, đúng thứ bị cấm ở ba chỗ. Ô DoD *"agreement của judge"*
         **không đóng trong D18** (§7 ô 2), và để trống trung thực hơn là điền một hằng số.
         """
-        golden = load_golden_set(golden_set_path, expect_ref=golden_set_ref)
+        if (golden_set_path is None) == (golden_set is None):
+            raise ValueError(
+                "EvalHarness.run: phải truyền ĐÚNG MỘT trong `golden_set_path` / `golden_set` — "
+                f"nhận path={golden_set_path!r}, golden_set={'có' if golden_set else None}"
+            )
+        if golden_set is not None:
+            if golden_set.golden_set_ref != golden_set_ref:
+                raise ValueError(
+                    f"EvalHarness.run: golden_set.golden_set_ref={golden_set.golden_set_ref!r} khác "
+                    f"golden_set_ref={golden_set_ref!r} — cùng phép kiểm chéo mà nhánh path nhận từ "
+                    "`load_golden_set(expect_ref=…)`; refusing"
+                )
+            golden = golden_set
+        else:
+            assert golden_set_path is not None
+            golden = load_golden_set(golden_set_path, expect_ref=golden_set_ref)
 
         results: list[CaseResult] = []
         scored_case_ids: set[str] = set()
