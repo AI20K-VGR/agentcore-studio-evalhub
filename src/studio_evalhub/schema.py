@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS eval.golden_sets (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL,
     kb_id UUID,
-    golden_set_ref TEXT NOT NULL UNIQUE,
+    golden_set_ref TEXT NOT NULL,
     cases JSONB NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -133,6 +133,42 @@ ALTER TABLE eval.scorecards ADD COLUMN IF NOT EXISTS tenant_id UUID NOT NULL;
 -- xuyên schema" đã áp dụng cho mọi `tenant_id` trong file này (Decision #4) — `kb_id` theo đúng
 -- khuôn đó, một cột UUID trần, ràng buộc join ở tầng ứng dụng khi có writer thật.
 ALTER TABLE eval.golden_sets ADD COLUMN IF NOT EXISTS kb_id UUID;
+
+-- `golden_set_ref` UNIQUE **toàn cục** → UNIQUE **theo cặp `(tenant_id, golden_set_ref)`**.
+--
+-- Bản đầu khai `golden_set_ref TEXT NOT NULL UNIQUE` ngay trong `CREATE TABLE`, tức duy nhất trên
+-- toàn bảng. Sai ngữ nghĩa: bảng này có `tenant_id NOT NULL` và RLS `FORCE` theo tenant — nó **đã
+-- là** bảng per-tenant ở mọi mặt khác. Ràng buộc toàn cục nói rằng Ankor đặt tên bộ là
+-- `"handbook-v1"` thì Borea **vĩnh viễn** không được dùng tên đó, dù RLS làm hai bên không bao giờ
+-- nhìn thấy nhau.
+--
+-- Hệ quả thật (không phải chuyện gọn gàng): cutover golden-set từ file sang DB đòi mỗi tenant một
+-- bộ. Với ràng buộc cũ, tenant thứ hai trở đi phải **bịa tên khác cho cùng một khái niệm** — và
+-- `recipe.golden_set_ref` là thứ người dùng khai trong recipe, nên cái tên bịa rò ra tận UI. Cách
+-- vá hay gặp (nhồi tenant vào chuỗi: `"borea/handbook-v1"`) đẩy một khoá HAI phần vào MỘT cột
+-- chuỗi, không ai cưỡng chế cấu trúc ngầm đó, và nó sẽ lệch.
+--
+-- **`CREATE UNIQUE INDEX IF NOT EXISTS` chứ không `ADD CONSTRAINT`**: Postgres không có
+-- `ADD CONSTRAINT IF NOT EXISTS`, nên đường kia bắt buộc phải bọc `DO $$ … pg_constraint … $$` —
+-- một khối procedural trong một file DDL vốn thuần khai báo, chỉ để mua lại tính idempotent mà
+-- `CREATE INDEX` cho sẵn. Về **cưỡng chế** hai dạng tương đương; `ON CONFLICT (tenant_id,
+-- golden_set_ref)` (dạng danh sách cột) hoạt động với unique index như với constraint, nên writer
+-- tương lai không mất gì.
+--
+-- `DROP CONSTRAINT IF EXISTS` dùng tên Postgres tự sinh cho `UNIQUE` inline
+-- (`{table}_{column}_key`, không mang tiền tố schema) — đã kiểm trên DB test thật, không đoán:
+-- lệnh `psql` mô tả bảng → `"golden_sets_golden_set_ref_key" UNIQUE CONSTRAINT, btree (golden_set_ref)`.
+-- DB dựng mới sau thay đổi này không có constraint đó ⇒ `IF EXISTS` biến câu thành no-op; DB cũ thì
+-- nó gỡ đúng ràng buộc sai. Hai đường hội tụ về cùng một hình dạng.
+--
+-- An toàn trên bảng có dữ liệu: cùng lý lẽ khối `tenant_id` ở trên, cộng một quan sát đo được —
+-- `eval.golden_sets` hiện **0 row** (`SELECT count(*)` trên DB test), và chưa có writer nào. Nếu
+-- ngày nào đó bảng đã có hai row cùng `golden_set_ref` trong CÙNG một tenant, `CREATE UNIQUE INDEX`
+-- sẽ **fail loud** — đúng hành vi mong muốn: nó buộc người migrate trả lời *"bộ nào là bộ thật"*
+-- thay vì im lặng giữ lại một cái.
+ALTER TABLE eval.golden_sets DROP CONSTRAINT IF EXISTS golden_sets_golden_set_ref_key;
+CREATE UNIQUE INDEX IF NOT EXISTS eval_golden_sets_tenant_ref_uidx
+    ON eval.golden_sets (tenant_id, golden_set_ref);
 
 -- `recipe_hash` NULLABLE, và đó là chỗ khác `tenant_id` ngay trên: kiểu Python là
 -- `Scorecard.recipe_hash: str | None` (`DEC-03` cho phép `None`, consumer `publish()` fail-closed
