@@ -22,6 +22,8 @@ Chưa quyết (xem `docs/scorecard-v0.md` §3 — mang ra workshop D11, không t
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -117,6 +119,51 @@ class GoldenCase(BaseModel):
     lệ — nhãn theo *kết quả mong đợi* hay theo *chất lượng câu trả lời*) là của DE và **chưa chốt**.
     Đóng khung thành enum từ phía tiêu thụ là AIE-2 lấn quyền `DEC-Q5` và đặt trước một vocabulary
     chưa ai đồng ý. Ngày DE chốt trục, chỗ này siết lại được mà không đổi tên field."""
+
+    source: Literal["ai", "human"] | None = None
+    """Case này do **máy sinh** hay do **người** viết/sửa — trục của golden set lai (AI sinh diện
+    rộng + người sửa phần quan trọng).
+
+    **`None` nghĩa là "chưa khai nguồn", KHÔNG phải `"ai"`.** 60 case golden hiện có (`v1` + `2.0`)
+    không mang field này; mặc định `"ai"` sẽ **khai hộ nguồn gốc** cho cả 60 mà không ai kiểm, và
+    bảng *"AI sinh bao nhiêu / người sửa bao nhiêu"* đọc từ đó là một con số bịa. Cùng luật
+    `manual_label` ngay trên và `DEC-D16-03` (`rate=None ≠ 0.0`).
+
+    Dùng để cưỡng chế *"human ground-truth always wins"* lúc hợp nhất hai nguồn: khi dedup thấy hai
+    case cùng nội dung, bản `source="human"` **ghi đè** bản `"ai"`, không phải bản nào tới sau thắng.
+
+    Tập **đóng** (khác `manual_label` cố ý để `str` mở): trục này AIE-2 sở hữu và giá trị đã chốt tại
+    đây, nên đóng khung không lấn `DEC-Q5` của DE."""
+
+    is_critical: bool | None = Field(default=None, strict=True)
+    """Case thuộc nhánh **không được sai một lần nào** — đầu vào của cổng bảo mật zero-tolerance.
+
+    **`None` nghĩa là "chưa phân loại", KHÔNG phải `False`.** Đây là trục có cái giá lệch nhất trong
+    ba: mặc định `False` dán nhãn *"không quan trọng"* lên **mọi** case sẵn có, nên cổng zero-tolerance
+    đọc trục này sẽ gác một tập **rỗng** — và xanh. Fail-open đúng trên trục nó gác, im lặng.
+
+    `strict=True` chứ không để pydantic ép kiểu: yaml `is_critical: "true"` (có dấu nháy — lỗi gõ dễ
+    gặp nhất) phải **đỏ**, không được diễn giải hộ thành `True`. Một case bị nháy nhầm mà vẫn lọt vào
+    nhánh bảo mật là đúng thứ trục này tồn tại để chặn.
+
+    Không suy từ `expects_refusal`: `expects_refusal` là *hành vi đúng của case này là từ chối*, còn
+    `is_critical` là *sai case này thì cả lượt chấm hỏng*. Hai tập giao nhau nhiều nhưng không bằng
+    nhau — một case trả-lời-được về hạn mức chi tiêu có thể critical mà không refusal."""
+
+    tier: Literal["core", "full"] | None = None
+    """Case nằm ở bộ **Core** (chạy lúc gate Publish) hay bộ **Full** (chạy nền).
+
+    Lý do tách: người bấm Publish chờ được 15–30s. Bộ Core 30–50 case chạy ~20–30s; chạy đủ 100–500
+    case mất 5–10 phút ⇒ spinner treo hoặc HTTP 504. Nên gate đọc Core, còn Full chạy ngoài đường
+    request.
+
+    **`None` nghĩa là "chưa phân tầng", KHÔNG phải `"full"` hay `"core"`.** Mặc định `"core"` nhét
+    case chưa ai xét vào đúng tập chạy lúc gate — làm cổng chậm đi và chấm trên tập không ai chọn;
+    mặc định `"full"` thì ngược lại, âm thầm loại case khỏi gate. Cả hai đều là quyết định thay người
+    phân loại.
+
+    Tập **đóng**, cùng lý do `source`. Một `tier: "medium"` gõ nhầm mà lọt sẽ làm case đó rơi khỏi
+    **cả** Core lẫn Full — biến mất khỏi mọi phép chấm, không lỗi nào nổi lên."""
 
     @property
     def expects_refusal(self) -> bool:

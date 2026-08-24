@@ -99,3 +99,70 @@ def test_field_la_khong_lien_quan_cung_phai_do() -> None:
         GoldenCase(**{**_CASE_HOP_LE, "ghi_chu_cua_de": "x"})
 
     assert "ghi_chu_cua_de" in str(excinfo.value)
+
+
+# ── Ba trục phân loại case (`source` · `is_critical` · `tier`) ─────────────────────────────────
+#
+# Khai ở đây **TRƯỚC** khi DE emit, cùng lý lẽ nguyên văn đã ghi cho `manual_label`: *"nếu khai sau,
+# `extra="forbid"` làm yaml của DE đỏ, còn không có `extra="forbid"` thì nhãn bị nuốt câm. Không có
+# thứ tự thứ ba an toàn."* Ba field này là điều kiện của golden set lai (AI sinh + người sửa) và của
+# cổng nhiều tầng — cả hai đều cần DE sinh case mang nhãn, nên schema phải đi trước một nhịp.
+
+
+def test_ba_truc_moi_doc_ra_duoc_khi_yaml_khai() -> None:
+    """**Bài đỏ-trước.** Case mang `source`/`is_critical`/`tier` phải dựng được và đọc lại đúng.
+
+    Trên code trước khi vá, bài này đỏ với `ValidationError` từ `extra="forbid"` (3 extra fields) —
+    đỏ vì **hành vi**, không phải `ImportError`."""
+    case = GoldenCase(**_CASE_HOP_LE, source="human", is_critical=True, tier="core")
+
+    assert case.source == "human"
+    assert case.is_critical is True
+    assert case.tier == "core"
+
+
+def test_ba_truc_moi_vang_la_none_khong_phai_gia_tri_mac_dinh() -> None:
+    """**Vắng ⇒ `None`, KHÔNG phải `"ai"`/`False`/`"full"`.** Đây là vế quan trọng nhất của cả nhóm.
+
+    Cùng luật `manual_label` đã chốt (`DEC-D18-01`) và `DEC-D16-03` (`rate=None ≠ 0.0`): *chưa khai*
+    khác *đã khai và bằng X*. Cụ thể từng trục, vì cái giá khác nhau:
+
+    - `source` — mặc định `"ai"` sẽ **khai hộ nguồn gốc** cho 60 case golden hiện có mà không ai
+      kiểm; bảng "AI sinh bao nhiêu / người sửa bao nhiêu" đọc từ đó là một con số bịa.
+    - `is_critical` — mặc định `False` dán nhãn *"không quan trọng"* lên **mọi** case sẵn có. Cổng
+      bảo mật zero-tolerance đọc trục này; một mặc định `False` làm cổng đó **rỗng** mà vẫn xanh.
+      Đây là fail-open trên đúng trục nó gác.
+    - `tier` — mặc định `"full"` (hoặc `"core"`) tự xếp tầng cho case chưa ai phân, và bộ Core dùng
+      để gate lúc Publish sẽ chạy một tập không ai chọn.
+
+    Nên cả ba là `| None = None`. Phía tiêu thụ phải hỏi `is True` / `== "core"` tường minh, và
+    case `None` bị **loại khỏi mẫu số** thay vì rơi vào một nhánh mặc định."""
+    case = GoldenCase(**_CASE_HOP_LE)
+
+    assert case.source is None
+    assert case.is_critical is None
+    assert case.tier is None
+
+
+@pytest.mark.parametrize(("field", "gia_tri"), [("source", "mentor"), ("tier", "medium")])
+def test_gia_tri_ngoai_tap_dong_phai_do(field: str, gia_tri: str) -> None:
+    """`source`/`tier` là tập ĐÓNG — giá trị lạ đỏ tại chỗ, không nuốt.
+
+    Khác `manual_label` (cố ý để `str` mở vì trục nhãn là của DE và **chưa chốt**): hai trục này
+    AIE-2 sở hữu và tập giá trị đã chốt ngay tại đây, nên đóng khung được mà không lấn `DEC-Q5`.
+    Một `tier: "medium"` gõ nhầm mà lọt sẽ làm case đó rơi khỏi **cả** bộ Core lẫn bộ Full — biến
+    mất khỏi mọi phép chấm, im lặng."""
+    with pytest.raises(ValidationError) as bat:
+        GoldenCase(**{**_CASE_HOP_LE, field: gia_tri})
+
+    assert field in str(bat.value)
+
+
+def test_is_critical_khong_nhan_chuoi() -> None:
+    """`is_critical` là `bool` thật, không phải thứ pydantic ép từ chuỗi.
+
+    Yaml của DE viết `is_critical: true` ra `bool` Python, nhưng một `"true"` **có dấu nháy** (lỗi
+    gõ dễ gặp nhất trong yaml) phải đỏ chứ không được ép thành `True` — nếu ép, một case bị nháy
+    nhầm vẫn vào bộ bảo mật và không ai biết chuỗi đó đã được diễn giải hộ."""
+    with pytest.raises(ValidationError):
+        GoldenCase(**{**_CASE_HOP_LE, "is_critical": "true"})
