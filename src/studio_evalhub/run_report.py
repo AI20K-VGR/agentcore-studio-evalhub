@@ -84,14 +84,34 @@ def answer_from_trace(events: list[TraceEvent]) -> AgentAnswer:
     |---|---|
     | `events` rỗng | không có trace thì không có gì để chấm; trả answer rỗng là biến *chưa đo* thành *đã đo và trượt* |
     | không có `llm-step` | run không đi qua bước LLM ⇒ không có câu trả lời nào để so |
-    | thiếu key `answer` | node đúng nhưng payload thiếu — lý do vỡ khác hẳn, phải phân biệt được lúc gỡ lỗi |
+    | không `llm-step` nào mang `answer` | vòng lặp hết `max_turns` — node đủ, câu trả lời thiếu |
     | thiếu key `refused` | **thêm D15 sau finding B2** — xem khối dưới bảng |
-    | **nhiều** `llm-step` | *"câu trả lời của run"* lúc đó phải do hợp đồng nói, không do thứ tự dòng nói |
+    | **nhiều** `llm-step` cùng mang `answer` | *"câu trả lời của run"* phải do hợp đồng nói, không do thứ tự dòng |
 
     Nhánh cuối là nhánh đắt nhất. `#102` cho người dùng dựng recipe tự do, nên recipe nhiều bước LLM
     là chuyện sẽ tới. Chọn im lặng cái đầu hay cái cuối sẽ cho ra một bảng điểm trông vẫn đúng trong
     khi nó đang chấm nhầm bước — đúng lớp lỗi breakpoint `#14` (suy một giá trị ngữ nghĩa im lặng rồi
     chấm như thể đã đo).
+
+    ## Đếm trên `llm-step` MANG `answer`, không trên số `llm-step` (`evalhub#42`, D23)
+
+    Luật cũ là *"đúng 1 `llm-step`, nếu không thì raise"*, và nó **chặn nhầm `run_agent_loop()`**
+    (`engine#33`): vòng lặp phát **một `llm-step` mỗi lượt**, nên một run 2 lượt cho
+    `['llm-step', 'kb-retrieve', 'llm-step']` ⇒ raise ⇒ **mọi** run nhiều lượt không chấm lại được từ
+    trace. Đo trước khi vá, trên engine `65731e5`, không suy luận.
+
+    Bán kính: `score_run_from_trace` → `dev_playground_server.py` (số hiện trên Playground) và
+    `run_report` CLI. **Không** phải `EvalHarness.run()` ⇒ vỡ **thứ cấp** — nhưng sau `app#44` (nối
+    loop vào 3 call-site thật) thì mọi run production đều nhiều lượt.
+
+    Chọn theo **key `answer`** chứ không theo **vị trí** (*"lấy lượt cuối"*): positional là đúng thứ
+    bảng trên từ chối. Và không phải bịa quy ước mới — **producer đã cưỡng chế** bất biến này:
+    `agent_loop.py` ghi rõ lượt tool-call **không bao giờ** mang `answer` (*"a tool-call turn must
+    never have one"*), cùng lý do `eval_adapter._llm_answer` nhặt entry đầu tiên có `answer`.
+
+    Một luật phủ **cả hai** runtime, không rẽ nhánh: `interpreter.run()` phát đúng một `llm-step` và
+    nó mang `answer` ⇒ vẫn chọn đúng cái đó. Ca thật sự nhập nhằng (≥2 bước cùng khai `answer`) vẫn
+    raise y như trước.
 
     **Nhánh `refused` là finding của người ngoài, không phải của tôi.** @DongAnh2704 gieo mutation
     chéo T7 (`kb#17`, `kit#74`) và tìm ra: bản đầu dùng `outputs.get("refused", False)`, đổi default
@@ -121,19 +141,37 @@ def answer_from_trace(events: list[TraceEvent]) -> AgentAnswer:
     if not llm_steps:
         seen = ", ".join(sorted({e.node_type.value for e in events}))
         raise TraceAnswerError(f"trace không có event `llm-step` (chỉ thấy: {seen}) — không có câu trả lời để chấm")
-    if len(llm_steps) > 1:
+
+    # Lọc theo **key `answer`**, không theo **số lượng** `llm-step` (`evalhub#42`, D23).
+    #
+    # Luật cũ (*"đúng 1 `llm-step`, nếu không thì raise"*) chặn nhầm `run_agent_loop()` (engine#33):
+    # vòng lặp phát **một `llm-step` mỗi lượt**, nên mọi run nhiều lượt đều raise ⇒ bề mặt
+    # replay/report (`score_run_from_trace` → `dev_playground_server`, `run_report` CLI) tắt hẳn.
+    #
+    # Chọn theo `answer` chứ **không** theo vị trí (*"lấy lượt cuối"*): positional là đúng thứ luật
+    # cũ từ chối — *"chọn bừa một bước sẽ cho ra bảng điểm trông đúng mà chấm nhầm bước"*. Và không
+    # cần bịa quy ước mới, vì **producer đã cưỡng chế** bất biến này: `agent_loop.py` ghi rõ lượt
+    # tool-call **không bao giờ** mang key `answer` (*"a tool-call turn must never have one"*, cùng
+    # lý do `eval_adapter._llm_answer` nhặt entry đầu tiên có `answer`).
+    #
+    # Một luật phủ **cả hai** runtime, không rẽ nhánh: `interpreter.run()` phát đúng một `llm-step`
+    # và nó mang `answer` ⇒ vẫn chọn đúng cái đó.
+    mang_answer = [e for e in llm_steps if "answer" in e.outputs]
+    if not mang_answer:
+        khoa_thay_duoc = sorted({k for e in llm_steps for k in e.outputs})
         raise TraceAnswerError(
-            f"trace có {len(llm_steps)} event `llm-step` — không suy ra được đâu là câu trả lời của run. "
-            "Chọn bừa một bước sẽ cho ra bảng điểm trông đúng mà chấm nhầm bước; hợp đồng phải nói "
-            "trước bước nào là câu trả lời cuối."
+            f"trace có {len(llm_steps)} event `llm-step` nhưng KHÔNG event nào mang key `answer` "
+            f"(các key thấy được: {khoa_thay_duoc}) — node đúng nhưng run chưa tới lượt trả lời. Đây "
+            "là hình của một vòng lặp hết `max_turns`, khác hẳn ca trace thiếu `llm-step`."
+        )
+    if len(mang_answer) > 1:
+        raise TraceAnswerError(
+            f"trace có {len(mang_answer)} event `llm-step` cùng mang key `answer` — không suy ra được "
+            "đâu là câu trả lời của run. Chọn bừa một bước sẽ cho ra bảng điểm trông đúng mà chấm "
+            "nhầm bước; hợp đồng phải nói trước bước nào là câu trả lời cuối."
         )
 
-    outputs = llm_steps[0].outputs
-    if "answer" not in outputs:
-        raise TraceAnswerError(
-            f"event `llm-step` không có key `answer` trong outputs (có: {sorted(outputs)}) — "
-            "node đúng nhưng payload thiếu"
-        )
+    outputs = mang_answer[0].outputs
 
     if "refused" not in outputs:
         raise TraceAnswerError(
