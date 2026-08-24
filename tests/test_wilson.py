@@ -90,13 +90,32 @@ def test_smaller_effective_n_yields_wider_interval() -> None:
     vào là khai một lượng thông tin mình không có, và khoảng thu được **hẹp hơn sự thật**.
 
     Bài này khoá đúng chiều đó: nếu ai "tối ưu" hàm bằng cách bỏ qua `n` truyền vào và luôn dùng số
-    case thô, khoảng sẽ không còn nở ra khi `n` giảm."""
-    wider_n = wilson(28, 30)
-    smaller_n = wilson(20, 21)
+    case thô, khoảng sẽ không còn nở ra khi `n` giảm.
 
-    assert wider_n.lower is not None and smaller_n.lower is not None
-    # Cùng ~0.93–0.95 tỷ lệ điểm, nhưng n = 21 phải cho cận dưới THẤP hơn (khoảng rộng hơn).
-    assert smaller_n.lower < wider_n.lower or smaller_n.n < wider_n.n
+    **Hai điều kiện của fixture, cả hai đều bắt buộc** (bản đầu sai cả hai — review `evalhub#43`,
+    @TranBaDat2607):
+
+    1. **Cùng `p` chính xác**, không phải "xấp xỉ cùng tỷ lệ". Bản đầu so `28/30` (`p = 0.9333`) với
+       `20/21` (`p = 0.9524`): hai đại lượng đổi cùng lúc, nên một cận dưới thấp hơn không chứng
+       minh được là do `n` nhỏ đi hay do `p` khác. `28/30` vs `14/15` cho **đúng** cùng `p`, cô lập
+       biến duy nhất cần đo.
+    2. **Không có mệnh đề `or` nào so hai hằng số.** Bản đầu viết
+       `assert smaller.lower < wider.lower or smaller.n < wider.n` — vế sau là `21 < 30`, hai literal
+       cố định, **luôn đúng**, nên cả câu assert luôn xanh bất kể hàm làm gì. Đo được: gieo đúng
+       mutant mà docstring này mô tả (phép tính dùng cứng `n = 30`, field `.n` vẫn giữ giá trị
+       caller truyền) thì bản cũ **sống sót**; bản này chết. Một bài test có `or` nối tới một biểu
+       thức chỉ chứa hằng số thì không phải là một bài test."""
+    wider_n = wilson(28, 30)
+    smaller_n = wilson(14, 15)
+
+    assert wider_n.lower is not None and wider_n.upper is not None
+    assert smaller_n.lower is not None and smaller_n.upper is not None
+    assert wider_n.point == smaller_n.point, "fixture hỏng: hai khoảng phải có cùng p mới cô lập được n"
+
+    # n nhỏ hơn ⇒ cận dưới THẤP hơn VÀ khoảng RỘNG hơn. Khẳng định cả hai: chỉ cận dưới thôi vẫn
+    # đúng với một hàm dịch cả khoảng xuống mà không nở ra, mà "nở ra" mới là tính chất đang đo.
+    assert smaller_n.lower < wider_n.lower
+    assert (smaller_n.upper - smaller_n.lower) > (wider_n.upper - wider_n.lower)
 
 
 @pytest.mark.parametrize(("k", "n"), [(-1, 10), (5, -1), (11, 10)])

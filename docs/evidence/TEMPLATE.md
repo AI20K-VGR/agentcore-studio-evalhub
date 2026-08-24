@@ -18,6 +18,32 @@ docs/evidence/<YYMMDD>-<chủ-đề>/
 `raw/` là **thô**, không phải bản đã gọt. Một file `raw/` chỉ chứa con số cuối thì nó không phải dữ
 liệu thô, nó là README viết lại một lần nữa — và người kiểm không tính lại được gì từ đó.
 
+### Hai luật của `run.sh`, cả hai đều học từ một lần vỡ thật
+
+Cả hai đến từ review `evalhub#43` (@Dozyboy chạy thật và trúng luật 1; luật 2 lộ ra khi tôi dựng lại
+tình huống của họ). Chúng nhỏ, nhưng chúng là chỗ luật vàng *"chạy lại ra ĐÚNG số"* gãy trong tay
+người khác chứ không phải trong tay người viết.
+
+**1 — ghim interpreter: `uv run python`, không bao giờ `python` trần.** Người viết chạy trong venv
+của workspace nên `python` là bản đúng; người kiểm chạy từ shell của họ thì không. Ở `evalhub#43`,
+`scan_defaults.py` dùng `except A, B:` (PEP 758, hợp lệ từ 3.14 — bản workspace ghim) và một
+reviewer chạy bằng Python 3.12 nhận `SyntaxError: multiple exception types must be parenthesized`.
+Cú pháp **đúng**, phép đo **đúng**, nhưng người kiểm kết luận bằng chứng hỏng — và đó là kết luận
+hợp lý với thứ họ nhìn thấy. Một lỗi `uv: command not found` còn tốt hơn nhiều: nó nói đúng thứ
+đang thiếu.
+
+**2 — ghi ra file tạm rồi `mv` vào `raw/`, không `| tee raw/x.json`.** `tee` **cắt cụt file đích
+ngay giây đầu**, trước khi biết lệnh có chạy nổi không. Một lần chạy hỏng vì thế không để lại
+"không có gì mới" — nó **xoá** số thô đã commit và thay bằng file rỗng, im lặng. Với entry chạy 10
+phút (mutation sweep) thì mất luôn thứ đắt nhất trong thư mục. `set -euo pipefail` không cứu được:
+lúc shell thoát thì file đã cụt rồi.
+
+```bash
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+uv run python do_thing.py > "$tmp/out.json"
+mv "$tmp/out.json" raw/out.json
+```
+
 ## Sáu ô cho mỗi con số công bố
 
 Thiếu ô nào thì con số đó **chưa** được tính là có bằng chứng.

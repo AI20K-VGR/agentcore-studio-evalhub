@@ -11,5 +11,10 @@ cd "$(dirname "$0")/../../../../.."   # → gốc kit
 export STUDIO_DATABASE_URL_ADMIN="${STUDIO_DATABASE_URL_ADMIN:-postgresql://studio_owner:changeme@localhost:5433/studio_test}"
 export STUDIO_DATABASE_URL="${STUDIO_DATABASE_URL:-postgresql://studio_app:changeme@localhost:5433/studio_test}"
 export STUDIO_DATABASE_URL_SCORER="${STUDIO_DATABASE_URL_SCORER:-postgresql://studio_scorer:changeme@localhost:5433/studio_test}"
-python -u packages/evalhub/scripts/mutation_s3.py \
-  | tee packages/evalhub/docs/evidence/260824-mutation-s3/raw/sweep.log
+# `uv run python` + ghi file tạm rồi `mv` (xem run.sh của `260824-golden-30-sample` cho lý do đầy
+# đủ). Ở đây nó còn quan trọng hơn: lượt chạy này mất ~10 phút, mà `| tee .../sweep.log` cắt cụt log
+# ĐÍCH ngay giây đầu — hỏng giữa chừng là mất luôn số thô đã commit, đổi lấy một file rỗng.
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+uv run python -u packages/evalhub/scripts/mutation_s3.py | tee "$tmp/sweep.log"
+mv "$tmp/sweep.log" packages/evalhub/docs/evidence/260824-mutation-s3/raw/sweep.log
