@@ -94,3 +94,13 @@ mà cả bộ đo này sinh ra để chống — và nó tốn của người đ
 - Không phủ hết bề mặt: 5 mutant chọn theo 5 cờ đỏ Sprint 3, không phải một phép quét đầy đủ.
 - `bắt` **không** là thước đo chất lượng test. M1 = 26 không có nghĩa nó tốt gấp 26 lần M3 = 1 — nó
   chỉ nói hàng rào M1 chạm nhiều đường hơn.
+- `bắt` là một **tổng thô**: nó không tự phân biệt một bài đỏ vì mutant với một bài đỏ vì lý do
+  khác (flaky, thiếu Postgres, một PR khác vừa land). Nền `= 0` chặn được suite bẩn **trước** khi
+  gieo, không chặn được một bài trở chứng **trong lúc** gieo. Nêu bởi AIE-1 khi review `evalhub#43`.
+
+  Đã vá một nửa: `mutation_s3.py` giờ đọc luôn **tên từng bài đỏ** từ khối `short test summary info`
+  và in ra dưới bảng, nên người đọc tự thấy bài đỏ có dính tới hàng rào đang gieo hay không. Nửa
+  còn lại — khai trước danh sách bài **kỳ vọng** đỏ rồi đối chiếu, như `packages/kb/scripts/
+  mutation_check.py` của DE làm — **chưa làm**: bảng số trong file này đo bằng bản script **trước**
+  khi có phần đọc tên, nên chưa có danh sách nào để khai. Lượt chạy sau sẽ có, và khai từ số thật
+  chứ không từ trí nhớ.

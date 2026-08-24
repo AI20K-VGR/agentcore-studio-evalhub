@@ -126,11 +126,18 @@ _MUTANTS = (
 )
 
 
-def _count_failing_tests() -> int:
-    """Chạy suite **toàn workspace từ gốc kit** rồi đếm số test đỏ.
+def _run_suite() -> tuple[int, list[str]]:
+    """Chạy suite **toàn workspace từ gốc kit**, trả `(số test đỏ, tên từng test đỏ)`.
 
     Từ gốc kit chứ không phải từ repo con: CI của repo con mù với 5 repo còn lại, nên một mutant ở
-    engine có thể được **test của evalhub** bắt, và ngược lại. Đó chính là thứ *"chéo"* đo."""
+    engine có thể được **test của evalhub** bắt, và ngược lại. Đó chính là thứ *"chéo"* đo.
+
+    **Vì sao trả cả TÊN chứ không chỉ con số** (review `evalhub#43`, AIE-1): `bắt` là một tổng thô.
+    Một bài đỏ vì lý do chẳng liên quan — flaky, thiếu Postgres, một PR khác vừa land — vẫn cộng
+    vào `bắt` và làm hàng rào trông được khoá chặt hơn sự thật. Có danh sách tên thì người đọc tự
+    thấy bài đỏ có dính tới hàng rào đang gieo hay không; không có tên thì phải tin con số.
+    Nền = 0 là chốt chặn thứ nhất, nhưng nó chỉ bắt được suite bẩn **trước** khi gieo, không bắt
+    được một bài trở chứng **trong lúc** gieo."""
     result = subprocess.run(  # noqa: S603
         [sys.executable, "-m", "pytest", "-q", "--no-header", "-p", "no:cacheprovider"],
         cwd=_ROOT,
@@ -144,9 +151,23 @@ def _count_failing_tests() -> int:
         raise RuntimeError("không đọc được dòng tổng kết của pytest — xem stderr ở trên")
     summary = summary_lines[-1]
     print(f"      {summary.strip()}")
+    # `-q` vẫn in khối "short test summary info" với mỗi dòng dạng `FAILED <nodeid> - <lý do>`.
+    failing = sorted(
+        line.split(" - ")[0].removeprefix("FAILED ").strip()
+        for line in result.stdout.splitlines()
+        if line.startswith("FAILED ")
+    )
     if " failed" not in summary:
-        return 0
-    return int(summary.split(" failed")[0].strip().split()[-1])
+        return 0, []
+    count = int(summary.split(" failed")[0].strip().split()[-1])
+    if len(failing) != count:
+        # Không dừng: dòng tổng kết là nguồn cho `bắt`, danh sách tên chỉ để đọc. Nhưng lệch nghĩa
+        # là bản pytest này in short-summary khác kỳ vọng — nói ra thay vì im lặng đưa danh sách cụt.
+        print(
+            f"      ⚠️ đọc được {len(failing)} tên FAILED nhưng tổng kết ghi {count} — danh sách tên có thể cụt",
+            file=sys.stderr,
+        )
+    return count, failing
 
 
 def main() -> int:
@@ -161,15 +182,16 @@ def main() -> int:
         return 2
 
     print("Đo nền (không mutant):")
-    baseline = _count_failing_tests()
+    baseline, baseline_failing = _run_suite()
     if baseline != 0:
         print(
-            f"DỪNG: suite đã đỏ sẵn {baseline} bài trước khi gieo — mọi con số sau đó không đọc được.",
+            f"DỪNG: suite đã đỏ sẵn {baseline} bài trước khi gieo — mọi con số sau đó không đọc được.\n"
+            + "\n".join(f"  {name}" for name in baseline_failing),
             file=sys.stderr,
         )
         return 2
 
-    result: list[tuple[Mutant, int]] = []
+    result: list[tuple[Mutant, int, list[str]]] = []
     for mutant in _MUTANTS:
         original = mutant.path.read_text(encoding="utf-8")
         occurrences = original.count(mutant.anchor)
@@ -180,19 +202,28 @@ def main() -> int:
         print(f"\n{mutant.name} — {mutant.description}")
         try:
             mutant.path.write_text(original.replace(mutant.anchor, mutant.replacement), encoding="utf-8")
-            result.append((mutant, _count_failing_tests()))
+            hits, failing = _run_suite()
+            for name in failing:
+                print(f"      ↳ {name}")
+            result.append((mutant, hits, failing))
         finally:
             mutant.path.write_text(original, encoding="utf-8")
 
     print("\n" + "=" * 92)
     print(f"{'mutant':<38} {'hàng rào':<34} {'bắt':>5}")
     print("-" * 92)
-    for mutant, hits in result:
+    for mutant, hits, _failing in result:
         flag = "  ⚠️ PHÁT HIỆN" if hits == 0 else ""
         print(f"{mutant.name:<38} {mutant.fence:<34} {hits:>5}{flag}")
     print("=" * 92)
 
-    survivors = [mutant for mutant, hits in result if hits == 0]
+    print("\nTên từng bài đỏ (đọc để loại trừ bài đỏ vì lý do không liên quan):")
+    for mutant, _hits, failing in result:
+        print(f"\n  {mutant.name}")
+        for name in failing:
+            print(f"    {name}")
+
+    survivors = [mutant for mutant, hits, _failing in result if hits == 0]
     if survivors:
         print("\nMutant SỐNG SÓT — mỗi cái là một hành vi không test nào khoá, phải mở issue:")
         for mutant in survivors:

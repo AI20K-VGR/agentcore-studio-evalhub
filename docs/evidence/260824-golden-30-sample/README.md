@@ -9,36 +9,62 @@
 
 | | |
 |---|---|
-| Lệnh | `./run.sh` (gọi `measure_sample.py`, đọc YAML qua `load_golden_set`) |
-| Nguồn | `packages/kb/src/studio_kb/golden/{callisto-golden-30-v1,callisto-2.0-golden-30-v1}.yaml` |
+| Lệnh | `./run.sh` — `measure_sample.py` (đọc YAML qua `load_golden_set`) + `scan_defaults.py` (AST) |
+| Nguồn số mẫu | `packages/kb/src/studio_kb/golden/{callisto-golden-30-v1,callisto-2.0-golden-30-v1}.yaml` |
+| Nguồn số mặc định | `apps/studio/src/studio_app/routes/{runs,publish}.py` · `packages/workbench/src/studio_workbench/builder.py` |
 | Con trỏ `packages/kb` | `72b6133` |
-| Con trỏ `packages/evalhub` | nhánh `fix/answer-from-trace-multi-turn` @ `24fabad` |
+| Con trỏ `packages/evalhub` | nhánh `docs/evidence-khuon-mutation-s3` @ `468f9ba` |
+| Con trỏ `apps/studio` | `572f4b4` |
+| Con trỏ `packages/workbench` | `72fc633` |
 | Phụ thuộc ngoài | không (không DB, không mạng, không LLM) |
+
+Bốn SHA trên **không chép tay** — `scan_defaults.py` tự đọc `git rev-parse` của từng repo con và ghi
+vào [`raw/defaults.json`](raw/defaults.json) cùng lúc với số nó đo. Chép tay là chỗ bảng điều kiện
+đo lệch khỏi phép đo mà không ai thấy.
 
 ---
 
 ## ⛔ Phát hiện trước khi đọc số: **hệ thống có HAI golden set mặc định khác nhau**
 
-```console
-$ grep -n "callisto" packages/workbench/src/studio_workbench/builder.py
-111:    golden_set_ref: str = "callisto-golden-30-v1",
-213:        golden_set_ref="callisto-golden-30-v1",
-227:    golden_set_ref: str = "callisto-golden-30-v1",
+Ranh giới là **HTTP vs thư viện**, KHÔNG phải route-vs-route. Đo bằng AST chứ không bằng `grep` —
+một transcript `grep` dán vào đây là ảnh chụp, không chạy lại được, và nó không phân biệt nổi *"ba
+route dùng chung một class body"* với *"mỗi route một class riêng"*. Số thô đầy đủ:
+[`raw/defaults.json`](raw/defaults.json).
 
-$ grep -rn "callisto" apps/studio/src/studio_app/routes/runs.py
-64:    golden_set_ref: str = "callisto-2.0-golden-30-v1"
-```
+**Tầng HTTP — đúng một class body, dùng chung cho cả ba route:**
 
-`RunRequest` (`runs.py:64`) là body **dùng chung** cho `/api/runs`, `/evaluate` và `/publish`. Nên:
+| File | Class khai `golden_set_ref` | Mặc định | Handler nhận body kiểu gì |
+|---|---|---|---|
+| `routes/runs.py` | `RunRequest` | `callisto-2.0-golden-30-v1` | `create_run(body: RunRequest)` |
+| `routes/publish.py` | **không định nghĩa class nào** | — | `_evaluate` · `evaluate_agent` · `publish_agent` — cả ba `body: RunRequest` |
+
+`publish.py` không có class request riêng; nó `from studio_app.routes.runs import RunRequest`
+(`publish.py:51`). ⇒ **cả ba route HTTP mặc định về `2.0`, không route nào lệch route nào.**
+
+**Tầng thư viện — mặc định khác, ở hàm builder:**
+
+| File | Hàm | Mặc định |
+|---|---|---|
+| `studio_workbench/builder.py` | `create_dynamic_recipe` | `callisto-golden-30-v1` |
+| | `create_recipe_d6` | `callisto-golden-30-v1` |
+
+Cả `runs.py:114` lẫn `publish.py:121` đều truyền `golden_set_ref=body.golden_set_ref` xuống
+`create_dynamic_recipe(...)`, nên mặc định trần của builder **không bao giờ với tới được qua HTTP**.
+Nó cắn ở đường còn lại:
 
 - đi qua **HTTP** mà không khai `golden_set_ref` ⇒ chấm bằng **2.0**;
-- dựng recipe qua **`builder.py`** mà không khai ⇒ chấm bằng **v1**.
+- gọi thẳng **`builder.py`** (test, script, notebook, mọi caller không qua route) mà không khai ⇒
+  chấm bằng **v1**.
 
 Hai bộ **không cùng số**, và chênh lệch rơi đúng vào hai đại lượng mà sổ bằng chứng phải công bố:
 `n` hiệu dụng (cho khoảng tin cậy) và mẫu số `agreement` (nhãn tay).
 
 ⇒ **Mọi con số CI/agreement phải khai rõ đo trên `golden_set_ref` NÀO.** Ghi `n = 22` mà không nói
-bộ nào là một con số không tái lập được — người chạy lại qua đường khác sẽ ra `21`.
+bộ nào là một con số không tái lập được — người chạy lại qua đường kia sẽ ra `21`.
+
+Phép quét này **tự bắt được thay đổi tương lai**: ngày ai đó tách một class request riêng cho
+`/publish` với mặc định khác, `raw/defaults.json` sẽ có thêm một dòng và `distinct_defaults` dài ra —
+không cần ai nhớ chạy lại `grep`.
 
 ---
 

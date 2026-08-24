@@ -1,0 +1,47 @@
+{
+  "heads": {
+    "apps/studio": "572f4b4",
+    "packages/workbench": "72fc633",
+    "packages/kb": "72b6133",
+    "packages/evalhub": "468f9ba"
+  },
+  "http_layer": {
+    "src/studio_app/routes/runs.py": {
+      "classes": {
+        "RunRequest": {
+          "declares_golden_set_ref": true,
+          "default": "callisto-2.0-golden-30-v1"
+        },
+        "RunResponse": {
+          "declares_golden_set_ref": false,
+          "default": null
+        }
+      },
+      "imported_from_routes_runs": [],
+      "handler_body_types": {
+        "create_run": "RunRequest"
+      }
+    },
+    "src/studio_app/routes/publish.py": {
+      "classes": {},
+      "imported_from_routes_runs": [
+        "RunRequest"
+      ],
+      "handler_body_types": {
+        "_evaluate": "RunRequest",
+        "evaluate_agent": "RunRequest",
+        "publish_agent": "RunRequest"
+      }
+    }
+  },
+  "library_layer": {
+    "src/studio_workbench/builder.py": {
+      "create_dynamic_recipe": "callisto-golden-30-v1",
+      "create_recipe_d6": "callisto-golden-30-v1"
+    }
+  },
+  "distinct_defaults": [
+    "callisto-2.0-golden-30-v1",
+    "callisto-golden-30-v1"
+  ]
+}
