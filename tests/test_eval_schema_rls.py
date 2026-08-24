@@ -176,3 +176,67 @@ async def test_rls_chan_ghi_cheo_tenant(admin_pool: Any, pool: Any) -> None:
                 "VALUES (%s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb)",
                 ("agent-cross-write", BOREA_ID, "callisto-golden-30-v1", "[]", "{}", "{}"),
             )
+
+
+async def test_ddl_is_safe_on_populated_table(admin_pool: Any, pool: Any) -> None:
+    """`ddl()` chạy lại trên bảng **đã có dữ liệu** không được raise — bất biến giữ cho
+    `ADD COLUMN … NOT NULL` (`schema.py`) còn an toàn sau khi writer thật đã land (`evalhub#41`).
+
+    ## Bài này thay cho một comment đã trôi
+
+    `schema.py` từng dạy một tripwire: *"`grep -rn "INSERT INTO eval" …` ra **đúng 1 hit** = chưa có
+    writer = `ADD COLUMN … NOT NULL` còn an toàn"*, và tự ràng buộc rằng luật đó phải được sửa
+    **trong cùng PR** land writer. Writer đã land ở `studio_workbench/publish.py` (`INSERT INTO
+    eval.scorecards` trong `publish()`), luật đọc **không** được sửa cùng lúc ⇒ comment dạy ngược
+    suốt từ đó. Một phép kiểm bằng chữ thì trôi được; bài test thì không.
+
+    ## Tính chất đang thật sự đỡ, và bài này đo đúng nó
+
+    Không phải *"bảng rỗng"* (hết đúng từ khi có writer), mà là **không tồn tại row có trước cột**:
+
+    1. `tenant_id` vào DDL ở D20, **trước** writer đầu tiên (D23);
+    2. `ensure_all_schemas()` chạy mỗi lần boot ⇒ `ALTER` áp trước mọi lần ghi;
+    3. writer khai `tenant_id` **tường minh** trong danh sách cột ⇒ DB thiếu cột thì chính câu
+       `INSERT` đỏ, không phải chờ tới `ALTER`.
+
+    Bài này dựng đúng trạng thái *"bảng đã có row thật"* rồi chạy lại **toàn bộ** `ddl()` — tức đi
+    qua cả `CREATE TABLE IF NOT EXISTS` (no-op), cả 4 câu `ADD COLUMN IF NOT EXISTS`, cả
+    `DROP POLICY`/`CREATE POLICY`. Đó là chính xác thứ xảy ra ở **lần boot thứ hai của một môi
+    trường đang chạy**, và là ca mà `test_ddl_idempotent_chay_hai_lan_khong_doi` **không** phủ: bài
+    đó so hai chuỗi bằng nhau, không đưa chuỗi nào cho Postgres nuốt trên bảng có dữ liệu.
+
+    Đo được (mutant `M-T1`): gieo `ADD COLUMN IF NOT EXISTS ghi_chu TEXT NOT NULL` — một cột
+    `NOT NULL` mới, không `DEFAULT` — vào `ddl()` ⇒ bài này **đỏ** với `NotNullViolation`, đúng điều
+    kiện lật thứ hai ghi trong `schema.py`. `test_ddl_idempotent_chay_hai_lan_khong_doi` **vẫn
+    xanh**, vì nó so hai chuỗi chứ không đưa chuỗi nào cho Postgres.
+
+    Chỗ nó đỏ phụ thuộc trạng thái DB, và **cả hai chỗ đều là cùng một khuyết tật**:
+
+    - DB **sạch** (bảng vừa tạo, rỗng) ⇒ `ALTER` thêm cột lọt, rồi `INSERT` của bài này đỏ vì không
+      cấp `ghi_chu` — đúng thứ **writer thật cũng sẽ gặp**, vì writer khai danh sách cột tường minh;
+    - DB **đã có row** từ lần chạy trước ⇒ chính `ALTER` đỏ ngay ở `ensure_all_schemas()` của fixture.
+
+    Nói cách khác bài này bắt được khuyết tật ở **cả hai phía của thứ tự land** — đúng cặp tính chất
+    (1)+(3) mà `schema.py` viện làm lý do an toàn."""
+    async with pool.connection() as conn, conn.transaction():
+        await _bind(conn, ANKOR_ID)
+        await conn.execute(
+            "INSERT INTO eval.scorecards (agent_id, tenant_id, golden_set_ref, results, aggregate, gate) "
+            "VALUES (%s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb)",
+            ("agent-ddl-replay", ANKOR_ID, "callisto-golden-30-v1", "[]", "{}", "{}"),
+        )
+        await conn.execute(
+            "INSERT INTO eval.golden_sets (tenant_id, golden_set_ref, cases) VALUES (%s, %s, %s::jsonb)",
+            (ANKOR_ID, "ddl-replay-probe", "[]"),
+        )
+
+    # Bảng giờ có dữ liệu thật. Chạy lại NGUYÊN `ddl()` bằng owner-pool, đúng như `ensure_all_schemas()`.
+    async with admin_pool.connection() as conn:
+        await conn.execute(ddl())
+
+    # Và dữ liệu phải còn nguyên — một `ddl()` "an toàn" mà xoá mất row thì còn tệ hơn raise.
+    async with pool.connection() as conn, conn.transaction():
+        await _bind(conn, ANKOR_ID)
+        cur = await conn.execute("SELECT count(*) FROM eval.scorecards WHERE agent_id = %s", ("agent-ddl-replay",))
+        row = await cur.fetchone()
+    assert row is not None and row[0] == 1, "ddl() chạy lại không được làm mất row đã có"
