@@ -36,6 +36,7 @@ from typing import Any
 from uuid import UUID
 
 import pytest
+from psycopg import errors
 from studio_evalhub.schema import ddl
 
 ANKOR_ID = UUID("a0000000-0000-0000-0000-000000000001")
@@ -240,3 +241,71 @@ async def test_ddl_is_safe_on_populated_table(admin_pool: Any, pool: Any) -> Non
         cur = await conn.execute("SELECT count(*) FROM eval.scorecards WHERE agent_id = %s", ("agent-ddl-replay",))
         row = await cur.fetchone()
     assert row is not None and row[0] == 1, "ddl() chạy lại không được làm mất row đã có"
+
+
+async def test_hai_tenant_dung_chung_mot_golden_set_ref(admin_pool: Any, pool: Any) -> None:
+    """**Bài đỏ-trước** cho `UNIQUE (tenant_id, golden_set_ref)` — hai tenant phải giữ được **cùng
+    một** `golden_set_ref`.
+
+    ## Vì sao ràng buộc cũ sai ngữ nghĩa
+
+    `CREATE TABLE` khai `golden_set_ref TEXT NOT NULL UNIQUE`, tức **duy nhất toàn cục**. Nhưng bảng
+    này có `tenant_id NOT NULL` và RLS `FORCE` theo tenant — nó **đã là** bảng per-tenant ở mọi mặt
+    khác. Ràng buộc toàn cục nói rằng nếu Ankor có bộ tên `"handbook-v1"` thì Borea **vĩnh viễn**
+    không được đặt tên đó, dù hai bộ không bao giờ nhìn thấy nhau qua RLS.
+
+    Hệ quả thật, không phải chuyện gọn gàng: cutover golden-set từ file sang DB đòi mỗi tenant có bộ
+    riêng. Với ràng buộc cũ, tenant thứ hai trở đi phải bịa tên khác cho **cùng một khái niệm** — và
+    `recipe.golden_set_ref` là thứ người dùng khai trong recipe, nên cái tên bịa đó rò ra tận UI.
+    Cách vá phổ biến (nhồi tenant vào chuỗi: `"borea/handbook-v1"`) đẩy một khoá hai phần vào **một**
+    cột dạng chuỗi, không ai cưỡng chế cấu trúc đó, và nó sẽ lệch.
+
+    ## Bài này đo gì
+
+    Ghi cùng một `golden_set_ref` cho hai tenant, mỗi lần trong phiên của chính tenant đó (RLS
+    `WITH CHECK` chặn ghi hộ tenant khác — `test_rls_chan_ghi_cheo_tenant`). Trên DDL cũ, câu
+    `INSERT` thứ hai đỏ với `UniqueViolation` — **đỏ vì hành vi của Postgres**, không phải vì
+    `ImportError` hay vì assert của chính bài.
+
+    Đọc lại bằng từng phiên để chắc mỗi tenant thấy **đúng bộ của mình**: nếu ai đó "vá" bằng cách
+    gỡ `UNIQUE` mà không thêm ràng buộc ghép, bài vẫn xanh ở đây — nhưng
+    `test_unique_ghep_ton_tai_va_van_chan_trung_trong_cung_tenant` bên dưới sẽ đỏ. Hai bài là một
+    cặp; thiếu bài kia thì "gỡ sạch ràng buộc" cũng qua được."""
+    ref = "handbook-v1"
+    for tenant_id in (ANKOR_ID, BOREA_ID):
+        async with pool.connection() as conn, conn.transaction():
+            await _bind(conn, tenant_id)
+            await conn.execute(
+                "INSERT INTO eval.golden_sets (tenant_id, golden_set_ref, cases) VALUES (%s, %s, %s::jsonb)",
+                (tenant_id, ref, "[]"),
+            )
+
+    for tenant_id in (ANKOR_ID, BOREA_ID):
+        async with pool.connection() as conn, conn.transaction():
+            await _bind(conn, tenant_id)
+            cur = await conn.execute("SELECT tenant_id FROM eval.golden_sets WHERE golden_set_ref = %s", (ref,))
+            rows = await cur.fetchall()
+            assert [r[0] for r in rows] == [tenant_id], f"tenant {tenant_id} phải thấy ĐÚNG bộ của mình, nhận {rows!r}"
+
+
+async def test_unique_ghep_ton_tai_va_van_chan_trung_trong_cung_tenant(admin_pool: Any, pool: Any) -> None:
+    """Nửa còn lại của cặp: ràng buộc ghép **vẫn chặn** trùng ref trong **cùng một** tenant.
+
+    Không có bài này thì bản vá "gỡ `UNIQUE` đi cho xong" cũng làm bài trên xanh — và lúc đó một
+    tenant ghi hai bộ cùng tên, `recipe.golden_set_ref` trỏ tới một trong hai một cách không xác
+    định. Bài trên chứng minh ràng buộc **đủ lỏng**; bài này chứng minh nó **còn chặt ở đúng chỗ**."""
+    ref = "trung-trong-cung-tenant"
+    async with pool.connection() as conn, conn.transaction():
+        await _bind(conn, ANKOR_ID)
+        await conn.execute(
+            "INSERT INTO eval.golden_sets (tenant_id, golden_set_ref, cases) VALUES (%s, %s, %s::jsonb)",
+            (ANKOR_ID, ref, "[]"),
+        )
+
+    with pytest.raises(errors.UniqueViolation):
+        async with pool.connection() as conn, conn.transaction():
+            await _bind(conn, ANKOR_ID)
+            await conn.execute(
+                "INSERT INTO eval.golden_sets (tenant_id, golden_set_ref, cases) VALUES (%s, %s, %s::jsonb)",
+                (ANKOR_ID, ref, "[]"),
+            )
