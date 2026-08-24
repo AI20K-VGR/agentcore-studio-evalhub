@@ -11,6 +11,12 @@ from studio_evalhub.agreement import AgreementResult, agreement, nhan_tu_golden_
 from studio_evalhub.compute import compute_scorecard
 from studio_evalhub.golden_case import GoldenCase, GoldenSet
 from studio_evalhub.golden_loader import load_golden_set
+from studio_evalhub.golden_store import (
+    GoldenSetNotFound,
+    GoldenSetScopeError,
+    read_golden_set,
+    write_golden_set,
+)
 from studio_evalhub.harness import (
     EvalHarness,
     RetrievedChunk,
@@ -55,6 +61,8 @@ __all__ = [
     "AgentRunner",
     "AgreementResult",
     "CaseRun",
+    "GoldenSetNotFound",
+    "GoldenSetScopeError",
     "EvalHarness",
     "GoldenCase",
     "GoldenSet",
@@ -89,4 +97,6 @@ __all__ = [
     "score_case",
     "score_run_from_trace",
     "tenant_scope_ok",
+    "read_golden_set",
+    "write_golden_set",
 ]
