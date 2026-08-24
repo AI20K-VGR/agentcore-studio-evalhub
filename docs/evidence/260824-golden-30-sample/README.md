@@ -13,14 +13,20 @@
 | Nguồn số mẫu | `packages/kb/src/studio_kb/golden/{callisto-golden-30-v1,callisto-2.0-golden-30-v1}.yaml` |
 | Nguồn số mặc định | `apps/studio/src/studio_app/routes/{runs,publish}.py` · `packages/workbench/src/studio_workbench/builder.py` |
 | Con trỏ `packages/kb` | `72b6133` |
-| Con trỏ `packages/evalhub` | nhánh `docs/evidence-khuon-mutation-s3` @ `468f9ba` |
+| Con trỏ `packages/evalhub` | nhánh `docs/evidence-khuon-mutation-s3` (repo chứa chính entry này — SHA tự chiếu, git đã ghi) |
 | Con trỏ `apps/studio` | `572f4b4` |
 | Con trỏ `packages/workbench` | `72fc633` |
 | Phụ thuộc ngoài | không (không DB, không mạng, không LLM) |
 
-Bốn SHA trên **không chép tay** — `scan_defaults.py` tự đọc `git rev-parse` của từng repo con và ghi
+Ba SHA repo ngoài ở trên **không chép tay** — `scan_defaults.py` tự đọc `git rev-parse` của từng repo con và ghi
 vào [`raw/defaults.json`](raw/defaults.json) cùng lúc với số nó đo. Chép tay là chỗ bảng điều kiện
 đo lệch khỏi phép đo mà không ai thấy.
+
+Hệ quả phải nói rõ để không ai đọc sai luật vàng: SHA là **trạng thái workspace lúc đo**, và
+`run.sh` đọc lại chúng mỗi lần chạy — người chạy lại với con trỏ submodule khác sẽ thấy SHA của
+chính họ trong `raw/`, không phải ba giá trị trên. Thứ **phải khớp** là các con số đo được (mặc
+định, `n` hiệu dụng, mẫu số nhãn tay); SHA ở đây để trả lời *"đo trên cây nào"* khi một con số
+không khớp.
 
 ---
 

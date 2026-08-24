@@ -2,8 +2,7 @@
   "heads": {
     "apps/studio": "572f4b4",
     "packages/workbench": "72fc633",
-    "packages/kb": "72b6133",
-    "packages/evalhub": "468f9ba"
+    "packages/kb": "72b6133"
   },
   "http_layer": {
     "src/studio_app/routes/runs.py": {

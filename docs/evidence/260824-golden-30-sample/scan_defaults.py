@@ -42,7 +42,7 @@ def _literal(node: ast.AST | None) -> object:
         return None
     try:
         return ast.literal_eval(node)
-    except (ValueError, SyntaxError):
+    except ValueError, SyntaxError:
         return f"<không phải hằng: {ast.unparse(node)}>"
 
 
@@ -98,8 +98,13 @@ def scan_function_defaults(path: Path) -> dict[str, object]:
         if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
             continue
         args = node.args
-        pairs = list(zip(args.args[len(args.args) - len(args.defaults) :], args.defaults, strict=True))
-        pairs += list(zip(args.kwonlyargs, args.kw_defaults, strict=True))
+        # `args.defaults` chỉ phủ ĐUÔI của `args.args` (tham số có mặc định luôn đứng cuối), còn
+        # `args.kw_defaults` phủ đủ `kwonlyargs` nhưng cho `None` ở kwarg không mặc định — hai hình
+        # khác nhau, nên ghép riêng rồi nối, và kiểu phần tử phải khai tường minh (`expr | None`).
+        pairs: list[tuple[ast.arg, ast.expr | None]] = []
+        positional = args.args[len(args.args) - len(args.defaults) :]
+        pairs.extend(zip(positional, args.defaults, strict=True))
+        pairs.extend(zip(args.kwonlyargs, args.kw_defaults, strict=True))
         for arg, default in pairs:
             if arg.arg == _FIELD:
                 found[node.name] = _literal(default)
@@ -107,32 +112,42 @@ def scan_function_defaults(path: Path) -> dict[str, object]:
 
 
 def main() -> dict[str, object]:
-    report: dict[str, object] = {"heads": {}, "http_layer": {}, "library_layer": {}}
+    # Ba repo NGOÀI, không có `packages/evalhub`: entry này nằm trong chính repo đó, nên SHA của nó
+    # là tự chiếu — git đã ghi commit rồi, mà đưa vào đây thì `raw/defaults.json` đổi theo mỗi
+    # commit và tạo ra một diff nhiễu không nói thêm điều gì.
+    heads = {repo: _head_sha(repo) for repo in ("apps/studio", "packages/workbench", "packages/kb")}
 
-    for repo in ("apps/studio", "packages/workbench", "packages/kb", "packages/evalhub"):
-        report["heads"][repo] = _head_sha(repo)  # type: ignore[index]
-
+    http_layer: dict[str, dict[str, object]] = {}
     for repo, files in _ROUTE_FILES.items():
         for rel in files:
             path = _ROOT / repo / rel
-            report["http_layer"][rel] = {  # type: ignore[index]
+            http_layer[rel] = {
                 "classes": scan_request_classes(path),
                 "imported_from_routes_runs": scan_imports_from_runs(path),
                 "handler_body_types": scan_route_handlers(path),
             }
 
-    repo, rel = _BUILDER_FILE
-    report["library_layer"][rel] = scan_function_defaults(_ROOT / repo / rel)  # type: ignore[index]
+    builder_repo, builder_rel = _BUILDER_FILE
+    library_layer = {builder_rel: scan_function_defaults(_ROOT / builder_repo / builder_rel)}
 
-    distinct = {
-        entry["default"]
-        for file in report["http_layer"].values()  # type: ignore[union-attr]
-        for entry in file["classes"].values()
-        if entry["declares_golden_set_ref"]
-    } | set(report["library_layer"][rel].values())  # type: ignore[index]
-    report["distinct_defaults"] = sorted(str(value) for value in distinct)
+    # Tập mặc định KHÁC NHAU đang tồn tại — dài hơn 1 phần tử nghĩa là hệ thống chưa chốt một
+    # `golden_set_ref` mặc định, và mọi con số công bố phải khai mình đo trên bộ nào.
+    distinct: set[str] = set()
+    for file_report in http_layer.values():
+        classes = file_report["classes"]
+        assert isinstance(classes, dict)
+        for entry in classes.values():
+            if entry["declares_golden_set_ref"]:
+                distinct.add(str(entry["default"]))
+    for default in library_layer[builder_rel].values():
+        distinct.add(str(default))
 
-    return report
+    return {
+        "heads": heads,
+        "http_layer": http_layer,
+        "library_layer": library_layer,
+        "distinct_defaults": sorted(distinct),
+    }
 
 
 if __name__ == "__main__":
