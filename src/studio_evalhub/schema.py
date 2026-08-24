@@ -101,7 +101,7 @@ CREATE TABLE IF NOT EXISTS eval.scorecards (
 -- chất (1)+(3), không vì *"bảng rỗng"*.
 --
 -- Bất biến đó được **khoá bằng bài test**, không chỉ bằng comment này — comment vừa tự chứng minh nó
--- trôi được: `tests/test_eval_schema_rls.py::test_ddl_an_toan_tren_bang_da_co_row`.
+-- trôi được: `tests/test_eval_schema_rls.py::test_ddl_is_safe_on_populated_table`.
 --
 -- ## Điều kiện lật (thứ thay cho luật "đúng 1 hit")
 --

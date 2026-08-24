@@ -178,7 +178,7 @@ async def test_rls_chan_ghi_cheo_tenant(admin_pool: Any, pool: Any) -> None:
             )
 
 
-async def test_ddl_an_toan_tren_bang_da_co_row(admin_pool: Any, pool: Any) -> None:
+async def test_ddl_is_safe_on_populated_table(admin_pool: Any, pool: Any) -> None:
     """`ddl()` chạy lại trên bảng **đã có dữ liệu** không được raise — bất biến giữ cho
     `ADD COLUMN … NOT NULL` (`schema.py`) còn an toàn sau khi writer thật đã land (`evalhub#41`).
 
