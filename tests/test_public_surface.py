@@ -39,6 +39,17 @@ import pathlib
 import studio_evalhub
 
 KHONG_XUAT: dict[str, str] = {
+    "DEFAULT_MAX_CASES": (
+        "trần mặc định của bộ Core (`core_set.py`, ~30–50 case theo docstring `GoldenCase.tier`). "
+        "Không xuất vì nó là một GIÁ TRỊ CHỈNH ĐƯỢC, không phải hợp đồng: caller cần ngân sách "
+        "khác thì truyền `select_core(max_cases=…)` tường minh, chứ không đọc hằng số rồi cộng trừ "
+        "quanh nó — làm vậy là hai nguồn sự thật cho cùng một quyết định. Test import thẳng từ module."
+    ),
+    "DEFAULT_MIN_ANSWER": (
+        "số case trả-lời tối thiểu để `success_rate` nói được điều gì về chất lượng trả lời "
+        "(`core_set.py`). Cùng lý do `DEFAULT_MAX_CASES`: giá trị chỉnh được qua tham số "
+        "`min_answer=`, không phải hằng số mà caller nên bám vào."
+    ),
     "dsn_bo_cham": (
         "helper của CLI `python -m studio_evalhub.run_report` (`evalhub#37` — ưu tiên "
         "$STUDIO_DATABASE_URL_SCORER, fallback $STUDIO_DATABASE_URL). Không xuất vì nó là quy ước "

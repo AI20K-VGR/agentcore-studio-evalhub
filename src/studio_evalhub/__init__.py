@@ -9,6 +9,7 @@ docstrings cho hợp đồng của từng seam.
 from studio_evalhub.agent_runner import AgentAnswer, AgentRunner, CaseRun, StubAgentRunner
 from studio_evalhub.agreement import AgreementResult, agreement, nhan_tu_golden_set
 from studio_evalhub.compute import compute_scorecard
+from studio_evalhub.core_set import CoreSelection, CoreSelectionError, select_core
 from studio_evalhub.golden_case import GoldenCase, GoldenSet
 from studio_evalhub.golden_loader import load_golden_set
 from studio_evalhub.golden_merge import (
@@ -72,6 +73,8 @@ __all__ = [
     "chunks_from_trace",
     "citations_from_trace",
     "compute_scorecard",
+    "CoreSelection",
+    "CoreSelectionError",
     "ddl",
     "EvalHarness",
     "FixtureUnreadable",
@@ -103,6 +106,7 @@ __all__ = [
     "RunCostError",
     "score_case",
     "score_run_from_trace",
+    "select_core",
     "SmokeResult",
     "StubAgentRunner",
     "tenant_scope_ok",

@@ -28,6 +28,7 @@ from studio_contracts import CaseResult, NodeType, Scorecard, TraceEvent
 
 from studio_evalhub.agent_runner import AgentAnswer, AgentRunner, CaseRun
 from studio_evalhub.compute import compute_scorecard
+from studio_evalhub.core_set import select_core
 from studio_evalhub.golden_case import GoldenCase, GoldenSet
 from studio_evalhub.golden_loader import load_golden_set
 from studio_evalhub.judge import JudgeUnavailable, LLMJudge
@@ -502,6 +503,7 @@ class EvalHarness:
         threshold_citation_accuracy: float,
         judge: LLMJudge | None = None,
         recipe_hash: str | None = None,
+        core_only: bool = False,
     ) -> Scorecard:
         """Chạy **mọi** case của `golden_set_ref` qua `agent_id` rồi trả `Scorecard` có verdict thật.
 
@@ -619,6 +621,18 @@ class EvalHarness:
         else:
             assert golden_set_path is not None
             golden = load_golden_set(golden_set_path, expect_ref=golden_set_ref)
+
+        if core_only:
+            # Cổng Publish chạy bộ **Core**, không phải cả bộ. Luật chọn sống ở `core_set.py` chứ
+            # không ở từng caller: nó phải giống nhau giữa mọi đường vào cổng, và nó là chỗ duy
+            # nhất từ chối được một Core không đo nổi cả hai trục (`CoreSelectionError`).
+            #
+            # `golden_set_ref` của `Scorecard` KHÔNG đổi — đây vẫn là bộ đó, chỉ chạy một tập con.
+            # Hệ quả phải biết: scorecard hiện **không phân biệt được** lượt Core với lượt Full,
+            # nên hai lượt cùng ref có thể cho hai `success_rate` khác nhau một cách hợp lệ. Ghi ở
+            # đây thay vì thêm field vào `Scorecard` — chạm `packages/contracts` là mini-RFC, và
+            # `contracts#14` vừa cho thấy giá của một lần chạm.
+            golden = select_core(golden).golden
 
         results: list[CaseResult] = []
         scored_case_ids: set[str] = set()
