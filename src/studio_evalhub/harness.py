@@ -536,6 +536,26 @@ class EvalHarness:
         **biết** nhánh vì nó cầm `GoldenCase`, còn `CaseResult` thì không mang cờ nhánh
         (`DEC-D16-03`).
 
+        ## `core_only` / `core_max_cases` / `core_min_answer` — chạy bộ **Core**
+
+        `core_only=True` thì `run()` chấm trên tập con Core (`core_set.select_core`) thay vì cả bộ:
+        cổng Publish chạy đồng bộ trong một request HTTP, và một bộ golden lớn nhân với trần
+        `DEFAULT_MAX_TURNS` của agent-loop cho một request dài tới mức hỏng dưới dạng timeout thay
+        vì dưới dạng scorecard trượt — hai kiểu hỏng người vận hành đọc rất khác nhau.
+
+        `golden_set_ref` của `Scorecard` **KHÔNG** đổi: vẫn là bộ đó, chỉ chạy một tập con. Hệ quả
+        phải biết: scorecard hiện không phân biệt được lượt Core với lượt Full, nên hai lượt cùng
+        ref có thể cho hai `success_rate` khác nhau một cách hợp lệ.
+
+        `core_max_cases`/`core_min_answer` nới ngưỡng chọn, mặc định giữ **nghiêm** (`40`/`10`). Có
+        chúng vì từ `app#61` golden set sinh tự động theo từng `section_role` lúc upload tài liệu,
+        nên bộ nhỏ là ca **thường** chứ không phải ngoại lệ: một tenant vừa upload một tài liệu sẽ
+        có dưới `10` case trả-lời và `select_core` fail-closed đúng thiết kế — nhưng không có đường
+        nới thì fail-closed đó thành **outage vĩnh viễn** cho tenant ấy. Nới là lựa chọn tường minh
+        của caller, đọc được ngay ở chỗ gọi và ghi vào log cùng `declared`/`answer`/`refusal`.
+
+        Cả ba bị **bỏ qua** khi `core_only=False` — không có tác dụng phụ nào ở đường chạy cả bộ.
+
         ## `judge` — additive, default `None` (D18/T4)
 
         **`judge=None` ⇒ không đổi một dòng** hành vi: mọi call-site hôm nay (`cli.py`, 2 bài
