@@ -55,6 +55,7 @@ còn cái này sinh ra chính tập mà cổng sẽ chấm.
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 
 from studio_evalhub.golden_case import GoldenCase, GoldenSet
@@ -153,7 +154,9 @@ def select_core(
     # từ-chối trùng id bị kéo vào mẫu `citation_accuracy` của nhánh trả-lời và làm hỏng chính con
     # số cổng đọc. `GoldenSet` không ép id duy nhất (bộ sinh máy và bộ người nộp đặt id độc lập,
     # xem `golden_merge.py`), nên chỗ duy nhất chặn được là ngay trước khi giao tập cho cổng.
-    duplicates = sorted({c.case_id for c in chosen if sum(1 for x in chosen if x.case_id == c.case_id) > 1})
+    # `Counter` chứ không `sum()` lồng trong comprehension: bản đầu là O(n²), và hàm này chạy
+    # trong ngân sách thời gian của cổng Publish (review evalhub#52, Dozyboy).
+    duplicates = sorted(case_id for case_id, n in Counter(c.case_id for c in chosen).items() if n > 1)
     if duplicates:
         raise CoreSelectionError(
             f"select_core: Core của {golden.golden_set_ref!r} có case_id trùng: {duplicates}. "
