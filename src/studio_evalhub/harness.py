@@ -185,6 +185,59 @@ def citations_from_trace(events: list[TraceEvent]) -> list[str]:
     return retrieved
 
 
+class C1ViolationError(RuntimeError):
+    """Trace mang `citations` trên node không-phải-`llm-step` — clause C-1 của engine bị vi phạm.
+
+    **Ném chứ không cảnh báo.** Một citation giả đi lọt làm `citation_accuracy` **cao hơn** sự
+    thật, tức cổng trả một con số trông đạt trong khi nó không đo cái nó tưởng. Đó cùng hạng với
+    `GoldenSetNotFound`/`CoreSelectionError`: khi phép đo không còn đo đúng thứ nó khai, im lặng
+    trả số là kiểu hỏng tệ nhất mà cổng này được dựng ra để tránh.
+    """
+
+
+def c1_violations(events: list[TraceEvent]) -> list[str]:
+    """`chunk_id` bị mang trên event **không phải `llm-step`** — vi phạm clause **C-1** của engine.
+
+    C-1 (`packages/engine/docs/contracts/trace-citations.v0.md`, chốt `DL-11.A1-10`): **chỉ node
+    `llm-step` được điền `TraceEvent.citations`**. Cổng cưỡng chế nằm ở `interpreter.py:304`, tức
+    **phía sản xuất**.
+
+    ## Vì sao cần một lưới ở phía tiêu thụ
+
+    Mutation của tôi (`docs/evidence/260824-mutation-s3/`) đo được: gỡ cổng C-1 ⇒ **đúng 1** bài đỏ
+    trên toàn workspace 1699 bài — lưới mỏng nhất trong 5 hàng rào, và **nằm hết ở phía sản xuất**.
+    Một bài bị xoá hoặc đổi vì lý do không liên quan là cổng đó về 0 mà không ai biết.
+
+    Lỗ mà C-1 chặn có thật, không phải giả định: `ToolCallExecutor` trả **thẳng** dict của
+    `ToolDispatch.dispatch()` (`executors.py:576`), nên một tool bên thứ ba đặt key `"citations"` là
+    giá trị đó vào trace **như trích dẫn thật**, rồi ăn điểm `citation_accuracy` — fail-open đúng
+    vào trục chấm điểm. Đó là kiểu hỏng tệ nhất ở đây: bộ chấm trả một con số **cao hơn** sự thật.
+
+    ## Vì sao hàm RIÊNG chứ không siết `citations_from_trace`
+
+    `citations_from_trace` cố ý node-agnostic, và có bài khoá hành vi đó
+    (`test_citations_from_trace_collects_regardless_of_node`). Docstring của nó có nêu điều kiện để
+    siết (*"chốt carrier với AIE-1 → siết theo node cụ thể"*), và điều kiện đó nay đã đạt — nhưng
+    siết sẽ **đảo một hành vi đang được test khoá** và làm đỏ 6 bài, tức là một thay đổi hành vi
+    xuyên quadrant chứ không phải thêm một lưới. Đo trước khi chọn: tôi đã thử siết và đếm được
+    đúng 6 bài đỏ, trong đó có bài khoá chính hành vi ấy.
+
+    Nên đây là **phát hiện**, không phải **lọc**: nó không đổi con số nào đang chạy, chỉ nói ra khi
+    trace vi phạm C-1. Giữ đúng tinh thần **C-1a** (*"chặn, không xoá"*) — giá trị vẫn còn trong
+    `outputs`, chỉ không được coi là trích dẫn.
+
+    Trả danh sách `chunk_id` thay vì `bool`: người đọc cần biết **cái gì** lọt vào, không chỉ biết
+    "có chuyện". Rỗng = sạch.
+    """
+    forged: list[str] = []
+    for event in events:
+        if event.node_type is NodeType.LLM_STEP:
+            continue
+        if event.citations:
+            forged.extend(event.citations)
+    return forged
+
+
 def tenant_scope_ok(events: list[TraceEvent], expected: UUID) -> bool:
     """Mọi trace event của một run có mang ĐÚNG `expected` ở `tenant_id` hay không (D8 #39).
 
@@ -698,6 +751,18 @@ class EvalHarness:
                 tenant_id=tenant_ids[case.tenant],
                 section_roles=case.section_roles,
             )
+            # Lưới C-1 phía TIÊU THỤ. Cổng thật nằm ở engine (`interpreter.py`), nhưng mutation
+            # đo được nó chỉ có ĐÚNG 1 bài khoá trên toàn workspace — xem docstring
+            # `c1_violations`. Kiểm ở đây là lớp thứ hai, và nó ở đúng chỗ hậu quả xảy ra: một
+            # citation giả lọt vào là `citation_accuracy` của case này cao hơn sự thật.
+            forged = c1_violations(case_run.events)
+            if forged:
+                raise C1ViolationError(
+                    f"case {case.case_id!r}: {len(forged)} citation mang trên node không phải "
+                    f"`llm-step` — vi phạm clause C-1 của engine: {sorted(set(forged))}. "
+                    f"`citation_accuracy` tính trên trace này sẽ CAO HƠN sự thật, nên cổng dừng "
+                    f"thay vì trả một con số trông đạt."
+                )
             scored = _score_case_run(case, case_run, tenant_ids)
             if judge is not None and _duoc_hoi_judge(case, case_run, scored):
                 scored = await _hoi_judge(judge, case, scored)

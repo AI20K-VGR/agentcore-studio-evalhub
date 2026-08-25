@@ -50,24 +50,36 @@ class _LLMLuonPass:
         return "PASS"
 
 
-def _event(tenant_id: UUID, citations: list[str]) -> TraceEvent:
-    return TraceEvent(
-        event_id="e1",
-        run_id="r1",
-        agent_id="a",
-        tenant_id=tenant_id,
-        node_id="n1",
-        node_type=NodeType.KB_RETRIEVE,
-        ts="2026-08-10T00:00:00+00:00",
-        inputs_hash="h",
+def _events(tenant_id: UUID, citations: list[str]) -> list[TraceEvent]:
+    """HAI event, đúng hình dạng trace thật: `kb-retrieve` mang chunk, `llm-step` mang citation.
+
+    Bản trước gộp cả hai vào MỘT event `kb-retrieve` mang luôn `citations` — theo cách đọc của chú
+    thích contract thời đó (`TraceEvent.citations  # from kb-retrieve`). Clause **C-1** (engine
+    `trace-citations.v0.md`, chốt `DL-11.A1-10`) đã chốt ngược lại: **chỉ `llm-step` được mang
+    `citations`**, và `interpreter.py` cưỡng chế theo `node_type`. Nên hình dạng cũ là thứ engine
+    **không sinh ra được nữa** — một stub mô hình hoá trạng thái bất khả thi.
+
+    Tách đôi chứ không chỉ đổi `node_type`: `chunks_from_trace` đọc chunk từ đúng event
+    `kb-retrieve`, nên dời cả sang `llm-step` sẽ làm mất nguồn chunk và đổi luôn thứ các bài này
+    đang đo (đã thử, `success_rate` lệch ngay).
+    """
+    base = {
+        "event_id": "e1",
+        "run_id": "r1",
+        "agent_id": "agent-1",
+        "tenant_id": tenant_id,
+        "ts": "2026-08-10T00:00:00+00:00",
+        "inputs_hash": "h",
+        "tokens": Tokens(prompt=0, completion=0),
+        "cost": 0.0,
+    }
+    return [
         # `kb-retrieve` THẬT luôn mang `outputs["chunks"]` (`interpreter.py:347`), kể cả khi
-        # retrieval trả rỗng. Stub phải mô hình đúng: thiếu hẳn khoá nghĩa là *payload không
-        # đọc được* ⇒ `chunks_from_trace` fail-closed `None` (vá sau review evalhub#18, DE).
-        outputs={"chunks": []},
-        tokens=Tokens(prompt=0, completion=0),
-        cost=0.0,
-        citations=citations,
-    )
+        # retrieval trả rỗng. Thiếu hẳn khoá nghĩa là *payload không đọc được* ⇒ `chunks_from_trace`
+        # fail-closed `None` (vá sau review evalhub#18, DE).
+        TraceEvent(node_id="n1", node_type=NodeType.KB_RETRIEVE, outputs={"chunks": []}, citations=None, **base),
+        TraceEvent(node_id="n2", node_type=NodeType.LLM_STEP, outputs={}, citations=citations, **base),
+    ]
 
 
 def _bad_runner(golden: GoldenSet, tenant_ids: Mapping[str, UUID]) -> StubAgentRunner:
@@ -111,7 +123,7 @@ def _bad_runner(golden: GoldenSet, tenant_ids: Mapping[str, UUID]) -> StubAgentR
             )
         fixtures[(case.query, tenant_id, tuple(case.section_roles))] = CaseRun(
             answer=answer,
-            events=[_event(tenant_id, [])],  # ĐÚNG 1 event — FAIL phải đến từ answer, không từ no-trace
+            events=_events(tenant_id, []),  # ĐÚNG 1 event — FAIL phải đến từ answer, không từ no-trace
         )
     return StubAgentRunner(fixtures)
 

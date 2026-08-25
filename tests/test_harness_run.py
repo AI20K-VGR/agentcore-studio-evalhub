@@ -54,24 +54,36 @@ cases:
 """
 
 
-def _event(tenant_id: UUID, citations: list[str]) -> TraceEvent:
-    return TraceEvent(
-        event_id="e1",
-        run_id="r1",
-        agent_id="agent-1",
-        tenant_id=tenant_id,
-        node_id="n1",
-        node_type=NodeType.KB_RETRIEVE,
-        ts="2026-08-10T00:00:00+00:00",
-        inputs_hash="h",
+def _events(tenant_id: UUID, citations: list[str]) -> list[TraceEvent]:
+    """HAI event, đúng hình dạng trace thật: `kb-retrieve` mang chunk, `llm-step` mang citation.
+
+    Bản trước gộp cả hai vào MỘT event `kb-retrieve` mang luôn `citations` — theo cách đọc của chú
+    thích contract thời đó (`TraceEvent.citations  # from kb-retrieve`). Clause **C-1** (engine
+    `trace-citations.v0.md`, chốt `DL-11.A1-10`) đã chốt ngược lại: **chỉ `llm-step` được mang
+    `citations`**, và `interpreter.py` cưỡng chế theo `node_type`. Nên hình dạng cũ là thứ engine
+    **không sinh ra được nữa** — một stub mô hình hoá trạng thái bất khả thi.
+
+    Tách đôi chứ không chỉ đổi `node_type`: `chunks_from_trace` đọc chunk từ đúng event
+    `kb-retrieve`, nên dời cả sang `llm-step` sẽ làm mất nguồn chunk và đổi luôn thứ các bài này
+    đang đo (đã thử, `success_rate` lệch ngay).
+    """
+    base = {
+        "event_id": "e1",
+        "run_id": "r1",
+        "agent_id": "agent-1",
+        "tenant_id": tenant_id,
+        "ts": "2026-08-10T00:00:00+00:00",
+        "inputs_hash": "h",
+        "tokens": Tokens(prompt=0, completion=0),
+        "cost": 0.0,
+    }
+    return [
         # `kb-retrieve` THẬT luôn mang `outputs["chunks"]` (`interpreter.py:347`), kể cả khi
-        # retrieval trả rỗng. Stub phải mô hình đúng: thiếu hẳn khoá nghĩa là *payload không
-        # đọc được* ⇒ `chunks_from_trace` fail-closed `None` (vá sau review evalhub#18, DE).
-        outputs={"chunks": []},
-        tokens=Tokens(prompt=0, completion=0),
-        cost=0.0,
-        citations=citations,
-    )
+        # retrieval trả rỗng. Thiếu hẳn khoá nghĩa là *payload không đọc được* ⇒ `chunks_from_trace`
+        # fail-closed `None` (vá sau review evalhub#18, DE).
+        TraceEvent(node_id="n1", node_type=NodeType.KB_RETRIEVE, outputs={"chunks": []}, citations=None, **base),
+        TraceEvent(node_id="n2", node_type=NodeType.LLM_STEP, outputs={}, citations=citations, **base),
+    ]
 
 
 def _write(tmp_path: Path, text: str) -> Path:
@@ -163,7 +175,7 @@ async def test_run_van_phan_biet_no_trace_voi_refusal_khong_trich(
         {
             ("Thưởng cuối năm của ankor là bao nhiêu?", tenant_ids["borea"], ("public",)): CaseRun(
                 answer=AgentAnswer(answer="Tôi không thể trả lời câu hỏi này.", citations=[], refused=True),
-                events=[_event(tenant_ids["borea"], [])],  # ← MỘT event, zero citation = F02
+                events=_events(tenant_ids["borea"], []),  # ← MỘT event, zero citation = F02
             )
         }
     )
@@ -239,16 +251,16 @@ cases:
             # Mỗi case trả-lời trích ĐÚNG MỘT trong hai chunk kỳ vọng ⇒ citation_accuracy = 0.5.
             ("q-a1", ankor, ("hr",)): CaseRun(
                 answer=AgentAnswer(answer="Được nghỉ 12 ngày.", citations=[], refused=False),
-                events=[_event(ankor, ["ankor-a#c1"])],
+                events=_events(ankor, ["ankor-a#c1"]),
             ),
             ("q-a2", ankor, ("hr",)): CaseRun(
                 answer=AgentAnswer(answer="Duyệt tối đa 20 triệu.", citations=[], refused=False),
-                events=[_event(ankor, ["ankor-b#c1"])],
+                events=_events(ankor, ["ankor-b#c1"]),
             ),
             # Refusal mang 1.0 quy ước — con số KHÁC 0.5, nên nó vào mẫu số là thấy ngay.
             ("q-r1", borea, ("public",)): CaseRun(
                 answer=AgentAnswer(answer="Tôi không thể trả lời.", citations=[], refused=True),
-                events=[_event(borea, [])],
+                events=_events(borea, []),
             ),
         }
     )
@@ -282,7 +294,7 @@ async def test_run_recipe_hash_none_van_dung_scorecard(tmp_path: Path, tenant_id
         {
             ("Nghỉ phép năm được bao nhiêu ngày?", tenant_ids["ankor"], ("hr",)): CaseRun(
                 answer=AgentAnswer(answer="Được nghỉ 12 ngày mỗi năm.", citations=[], refused=False),
-                events=[_event(tenant_ids["ankor"], ["ankor-leave-001#c1"])],
+                events=_events(tenant_ids["ankor"], ["ankor-leave-001#c1"]),
             )
         }
     )
