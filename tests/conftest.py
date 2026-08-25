@@ -117,9 +117,21 @@ def tenant_ids() -> Mapping[str, UUID]:
     return {"ankor": uuid5(NAMESPACE_DNS, "ankor"), "borea": uuid5(NAMESPACE_DNS, "borea")}
 
 
-def _trace_event(tenant_id: UUID, citations: list[str], *, chunks: list[dict[str, object]] | None = None) -> TraceEvent:
-    """Một event `kb-retrieve` mang **hai** mặt quan sát: `citations` (tầng *cited*) và
-    `outputs["chunks"]` (tầng *retrieved*).
+def _trace_events(
+    tenant_id: UUID, citations: list[str], *, chunks: list[dict[str, object]] | None = None
+) -> list[TraceEvent]:
+    """**Hai** event, mỗi mặt quan sát ở đúng node của nó: `kb-retrieve` mang
+    `outputs["chunks"]` (tầng *retrieved*), `llm-step` mang `citations` (tầng *cited*).
+
+    Trước đây gộp cả hai vào MỘT event `kb-retrieve` — theo cách đọc của chú thích contract thời đó
+    (`TraceEvent.citations  # from kb-retrieve`). Clause **C-1** (engine `trace-citations.v0.md`,
+    chốt `DL-11.A1-10`) đã chốt ngược lại: **chỉ `llm-step` được mang `citations`**, và
+    `interpreter.py` cưỡng chế theo `node_type`. Nên hình dạng cũ là thứ engine **không sinh ra
+    được nữa**, và một stub mô hình hoá trạng thái bất khả thi sẽ che mất đúng lớp lỗi mà lưới
+    `c1_violations` dựng lên để bắt.
+
+    Tách đôi chứ không chỉ đổi `node_type`: `chunks_from_trace` đọc chunk từ **đúng** event
+    `kb-retrieve`, nên dời cả sang `llm-step` là mất nguồn chunk và đổi luôn thứ các bài đang đo.
 
     Sau `F-6` (`DEC-D17-02`) nhánh từ-chối chấm `no_leak` trên **`chunks`**, không trên `citations`.
     Nên một stub chỉ mang `citations` là stub **không mô hình được** thứ bộ chấm đọc — và tệ hơn,
@@ -127,20 +139,32 @@ def _trace_event(tenant_id: UUID, citations: list[str], *, chunks: list[dict[str
     viết ra để tránh: `all(...)` trên tập chunk rỗng luôn `True` nên luật `no_leak` sai kiểu gì
     cũng không lộ. `chunks=None` ⇒ `{"chunks": []}` (retrieval trả rỗng), khớp `interpreter.py:347`
     vốn LUÔN ghi khoá đó cho `kb-retrieve`."""
-    return TraceEvent(
-        event_id="e1",
-        run_id="r1",
-        agent_id="agent-1",
-        tenant_id=tenant_id,
-        node_id="n1",
-        node_type=NodeType.KB_RETRIEVE,
-        ts="2026-08-10T00:00:00+00:00",
-        inputs_hash="h",
-        outputs={"chunks": chunks if chunks is not None else []},
-        tokens=Tokens(prompt=0, completion=0),
-        cost=0.0,
-        citations=citations,
-    )
+    base: dict[str, object] = {
+        "event_id": "e1",
+        "run_id": "r1",
+        "agent_id": "agent-1",
+        "tenant_id": tenant_id,
+        "ts": "2026-08-10T00:00:00+00:00",
+        "inputs_hash": "h",
+        "tokens": Tokens(prompt=0, completion=0),
+        "cost": 0.0,
+    }
+    return [
+        TraceEvent(
+            node_id="n1",
+            node_type=NodeType.KB_RETRIEVE,
+            outputs={"chunks": chunks if chunks is not None else []},
+            citations=None,
+            **base,  # type: ignore[arg-type]
+        ),
+        TraceEvent(
+            node_id="n2",
+            node_type=NodeType.LLM_STEP,
+            outputs={},
+            citations=citations,
+            **base,  # type: ignore[arg-type]
+        ),
+    ]
 
 
 @pytest.fixture
@@ -195,14 +219,14 @@ def runner_tot() -> Callable[[GoldenSet, Mapping[str, UUID]], StubAgentRunner]:
                         "text": "t",
                     }
                 ]
-                events = [_trace_event(tenant_id, [chunk_id], chunks=chunks)]
+                events = _trace_events(tenant_id, [chunk_id], chunks=chunks)
             else:
                 answer = AgentAnswer(
                     answer=f"Theo tài liệu, {case.expected}.",
                     citations=list(case.expected_citation),
                     refused=False,
                 )
-                events = [_trace_event(tenant_id, list(case.expected_citation))]
+                events = _trace_events(tenant_id, list(case.expected_citation))
             fixtures[(case.query, tenant_id, tuple(case.section_roles))] = CaseRun(answer=answer, events=events)
         return StubAgentRunner(fixtures)
 

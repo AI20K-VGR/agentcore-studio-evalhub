@@ -27,9 +27,11 @@ from studio_evalhub.golden_store import (
     write_golden_set,
 )
 from studio_evalhub.harness import (
+    C1ViolationError,
     EvalHarness,
     RetrievedChunk,
     SmokeResult,
+    c1_violations,
     chunks_from_trace,
     citations_from_trace,
     score_case,
@@ -71,8 +73,10 @@ __all__ = [
     "CaseKey",
     "CaseRun",
     "chunks_from_trace",
+    "c1_violations",
     "citations_from_trace",
     "compute_scorecard",
+    "C1ViolationError",
     "CoreSelection",
     "CoreSelectionError",
     "ddl",
