@@ -1,0 +1,232 @@
+{
+  "khi": "2026-08-24T17:02:36.681113+00:00",
+  "n": 5,
+  "model": "gpt-4o-mini",
+  "ket": {
+    "canvas": [
+      {
+        "success": 0.9333333333333333,
+        "citation": 1.0,
+        "n_cit": 22,
+        "verdict": "PASS",
+        "truot": [
+          "HB2-08",
+          "HB2-25"
+        ],
+        "cache_hit": 12,
+        "cache_miss": 18,
+        "vi_du_query_llm_tu_viet": [
+          "ngày phép năm của nhân viên chính thức",
+          "nhân viên chính thức ngày phép năm",
+          "Tết Nguyên Đán nghỉ mấy ngày",
+          "Bảo hiểm sức khỏe có hạn mức nội trú bao nhiêu?",
+          "đơn xin nghỉ phép phải nộp trước bao lâu"
+        ]
+      },
+      {
+        "success": 0.8666666666666667,
+        "citation": 0.9545454545454546,
+        "n_cit": 22,
+        "verdict": "FAIL",
+        "truot": [
+          "HB2-07",
+          "HB2-08",
+          "HB2-12",
+          "HB2-25"
+        ],
+        "cache_hit": 23,
+        "cache_miss": 7,
+        "vi_du_query_llm_tu_viet": [
+          "quy trình mua sắm giao dịch từ bao nhiêu",
+          "Quy trình mua sắm áp dụng cho giao dịch từ bao nhiêu",
+          "hoá đơn được xuất trong bao nhiêu ngày làm việc",
+          "phụ cấp trực on-call ngày thường",
+          "Ngân sách đào tạo mỗi nhân viên một năm"
+        ]
+      },
+      {
+        "success": 0.9,
+        "citation": 0.9545454545454546,
+        "n_cit": 22,
+        "verdict": "PASS",
+        "truot": [
+          "HB2-08",
+          "HB2-12",
+          "HB2-25"
+        ],
+        "cache_hit": 22,
+        "cache_miss": 8,
+        "vi_du_query_llm_tu_viet": [
+          "nhân viên chính thức bao nhiêu ngày phép năm",
+          "Bảo hiểm sức khoẻ có hạn mức nội trú",
+          "quy trình mua sắm giao dịch",
+          "chi phí ăn uống công tác nội thành được hoàn ứng tối đa bao nhiêu",
+          "hoá đơn được xuất trong bao nhiêu ngày làm việc?"
+        ]
+      },
+      {
+        "success": 0.9666666666666667,
+        "citation": 0.9545454545454546,
+        "n_cit": 22,
+        "verdict": "PASS",
+        "truot": [
+          "HB2-25"
+        ],
+        "cache_hit": 26,
+        "cache_miss": 4,
+        "vi_du_query_llm_tu_viet": [
+          "Nhân viên chính thức được bao nhiêu ngày phép năm",
+          "cơ cấu lương",
+          "Nhân viên Ankor được bao nhiêu ngày phép năm",
+          "Cơ cấu lương của công ty"
+        ]
+      },
+      {
+        "success": 0.9,
+        "citation": 1.0,
+        "n_cit": 22,
+        "verdict": "PASS",
+        "truot": [
+          "HB2-07",
+          "HB2-08",
+          "HB2-25"
+        ],
+        "cache_hit": 25,
+        "cache_miss": 5,
+        "vi_du_query_llm_tu_viet": [
+          "P1 incident response time",
+          "hoá đơn xuất trong bao nhiêu ngày làm việc",
+          "Sự cố P1 của Borea cần xử lý trong bao lâu",
+          "Quy trình mua sắm của Ankor giao dịch từ bao nhiêu",
+          "nhân viên Ankor ngày phép năm"
+        ]
+      }
+    ],
+    "canvas+refusal": [
+      {
+        "success": 0.8333333333333334,
+        "citation": 0.7272727272727273,
+        "n_cit": 22,
+        "verdict": "FAIL",
+        "truot": [
+          "HB2-03",
+          "HB2-04",
+          "HB2-08",
+          "HB2-10",
+          "HB2-19"
+        ],
+        "cache_hit": 18,
+        "cache_miss": 8,
+        "vi_du_query_llm_tu_viet": [
+          "hạn mức nội trú bảo hiểm sức khoẻ",
+          "Sự cố P1 cần bắt đầu xử lý trong bao lâu",
+          "quy trình mua sắm áp dụng cho giao dịch từ bao nhiêu?",
+          "đánh giá hiệu suất diễn ra mấy lần một năm?",
+          "Phụ cấp trực on-call ngày thường"
+        ]
+      },
+      {
+        "success": 0.7333333333333333,
+        "citation": 0.6818181818181818,
+        "n_cit": 22,
+        "verdict": "FAIL",
+        "truot": [
+          "HB2-04",
+          "HB2-08",
+          "HB2-09",
+          "HB2-10",
+          "HB2-13",
+          "HB2-21",
+          "HB2-22",
+          "HB2-23"
+        ],
+        "cache_hit": 18,
+        "cache_miss": 5,
+        "vi_du_query_llm_tu_viet": [
+          "Quy trình mua sắm giao dịch từ bao nhiêu",
+          "tin tuyển dụng phải đăng tối thiểu bao nhiêu ngày",
+          "Lương được trả vào ngày mấy hằng tháng",
+          "Team Lead phê duyệt chi tối đa bao nhiêu một giao dịch",
+          "quy trình mua sắm của Ankor áp dụng cho giao dịch từ bao nhiêu"
+        ]
+      },
+      {
+        "success": 0.8333333333333334,
+        "citation": 0.7727272727272727,
+        "n_cit": 22,
+        "verdict": "FAIL",
+        "truot": [
+          "HB2-03",
+          "HB2-04",
+          "HB2-08",
+          "HB2-09",
+          "HB2-10"
+        ],
+        "cache_hit": 24,
+        "cache_miss": 2,
+        "vi_du_query_llm_tu_viet": [
+          "lương được trả vào ngày mấy hằng tháng?",
+          "cơ cấu lương của công ty"
+        ]
+      },
+      {
+        "success": 0.8666666666666667,
+        "citation": 0.8181818181818182,
+        "n_cit": 22,
+        "verdict": "FAIL",
+        "truot": [
+          "HB2-08",
+          "HB2-10",
+          "HB2-12",
+          "HB2-21"
+        ],
+        "cache_hit": 25,
+        "cache_miss": 3,
+        "vi_du_query_llm_tu_viet": [
+          "Tết Nguyên Đán nhân viên được nghỉ mấy ngày",
+          "Tết Nguyên Đán nhân viên được nghỉ mấy ngày",
+          "sự cố P1 của Borea thời gian xử lý"
+        ]
+      },
+      {
+        "success": 0.8666666666666667,
+        "citation": 0.8636363636363636,
+        "n_cit": 22,
+        "verdict": "FAIL",
+        "truot": [
+          "HB2-03",
+          "HB2-04",
+          "HB2-08",
+          "HB2-23"
+        ],
+        "cache_hit": 24,
+        "cache_miss": 3,
+        "vi_du_query_llm_tu_viet": [
+          "chi phí ăn uống công tác nội thành tối đa",
+          "quy trình mua sắm của Ankor áp dụng cho giao dịch từ bao nhiêu?",
+          "cơ cấu lương của công ty Callisto"
+        ]
+      }
+    ]
+  },
+  "tomtat_canvas": {
+    "success_tb": 0.9133,
+    "success_min": 0.8666666666666667,
+    "success_max": 0.9666666666666667,
+    "success_sd": 0.038,
+    "citation_tb": 0.9727,
+    "citation_min": 0.9545454545454546,
+    "citation_max": 1.0,
+    "pass": 4
+  },
+  "tomtat_canvas+refusal": {
+    "success_tb": 0.8267,
+    "success_min": 0.7333333333333333,
+    "success_max": 0.8666666666666667,
+    "success_sd": 0.0548,
+    "citation_tb": 0.7727,
+    "citation_min": 0.6818181818181818,
+    "citation_max": 0.8636363636363636,
+    "pass": 0
+  }
+}
