@@ -28,6 +28,7 @@ from studio_contracts import CaseResult, NodeType, Scorecard, TraceEvent
 
 from studio_evalhub.agent_runner import AgentAnswer, AgentRunner, CaseRun
 from studio_evalhub.compute import compute_scorecard
+from studio_evalhub.core_set import DEFAULT_MAX_CASES, DEFAULT_MIN_ANSWER, select_core
 from studio_evalhub.golden_case import GoldenCase, GoldenSet
 from studio_evalhub.golden_loader import load_golden_set
 from studio_evalhub.judge import JudgeUnavailable, LLMJudge
@@ -502,6 +503,9 @@ class EvalHarness:
         threshold_citation_accuracy: float,
         judge: LLMJudge | None = None,
         recipe_hash: str | None = None,
+        core_only: bool = False,
+        core_max_cases: int = DEFAULT_MAX_CASES,
+        core_min_answer: int = DEFAULT_MIN_ANSWER,
     ) -> Scorecard:
         """Chạy **mọi** case của `golden_set_ref` qua `agent_id` rồi trả `Scorecard` có verdict thật.
 
@@ -619,6 +623,51 @@ class EvalHarness:
         else:
             assert golden_set_path is not None
             golden = load_golden_set(golden_set_path, expect_ref=golden_set_ref)
+
+        if core_only:
+            # Cổng Publish chạy bộ **Core**, không phải cả bộ. Luật chọn sống ở `core_set.py` chứ
+            # không ở từng caller: nó phải giống nhau giữa mọi đường vào cổng, và nó là chỗ duy
+            # nhất từ chối được một Core không đo nổi cả hai trục (`CoreSelectionError`).
+            #
+            # `golden_set_ref` của `Scorecard` KHÔNG đổi — đây vẫn là bộ đó, chỉ chạy một tập con.
+            # Hệ quả phải biết: scorecard hiện **không phân biệt được** lượt Core với lượt Full,
+            # nên hai lượt cùng ref có thể cho hai `success_rate` khác nhau một cách hợp lệ. Ghi ở
+            # đây thay vì thêm field vào `Scorecard` — chạm `packages/contracts` là mini-RFC, và
+            # `contracts#14` vừa cho thấy giá của một lần chạm.
+            # Cho phép nới ngưỡng, KHÔNG hardcode: một tenant mới chỉ vừa upload một tài liệu có
+            # thể có dưới `DEFAULT_MIN_ANSWER` case trả-lời — và từ app#61, golden set sinh tự động
+            # theo từng `section_role` nên bộ nhỏ là ca THƯỜNG chứ không phải ngoại lệ. Hardcode
+            # `select_core(golden)` biến fail-closed từ *tín hiệu chất lượng dữ liệu* thành **outage
+            # vĩnh viễn**: tenant đó không publish được lần nào cho tới khi có thêm tài liệu, mà
+            # không có đường nào để người vận hành khai *"tôi biết bộ này nhỏ"*.
+            #
+            # Mặc định vẫn NGHIÊM (40/10). Nới là lựa chọn tường minh của caller, đọc được ở
+            # chỗ gọi và ghi lại trong log ngay dưới — không phải một mặc định âm thầm.
+            selection = select_core(golden, max_cases=core_max_cases, min_answer=core_min_answer)
+            # Ghi lại CÁCH chọn, không chỉ kết quả: `over_budget` là tín hiệu chính module kia sinh
+            # ra để khai, mà `.golden` thì vứt nó đi. Không có dòng này, một cổng Publish chạy vượt
+            # ngân sách (case `is_critical` nhiều hơn `max_cases`) sẽ vượt trên MỌI lần publish mà
+            # không để lại dấu vết nào — đúng loại hỏng chỉ lộ ra ở hoá đơn cuối tháng.
+            # Ghi log chứ chưa đưa vào `Scorecard`: thêm field là chạm `packages/contracts`, tức
+            # mini-RFC (xem chú thích ngay trên).
+            _logger.info(
+                "core_only: %d/%d case (declared=%d answer=%d refusal=%d, max_cases=%d min_answer=%d)%s",
+                len(selection.golden.cases),
+                len(golden.cases),
+                selection.n_declared,
+                selection.n_answer,
+                selection.n_refusal,
+                core_max_cases,
+                core_min_answer,
+                " VƯỢT NGÂN SÁCH" if selection.over_budget else "",
+            )
+            if selection.over_budget:
+                _logger.warning(
+                    "core_only: Core %d case > max_cases — case đã khai is_critical/tier=core đòi "
+                    "vượt trần. Không phải lỗi, nhưng cổng sẽ chạy lâu hơn ngân sách đã tính.",
+                    len(selection.golden.cases),
+                )
+            golden = selection.golden
 
         results: list[CaseResult] = []
         scored_case_ids: set[str] = set()
