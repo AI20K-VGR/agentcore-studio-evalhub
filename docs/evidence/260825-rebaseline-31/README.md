@@ -56,6 +56,27 @@ Hai cấu hình, khác nhau **đúng một câu** trong `instructions`:
 **Số đề nghị đưa vào evidence-pack:** `success_rate = 0.9300` (0.8667–0.9667, n=10, sd 0.0331) ·
 `citation_accuracy = 0.9773` (0.9545–1.0000) · **verdict PASS 9/10 lượt**.
 
+**Hai điều kiện con số này gắn chặt vào — mất một trong hai là nó hết mô tả đúng thứ gì.**
+
+**1. Bộ case: 30 câu NGƯỜI VIẾT, không phải bộ mặc định hiện tại.** Cả 20 lượt chạy trên
+`callisto-2.0-golden-30-v1` — bộ curate tay, cân theo tenant/phòng ban, mỗi case có người rà.
+Nhưng từ `app#61`, đường mặc định của sản phẩm **không còn dùng bộ đó**: upload tài liệu sinh ra
+`kb-{phòng ban}-auto-v1` bằng `golden_from_kb.build_cases`, và cổng Publish của một tenant thật sẽ
+chấm trên bộ **máy sinh** ấy.
+
+Hai bộ khác nhau ở chỗ đắt nhất chứ không phải ở kích thước: câu hỏi máy sinh là câu **trích từ
+chính chunk** (`ExtractiveQuestionWriter` lấy câu đầu của chunk rồi bọc thành *"Tài liệu nói gì
+về…"*), nên nó **hỏi đúng thứ vừa nằm trong đoạn văn** — dễ hơn hẳn một câu người viết diễn đạt lại
+theo cách người dùng thật sẽ hỏi. Chiều ngược lại thì bộ máy sinh **nặng case bẫy hơn** (`trap_ratio`
+mặc định 0.25, cưỡng chế bằng `_traps_needed`) so với tỉ lệ tự nhiên của bộ 30.
+
+Không đo được hướng lệch nào thắng, nên **không suy diễn**: `0.9300` là số của **bộ người viết**, và
+nó **chưa nói gì** về `success_rate` mà một tenant mới sẽ thấy. Muốn có số đó phải chạy lại chính
+`run.sh` trên một bộ `kb-*-auto-v1` thật — chưa làm, và không được thay bằng phép ngoại suy.
+
+**2. Trần lượt LLM: `DEFAULT_MAX_TURNS = 6`.** Xem `DEC-D29-02` — từ `engine#45` (merged 25/08)
+trần đó là **20**, nên mọi so sánh bắc qua mốc ấy là so **hai chế độ**, không phải hai lần đo.
+
 **Không đưa một con số trần.** Biên độ 0.1000 trên 30 case = **3 case**; khoảng cách từ trung bình
 xuống ngưỡng chỉ 0.0300 = **dưới 1 case**. Một lượt chạy đơn lẻ ở đây không trả lời được *"agent này
 có đạt không"* — nó trả lời *"lượt này có đạt không"*, và trong 10 lượt hai câu đó cho hai đáp án
