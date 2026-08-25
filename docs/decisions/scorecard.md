@@ -364,6 +364,30 @@ là đổi hành vi mà người dùng quan sát được, và nó cần một q
 hay hợp nhất? có cờ chọn không?). Ghi ra ở đây để nó không thành một `recipe_ops` thứ hai — module
 đúng, không ai gọi, và không ai nhớ tại sao.
 
+## D29 · 2026-08-25 — hai thế hệ `refused`, mốc `max_turns`, và trả lời câu hỏi D28 để mở
+
+> Ba mục dưới đây đều là **thứ làm số cũ hết so được với số mới**, không phải tính năng. Ghi vào sổ
+> vì cả ba vô hình trong code của evalhub: hai mục đầu nằm ở `packages/engine`, mục thứ ba ở một
+> route của `apps/studio`. Người đọc `success_rate` sáu tuần nữa không có đường nào tự tìm ra chúng.
+
+| # | Quyết định | Lý do | PR / bằng chứng | Trạng thái |
+|---|---|---|---|---|
+| **DEC-D29-01** | **`refused` có HAI công thức**, tuỳ đường chạy. Mọi phép so tỉ lệ từ-chối giữa hai đường **phải đọc `citations` trực tiếp**, không đọc `refused`. Số đo cũ phải ghi kèm đường chạy sinh ra nó, không ghi thì **không so được** | `score_case` đọc `answer.refused` ở **ba** chỗ (`harness.py:348/363/378`) — toàn bộ trục từ-chối của phép chấm đứng trên nó. Nhưng hai đường engine tính khác nhau: `LlmStepExecutor` (đường `interpreter.run`) dùng `has_kb_upstream and not citations`; `run_agent_loop` (A5) dùng `used_kb_search and (not citations) and (not used_non_kb_tool)`. Vế `used_non_kb_tool` là chỗ lệch thật: một agent gọi `calculator` rồi trả lời thẳng ra `refused=False` ở đường sau nhưng `refused=True` ở đường trước. Nên **cùng agent, cùng bộ case, hai đường ⇒ hai `success_rate` khác nhau một cách hợp lệ** — và không gì trong scorecard nói ra điều đó | `executors.py:383` · `agent_loop.py` A5 (dòng 53) · docstring `agent_loop.py` dòng 31-34 tự cảnh báo đúng chuyện này: *"Comparing the 2 paths' refusal rate must read `citations` directly, never `refused`"* — cảnh báo đó nằm ở **engine**, không ở evalhub, nên người đọc scorecard không bao giờ gặp nó | ✅ ghi nhận. 🟡 **điều kiện lật**: ngày hai đường hợp nhất (hoặc `refused` thành đại lượng dẫn xuất tại một chỗ duy nhất) thì mục này hết hiệu lực — nhưng **mọi baseline ghi trước đó vẫn phải giữ nhãn đường chạy**, vì chúng đo dưới luật cũ |
+| **DEC-D29-02** | Baseline `evalhub#31` (`success 0.9300` · `citation 0.9773`, N=10) đo dưới **`DEFAULT_MAX_TURNS = 6`**. Từ `engine#45` (merged 25/08 07:59) trần đó là **20**. Mọi so sánh bắc qua mốc này là so **hai chế độ**, không phải hai lần đo | Trần lượt LLM quyết định bao nhiêu case kịp tới câu trả lời cuối trước khi `AgentLoopExhausted`. Nâng 6→20 làm một số case trước đây cạn lượt (⇒ trượt) giờ trả lời được — tức `success_rate` dịch lên vì **luật dừng đổi**, không phải vì agent giỏi hơn. Không ghi mốc thì lần re-baseline tới đọc chênh lệch ấy thành *"mô hình đổi"* hoặc *"prompt tốt lên"* rồi đi sửa nhầm chỗ. Hệ quả kèm theo, đã nêu ở review: `DEFAULT_MAX_TURNS` giờ **bằng** `_MAX_TURNS_CEILING`, khoảng đệm bằng 0 | [engine#45](https://github.com/AI20K-VGR/agentcore-studio-engine/pull/45) merged `2026-08-25T07:59:31Z` · comment trong `agent_loop.py` tự khai *"NOT re-derived from a new worst-case-turn-count analysis — no measurement backs 20 the way 6 was measured"* · evidence pack `docs/evidence/260825-rebaseline-31/` chạy trên `engine fdba53d`, **trước** mốc | ✅ ghi nhận. 🟡 **điều kiện lật**: lần re-baseline kế tiếp phải chạy **sau** mốc này và ghi rõ trần lúc chạy. Tới lúc đó `0.9300` chỉ dùng để so với chính nó, **không** dùng làm mốc đạt/không-đạt cho số mới |
+| **DEC-D29-03** | Đường nạp golden set thủ công (`POST /api/admin/golden-sets`) là **PHỦ** (`overlay`) — không phải *thay*, cũng không phải `merge_golden_sets` | Trả lời thẳng câu D28 để mở (*"upload mặc định là thay hay hợp nhất? có cờ chọn không?"*). **Thay** thì một lần nạp xoá sạch bộ máy sinh của `golden_autogen` (app#61), mất im lặng. **`merge_golden_sets`** sai theo kiểu khác — và đây là chỗ tôi đã làm sai một lần: hàm đó phân xử va chạm bằng luật `source` (`DEC-D28-06`: chỉ `human` thắng `ai`), nên **mọi** cặp khác đều ném, kể cả hai case **giống hệt nhau**. Hệ quả: nạp lại đúng bộ vừa nạp trả 409, mất tính idempotent mà `write_golden_set` vốn có. Gốc rễ là **dùng sai công cụ**: `merge_golden_sets` hợp nhất hai nguồn **ngang hàng** (va chạm = *"hai bên bất đồng, không ai có thẩm quyền"* ⇒ ném là đúng); còn người dùng nạp bộ của mình lên ref của **chính mình** thì họ **là** bên có thẩm quyền trên những khoá họ gửi, và phủ thì không có khái niệm va chạm | [app#68](https://github.com/AI20K-VGR/agentcore-studio-app/pull/68) · `overlay_golden_set()` tách thành hàm **thuần**, test được không cần Postgres · 3 bài + mutant: `kept = []` giết bài *"giữ phần còn lại"*, `kept = list(existing.cases)` giết thêm bài *"nạp lại y hệt"* · bug do review app#68 (DongAnh2704) bắt | ✅ quyết. Khoá phủ dùng lại `case_key` (`DEC-D28-04`), **không** chuẩn hoá lại — hai cách chuẩn hoá lệch nhau là hai bộ trông giống hệt mà không khớp được. 🟡 **điều kiện lật**: ngày có nhu cầu *"nạp đè hẳn, xoá phần cũ"* thì đó là **thao tác khác**, phải có tên riêng và xác nhận riêng, không phải một cờ mặc định trên route này |
+
+**Nợ D28 đã đóng, nhưng không theo cách D28 dự đoán:** đoạn cuối D28 ghi *"`merge_golden_sets` chưa
+có caller production… đường nạp vẫn **thay** cả bộ"*. Từ app#68 đường đó không còn thay. Nhưng caller
+production hoá ra **không phải** `merge_golden_sets` mà là `overlay_golden_set` — nên
+`merge_golden_sets` vẫn chỉ có đúng một caller (`golden_autogen`). Bài học về cách đọc nợ: *"module
+đúng, không ai gọi"* đôi khi giải bằng **một module khác**, không phải bằng cách ép caller dùng
+module cũ.
+
+**Sắc cạnh còn lại, đã ghi issue:** `merge_golden_sets(X, X)` ném với bộ **giống hệt chính nó** —
+[evalhub#54](https://github.com/AI20K-VGR/agentcore-studio-evalhub/issues/54). Chưa phải bug đang
+sống (đường dùng duy nhất luôn có `source` chéo nhau), nhưng thông điệp lỗi nói *"phải do người
+quyết"* trong khi không có gì để quyết.
+
 ## Còn mở — chặn `FROZEN` thật sự
 
 | # | Nội dung | Chờ ai | Hạn |
