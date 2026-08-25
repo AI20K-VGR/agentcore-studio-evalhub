@@ -118,11 +118,11 @@ class CacheThenNetworkEmbedding:
         return await asyncio.to_thread(lambda: [self._embed_one(t) for t in texts])
 
 
-def _recipe(instructions: str) -> Recipe:
+def _recipe(system_prompt: str) -> Recipe:
     return create_recipe(
         agent_id="agent-rebaseline",
         tenant_id=TENANT_IDS["ankor"],
-        instructions=instructions,
+        system_prompt=system_prompt,
         tool_whitelist=[],
         nodes=[
             Node(id="n1", type=NodeType.KB_RETRIEVE, params={"top_k": 3}),
