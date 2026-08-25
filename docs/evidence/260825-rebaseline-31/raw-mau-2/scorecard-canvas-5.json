@@ -1,0 +1,259 @@
+{
+  "agent_id": "agent-rebaseline",
+  "golden_set_ref": "callisto-2.0-golden-30-v1",
+  "results": [
+    {
+      "case_id": "HB2-01",
+      "expected": "12 ngày phép có lương",
+      "actual": "Nhân viên chính thức Ankor được 12 ngày phép có lương mỗi năm, cộng dồn tối đa 6 ngày sang năm sau [ankor-hr-leave#c1].",
+      "success": true,
+      "citation_accuracy": 1.0,
+      "judge": null
+    },
+    {
+      "case_id": "HB2-02",
+      "expected": "15 ngày phép có lương",
+      "actual": "Nhân viên chính thức Borea được 15 ngày phép có lương mỗi năm, cộng dồn tối đa 10 ngày sang năm sau [borea-hr-leave#c1].",
+      "success": true,
+      "citation_accuracy": 1.0,
+      "judge": null
+    },
+    {
+      "case_id": "HB2-03",
+      "expected": "nghỉ 7 ngày liên tục",
+      "actual": "Nhân viên Ankor được nghỉ 7 ngày liên tục trong dịp Tết Nguyên Đán, từ 29 tháng Chạp đến mùng 5 tháng Giêng [ankor-public-holidays#c1].",
+      "success": true,
+      "citation_accuracy": 1.0,
+      "judge": null
+    },
+    {
+      "case_id": "HB2-04",
+      "expected": "nghỉ 9 ngày liên tục",
+      "actual": "Nhân viên Borea được nghỉ 9 ngày liên tục trong dịp Tết Nguyên Đán, từ 28 tháng Chạp đến mùng 6 tháng Giêng [borea-public-holidays#c1].",
+      "success": true,
+      "citation_accuracy": 1.0,
+      "judge": null
+    },
+    {
+      "case_id": "HB2-05",
+      "expected": "50.000.000 VNĐ/năm cho nội trú",
+      "actual": "Bảo hiểm sức khoẻ PVI Care có hạn mức nội trú là 50.000.000 VNĐ/năm [ankor-hr-benefits#c1].",
+      "success": true,
+      "citation_accuracy": 1.0,
+      "judge": null
+    },
+    {
+      "case_id": "HB2-06",
+      "expected": "100.000.000 VNĐ/năm nội trú",
+      "actual": "Bảo hiểm sức khỏe của Borea cung cấp hạn mức 100.000.000 VNĐ/năm cho nội trú [borea-hr-benefits#c1].",
+      "success": true,
+      "citation_accuracy": 1.0,
+      "judge": null
+    },
+    {
+      "case_id": "HB2-07",
+      "expected": "bắt đầu xử lý trong 15 phút",
+      "actual": "Sự cố P1 cần phải được xử lý trong vòng 15 phút sau khi đã được xác nhận (acknowledge) trong 5 phút đầu tiên. Tổng thời gian từ khi phát hiện đến khi bắt đầu xử lý là 20 phút [ankor-engineering-oncall#c4].",
+      "success": false,
+      "citation_accuracy": 1.0,
+      "judge": null
+    },
+    {
+      "case_id": "HB2-08",
+      "expected": "engage trong 10 phút",
+      "actual": "Sự cố P1 cần phải được xác nhận trong 3 phút, và bắt đầu can thiệp trong 10 phút, với mục tiêu giải quyết trong 30 phút [borea-engineering-oncall#c4].",
+      "success": false,
+      "citation_accuracy": 1.0,
+      "judge": null
+    },
+    {
+      "case_id": "HB2-09",
+      "expected": "trước ít nhất 3 ngày làm việc",
+      "actual": "Đơn xin nghỉ phép phải nộp trước ít nhất 3 ngày làm việc qua hệ thống HR Portal, trừ trường hợp khẩn cấp [ankor-hr-leave#c4].",
+      "success": true,
+      "citation_accuracy": 1.0,
+      "judge": null
+    },
+    {
+      "case_id": "HB2-10",
+      "expected": "nộp trước 5 ngày làm việc",
+      "actual": "Đơn xin nghỉ phép phải nộp trước 5 ngày làm việc qua Borea HR app [borea-hr-leave#c4].",
+      "success": true,
+      "citation_accuracy": 1.0,
+      "judge": null
+    },
+    {
+      "case_id": "HB2-11",
+      "expected": "từ 5.000.000 VNĐ trở lên",
+      "actual": "Quy trình mua sắm Ankor áp dụng cho mọi giao dịch mua hàng hóa, dịch vụ có giá trị từ 5.000.000 VNĐ trở lên. Dưới 5 triệu sử dụng petty cash mà không cần qua procurement [ankor-finance-procurement#c1].",
+      "success": true,
+      "citation_accuracy": 1.0,
+      "judge": null
+    },
+    {
+      "case_id": "HB2-12",
+      "expected": "từ 3.000.000 VNĐ trở lên",
+      "actual": "Quy trình mua sắm áp dụng cho giao dịch từ 3.000.000 VNĐ trở lên. Dưới 3 triệu, nhân viên tự mua và hoàn ứng qua Expensify [borea-finance-procurement#c1].",
+      "success": true,
+      "citation_accuracy": 1.0,
+      "judge": null
+    },
+    {
+      "case_id": "HB2-13",
+      "expected": "200.000 VNĐ/bữa nội thành",
+      "actual": "Chi phí ăn uống công tác nội thành được hoàn ứng tối đa 200.000 VNĐ/bữa [ankor-finance-reimbursement#c2].",
+      "success": true,
+      "citation_accuracy": 1.0,
+      "judge": null
+    },
+    {
+      "case_id": "HB2-14",
+      "expected": "xuất trong 5 ngày làm việc",
+      "actual": "Hoá đơn được xuất trong 5 ngày làm việc kể từ ngày nghiệm thu dịch vụ hoặc ngày thanh toán, tùy theo điều kiện hợp đồng [ankor-finance-invoicing#c2].",
+      "success": true,
+      "citation_accuracy": 1.0,
+      "judge": null
+    },
+    {
+      "case_id": "HB2-15",
+      "expected": "hiệu suất 2 lần/năm",
+      "actual": "Đánh giá hiệu suất diễn ra 2 lần một năm: giữa năm (tháng 6) và cuối năm (tháng 12) [ankor-hr-performance#c1].",
+      "success": true,
+      "citation_accuracy": 1.0,
+      "judge": null
+    },
+    {
+      "case_id": "HB2-16",
+      "expected": "đánh giá hiệu suất hằng quý",
+      "actual": "Đánh giá hiệu suất diễn ra hằng quý, tức là 4 lần một năm, mỗi đợt kéo dài 2 tuần. Ngoài ra, còn có đánh giá tổng kết năm vào tháng 1 năm sau [borea-hr-performance#c1].",
+      "success": true,
+      "citation_accuracy": 1.0,
+      "judge": null
+    },
+    {
+      "case_id": "HB2-17",
+      "expected": "tối thiểu 14 ngày",
+      "actual": "Tin tuyển dụng phải đăng tối thiểu 14 ngày [ankor-hr-recruitment#c2].",
+      "success": true,
+      "citation_accuracy": 1.0,
+      "judge": null
+    },
+    {
+      "case_id": "HB2-18",
+      "expected": "1.500.000 VNĐ/tuần trực ngày thường",
+      "actual": "Phụ cấp trực on-call ngày thường là 1.500.000 VNĐ/tuần [ankor-engineering-oncall#c3].",
+      "success": true,
+      "citation_accuracy": 1.0,
+      "judge": null
+    },
+    {
+      "case_id": "HB2-19",
+      "expected": "trả vào ngày 5 hằng tháng",
+      "actual": "Lương được trả vào ngày 5 hằng tháng qua chuyển khoản Vietcombank. Nếu ngày 5 rơi vào cuối tuần hoặc lễ, lương sẽ được trả vào ngày làm việc liền trước [ankor-hr-payroll#c2].",
+      "success": true,
+      "citation_accuracy": 1.0,
+      "judge": null
+    },
+    {
+      "case_id": "HB2-20",
+      "expected": "dưới 10.000.000 VNĐ/giao dịch",
+      "actual": "Team Lead được phê duyệt chi phí vận hành dưới 10.000.000 VNĐ một giao dịch. Tổng hạn mức phê duyệt tối đa là 50.000.000 VNĐ một tháng [ankor-finance-approval-limits#c2].",
+      "success": true,
+      "citation_accuracy": 1.0,
+      "judge": null
+    },
+    {
+      "case_id": "HB2-21",
+      "expected": "10.000.000 VNĐ/năm cho đào tạo",
+      "actual": "Ngân sách đào tạo mỗi nhân viên Ankor là 10.000.000 VNĐ/năm. [ankor-hr-training#c1]",
+      "success": true,
+      "citation_accuracy": 1.0,
+      "judge": null
+    },
+    {
+      "case_id": "HB2-22",
+      "expected": "3 ngày (1–3/9)",
+      "actual": "Nhân viên được nghỉ lễ Quốc khánh 3 ngày, từ 1 đến 3 tháng 9 [borea-public-holidays#c2].",
+      "success": true,
+      "citation_accuracy": 1.0,
+      "judge": null
+    },
+    {
+      "case_id": "HB2-23",
+      "expected": "refusal",
+      "actual": "Không có thông tin về ngân sách đào tạo của Borea.",
+      "success": true,
+      "citation_accuracy": 1.0,
+      "judge": null
+    },
+    {
+      "case_id": "HB2-24",
+      "expected": "refusal",
+      "actual": "Không có thông tin.",
+      "success": true,
+      "citation_accuracy": 1.0,
+      "judge": null
+    },
+    {
+      "case_id": "HB2-25",
+      "expected": "refusal",
+      "actual": "Sự cố P1 của Borea cần được xử lý với MTTR target dưới 1 giờ, theo quy định về SLA xử lý [ankor-engineering-incident#c6].",
+      "success": false,
+      "citation_accuracy": 1.0,
+      "judge": null
+    },
+    {
+      "case_id": "HB2-26",
+      "expected": "refusal",
+      "actual": "Không có thông tin.",
+      "success": true,
+      "citation_accuracy": 1.0,
+      "judge": null
+    },
+    {
+      "case_id": "HB2-27",
+      "expected": "refusal",
+      "actual": "Không có thông tin.",
+      "success": true,
+      "citation_accuracy": 1.0,
+      "judge": null
+    },
+    {
+      "case_id": "HB2-28",
+      "expected": "refusal",
+      "actual": "Không có thông tin.",
+      "success": true,
+      "citation_accuracy": 1.0,
+      "judge": null
+    },
+    {
+      "case_id": "HB2-29",
+      "expected": "refusal",
+      "actual": "Không có thông tin.",
+      "success": true,
+      "citation_accuracy": 1.0,
+      "judge": null
+    },
+    {
+      "case_id": "HB2-30",
+      "expected": "refusal",
+      "actual": "Không có thông tin.",
+      "success": true,
+      "citation_accuracy": 1.0,
+      "judge": null
+    }
+  ],
+  "aggregate": {
+    "success_rate": 0.9,
+    "citation_accuracy": 1.0,
+    "n_scored_citation": 22
+  },
+  "gate": {
+    "threshold": {
+      "success": 0.9,
+      "citation_accuracy": 0.95
+    },
+    "verdict": "PASS"
+  },
+  "recipe_hash": "rebaseline-not-published"
+}

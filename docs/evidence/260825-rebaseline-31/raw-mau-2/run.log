@@ -1,0 +1,32 @@
+  canvas lượt 1: success=0.9333 citation=1.0000 PASS truot=2
+  canvas lượt 2: success=0.8667 citation=0.9545 FAIL truot=4
+  canvas lượt 3: success=0.9000 citation=0.9545 PASS truot=3
+  canvas lượt 4: success=0.9667 citation=0.9545 PASS truot=1
+  canvas lượt 5: success=0.9000 citation=1.0000 PASS truot=3
+  canvas+refusal lượt 1: success=0.8333 citation=0.7273 FAIL truot=5
+  canvas+refusal lượt 2: success=0.7333 citation=0.6818 FAIL truot=8
+  canvas+refusal lượt 3: success=0.8333 citation=0.7727 FAIL truot=5
+  canvas+refusal lượt 4: success=0.8667 citation=0.8182 FAIL truot=4
+  canvas+refusal lượt 5: success=0.8667 citation=0.8636 FAIL truot=4
+{
+  "tomtat_canvas": {
+    "success_tb": 0.9133,
+    "success_min": 0.8666666666666667,
+    "success_max": 0.9666666666666667,
+    "success_sd": 0.038,
+    "citation_tb": 0.9727,
+    "citation_min": 0.9545454545454546,
+    "citation_max": 1.0,
+    "pass": 4
+  },
+  "tomtat_canvas+refusal": {
+    "success_tb": 0.8267,
+    "success_min": 0.7333333333333333,
+    "success_max": 0.8666666666666667,
+    "success_sd": 0.0548,
+    "citation_tb": 0.7727,
+    "citation_min": 0.6818181818181818,
+    "citation_max": 0.8636363636363636,
+    "pass": 0
+  }
+}
