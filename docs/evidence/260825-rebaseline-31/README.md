@@ -45,11 +45,16 @@ Hai cấu hình, khác nhau **đúng một câu** trong `instructions`:
 
 | cấu hình | success (10 lượt) | tb | sd | biên độ | citation tb | verdict |
 |---|---|---|---|---|---|---|
-| **`canvas`** (production) | 0.8667 – 0.9667 | **0.9300** | 0.0331 | 0.1000 | 0.9727 | **9/10 PASS** |
-| `canvas+refusal` | 0.7333 – 0.9667 | 0.8500 | 0.0724 | 0.2333 | 0.8536 | **0/10 PASS** |
+| **`canvas`** (production) | 0.8667 – 0.9667 | **0.9300** | 0.0331 | 0.1000 | 0.9773 | **9/10 PASS** |
+| `canvas+refusal` | 0.7333 – 0.9667 | 0.8500 | 0.0724 | 0.2333 | 0.8091 | **0/10 PASS** |
+
+> Mọi ô trong bảng trên tái dựng được từ `aggregate` của 20 scorecard trong `raw/` +
+> `raw-mau-2/`: chạy `python3 verify_table.py`. Bảng này từng sai đúng vì chép tay (cột
+> `citation tb` mang số của mẫu N=5 thay vì số gộp N=10) — số dẫn xuất gõ vào tài liệu thì
+> không có gì canh, nên phép canh nằm ở script chứ không ở sự cẩn thận.
 
 **Số đề nghị đưa vào evidence-pack:** `success_rate = 0.9300` (0.8667–0.9667, n=10, sd 0.0331) ·
-`citation_accuracy = 0.9727` (0.9091–1.0000) · **verdict PASS 9/10 lượt**.
+`citation_accuracy = 0.9773` (0.9545–1.0000) · **verdict PASS 9/10 lượt**.
 
 **Không đưa một con số trần.** Biên độ 0.1000 trên 30 case = **3 case**; khoảng cách từ trung bình
 xuống ngưỡng chỉ 0.0300 = **dưới 1 case**. Một lượt chạy đơn lẻ ở đây không trả lời được *"agent này
@@ -93,7 +98,7 @@ mặt cấu trúc không thể có biến động này — và đây gần như 
 là `packages/workbench` + `apps/web/src/recipe/sample.ts` (lane SWE). **Không lane nào áp nó** — và
 `create_recipe_d4` sau đó bị xoá hẳn (`workbench#41`).
 
-Đo lại hôm nay: câu đó kéo success `0.9300 → 0.8500`, citation `0.9727 → 0.8536`, **0/10 PASS**, và
+Đo lại hôm nay: câu đó kéo success `0.9300 → 0.8500`, citation `0.9773 → 0.8091`, **0/10 PASS**, và
 sd **gấp đôi** (0.0331 → 0.0724). Số case trượt phân biệt tăng từ 3 lên **12**.
 
 Đáng chú ý: nó **fail trên trục citation**, không chỉ trục success. Lượt tốt nhất của cấu hình này
