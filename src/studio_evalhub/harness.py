@@ -632,7 +632,29 @@ class EvalHarness:
             # nên hai lượt cùng ref có thể cho hai `success_rate` khác nhau một cách hợp lệ. Ghi ở
             # đây thay vì thêm field vào `Scorecard` — chạm `packages/contracts` là mini-RFC, và
             # `contracts#14` vừa cho thấy giá của một lần chạm.
-            golden = select_core(golden).golden
+            selection = select_core(golden)
+            # Ghi lại CÁCH chọn, không chỉ kết quả: `over_budget` là tín hiệu chính module kia sinh
+            # ra để khai, mà `.golden` thì vứt nó đi. Không có dòng này, một cổng Publish chạy vượt
+            # ngân sách (case `is_critical` nhiều hơn `max_cases`) sẽ vượt trên MỌI lần publish mà
+            # không để lại dấu vết nào — đúng loại hỏng chỉ lộ ra ở hoá đơn cuối tháng.
+            # Ghi log chứ chưa đưa vào `Scorecard`: thêm field là chạm `packages/contracts`, tức
+            # mini-RFC (xem chú thích ngay trên).
+            _logger.info(
+                "core_only: %d/%d case (declared=%d answer=%d refusal=%d)%s",
+                len(selection.golden.cases),
+                len(golden.cases),
+                selection.n_declared,
+                selection.n_answer,
+                selection.n_refusal,
+                " VƯỢT NGÂN SÁCH" if selection.over_budget else "",
+            )
+            if selection.over_budget:
+                _logger.warning(
+                    "core_only: Core %d case > max_cases — case đã khai is_critical/tier=core đòi "
+                    "vượt trần. Không phải lỗi, nhưng cổng sẽ chạy lâu hơn ngân sách đã tính.",
+                    len(selection.golden.cases),
+                )
+            golden = selection.golden
 
         results: list[CaseResult] = []
         scored_case_ids: set[str] = set()

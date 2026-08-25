@@ -86,12 +86,12 @@ class CoreSelection:
     """Case vào vì đã khai `is_critical`/`tier="core"` — tầng không thương lượng."""
     n_answer: int
     n_refusal: int
-    vuot_ngan_sach: bool
+    over_budget: bool
     """`True` khi Core lớn hơn `max_cases` vì tầng 1 hoặc tầng 2 đòi. Không phải lỗi — là đánh đổi
     đã khai: thà chạy lâu hơn ngân sách còn hơn bỏ một case `is_critical`."""
 
 
-def _da_khai_core(case: GoldenCase) -> bool:
+def _declared_core(case: GoldenCase) -> bool:
     return case.is_critical is True or case.tier == "core"
 
 
@@ -110,53 +110,76 @@ def select_core(
     """
     if max_cases < 1:
         raise ValueError(f"select_core: max_cases phải ≥ 1, nhận {max_cases}")
+    # `min_answer < 1` làm điều kiện `n_answer < min_answer` ở cuối hàm không bao giờ đúng được,
+    # tức tắt hẳn cái chốt fail-closed mà cả module này dựng lên — một Core 0 case trả-lời sẽ đi
+    # lọt và `success_rate` báo về trục từ-chối. `select_core` là symbol công khai
+    # (`studio_evalhub.select_core`), không chỉ tới qua `EvalHarness.run`, nên phải tự chặn ở đây.
+    if min_answer < 1:
+        raise ValueError(f"select_core: min_answer phải ≥ 1, nhận {min_answer}")
 
-    declared = [c for c in golden.cases if _da_khai_core(c)]
-    con_lai = [c for c in golden.cases if not _da_khai_core(c)]
-    tra_loi_con_lai = [c for c in con_lai if not c.expects_refusal]
+    # Chọn theo **chỉ số**, không theo `case_id`: `GoldenSet` không ép `case_id` duy nhất (xem
+    # `golden_merge.py` — bộ sinh máy và bộ người nộp đặt id độc lập nhau nên đụng được). Lọc lại
+    # bằng `case_id in đã_chọn` sẽ kéo theo MỌI case trùng id, kể cả case chưa hề được chọn: một
+    # case từ-chối đã khai `is_critical` và một case trả-lời trùng id sẽ cùng lọt vào Core, ngân
+    # sách `max_cases` đo trên số đã chọn còn bộ phát ra thì lớn hơn. Chỉ số cũng là nguồn sự thật
+    # DUY NHẤT ở đây — không còn cặp `list`/`set` phải giữ đồng bộ bằng tay qua ba tầng.
+    declared = [i for i, c in enumerate(golden.cases) if _declared_core(c)]
+    rest = [i for i, c in enumerate(golden.cases) if not _declared_core(c)]
 
-    chon: list[GoldenCase] = list(declared)
-    da_chon = {c.case_id for c in chon}
+    selected: set[int] = set(declared)
+    n_answer_selected = sum(1 for i in declared if not golden.cases[i].expects_refusal)
 
     # Tầng 2 trước tầng 3: bảo đảm trục trả-lời đo được, kể cả khi tầng 1 đã lấp đầy ngân sách.
-    thieu = min_answer - sum(1 for c in chon if not c.expects_refusal)
-    for c in tra_loi_con_lai:
-        if thieu <= 0:
+    for i in rest:
+        if n_answer_selected >= min_answer:
             break
-        chon.append(c)
-        da_chon.add(c.case_id)
-        thieu -= 1
+        if not golden.cases[i].expects_refusal:
+            selected.add(i)
+            n_answer_selected += 1
 
-    for c in con_lai:
-        if len(chon) >= max_cases:
+    for i in rest:
+        if len(selected) >= max_cases:
             break
-        if c.case_id not in da_chon:
-            chon.append(c)
-            da_chon.add(c.case_id)
+        selected.add(i)
 
     # Giữ thứ tự GỐC của bộ, không phải thứ tự nhặt: hai bộ Core cùng nội dung mà khác thứ tự sẽ
     # cho `Scorecard.results` khác nhau về hình thức, và người đọc không phân biệt được với đổi thật.
-    theo_goc = [c for c in golden.cases if c.case_id in da_chon]
-    n_tra_loi = sum(1 for c in theo_goc if not c.expects_refusal)
+    chosen = [golden.cases[i] for i in sorted(selected)]
+    n_answer = sum(1 for c in chosen if not c.expects_refusal)
 
-    if not theo_goc:
+    # `case_id` trùng trong Core là bộ KHÔNG chấm đúng được, nên chặn ở đây chứ không để trôi:
+    # `EvalHarness.run` chỉ thêm case **không từ-chối** vào `scored_case_ids`, nhưng
+    # `compute_scorecard` lọc bằng `r.case_id in scored_case_ids` — nên `CaseResult` của một case
+    # từ-chối trùng id bị kéo vào mẫu `citation_accuracy` của nhánh trả-lời và làm hỏng chính con
+    # số cổng đọc. `GoldenSet` không ép id duy nhất (bộ sinh máy và bộ người nộp đặt id độc lập,
+    # xem `golden_merge.py`), nên chỗ duy nhất chặn được là ngay trước khi giao tập cho cổng.
+    duplicates = sorted({c.case_id for c in chosen if sum(1 for x in chosen if x.case_id == c.case_id) > 1})
+    if duplicates:
+        raise CoreSelectionError(
+            f"select_core: Core của {golden.golden_set_ref!r} có case_id trùng: {duplicates}. "
+            f"Cổng chấm hai nhánh luật khác nhau theo `expects_refusal` nhưng gộp kết quả theo "
+            f"`case_id`, nên hai case cùng id sẽ trộn nhánh từ-chối vào mẫu citation của nhánh "
+            f"trả-lời. Sửa ở bộ golden (đặt lại id), không phải ở luật chọn"
+        )
+
+    if not chosen:
         raise CoreSelectionError(
             f"select_core: bộ {golden.golden_set_ref!r} không chọn được case nào cho Core "
             f"(bộ có {len(golden.cases)} case) — cổng sẽ chấm trên mẫu số 0"
         )
-    if n_tra_loi < min_answer:
-        tong_tra_loi = sum(1 for c in golden.cases if not c.expects_refusal)
+    if n_answer < min_answer:
+        total_answer = sum(1 for c in golden.cases if not c.expects_refusal)
         raise CoreSelectionError(
-            f"select_core: Core của {golden.golden_set_ref!r} chỉ có {n_tra_loi} case trả-lời, cần "
-            f"≥{min_answer}. Cả bộ chỉ có {tong_tra_loi} case trả-lời trên tổng {len(golden.cases)} "
+            f"select_core: Core của {golden.golden_set_ref!r} chỉ có {n_answer} case trả-lời, cần "
+            f"≥{min_answer}. Cả bộ chỉ có {total_answer} case trả-lời trên tổng {len(golden.cases)} "
             f"— thiếu ở chính bộ golden, không phải ở luật chọn. `success_rate` tính trên Core này "
             f"sẽ nói về trục từ-chối, không phải chất lượng trả lời"
         )
 
     return CoreSelection(
-        golden=GoldenSet(golden_set_ref=golden.golden_set_ref, cases=theo_goc),
+        golden=GoldenSet(golden_set_ref=golden.golden_set_ref, cases=chosen),
         n_declared=len(declared),
-        n_answer=n_tra_loi,
-        n_refusal=len(theo_goc) - n_tra_loi,
-        vuot_ngan_sach=len(theo_goc) > max_cases,
+        n_answer=n_answer,
+        n_refusal=len(chosen) - n_answer,
+        over_budget=len(chosen) > max_cases,
     )
