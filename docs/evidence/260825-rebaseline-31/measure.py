@@ -6,6 +6,7 @@ Chạy: uv run python <file> <n_runs>
 from __future__ import annotations
 
 import asyncio
+import importlib
 import json
 import os
 import statistics
@@ -51,12 +52,19 @@ sys.path.insert(0, str(_KB / "tests" / "embedding-tests"))
 # neo `CACHE_DIR` theo vị trí file của chính nó (xem docstring `ingest_callisto_v2.py`). Vá `sys.path`
 # rẻ hơn nhiều so với lôi 9 MB cache vào wheel production.
 #
-# KHÔNG `type: ignore[import-not-found]` ở đây: gate thật là `uv run mypy packages apps` (gốc kit),
-# và ở chế độ đó mypy CÓ phân giải được hai module này vì `packages/kb/tests/` nằm trong tập kiểm.
-# Thêm ignore sẽ thành `unused-ignore` và làm CI đỏ. Chạy mypy trên RIÊNG file này thì ngược lại —
-# nhưng đó không phải lệnh nào chạy trong CI.
-from _vector_cache import VectorCache  # noqa: E402
-from providers import GEMINI_DIM, GEMINI_MODEL, GeminiEmbedding  # noqa: E402
+# Nạp qua `importlib` chứ không `from providers import ...` vì HAI gate mypy mâu thuẫn nhau:
+#   - CI repo con chạy `mypy packages/evalhub` — phạm vi hẹp, KHÔNG phân giải được hai module này
+#     ⇒ đòi `# type: ignore[import-not-found]`;
+#   - CI gốc kit chạy `mypy packages apps` — phạm vi rộng, `packages/kb/tests/` nằm trong tập kiểm
+#     nên nó phân giải ĐƯỢC ⇒ chính cái ignore đó thành `unused-ignore` và làm đỏ.
+# Không có cách nào viết một `import` tĩnh thoả cả hai. `importlib` thì mypy không soi tên module,
+# nên nó xanh ở cả hai phạm vi — và chỗ này là script đo, không phải mã production.
+_providers = importlib.import_module("providers")
+_vector_cache = importlib.import_module("_vector_cache")
+VectorCache = _vector_cache.VectorCache
+GeminiEmbedding = _providers.GeminiEmbedding
+GEMINI_MODEL: str = _providers.GEMINI_MODEL
+GEMINI_DIM: int = _providers.GEMINI_DIM
 
 GOLDEN = _KB / "src" / "studio_kb" / "golden" / "callisto-2.0-golden-30-v1.yaml"
 REF = "callisto-2.0-golden-30-v1"
