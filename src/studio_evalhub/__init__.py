@@ -61,6 +61,11 @@ from studio_evalhub.run_report import (
     score_run_from_trace,
 )
 from studio_evalhub.schema import ddl
+from studio_evalhub.scorecard_store import (
+    drop_pending_scorecards,
+    read_pending_scorecard,
+    write_pending_scorecard,
+)
 from studio_evalhub.wilson import Z_95, WilsonInterval, wilson
 
 __all__ = [
@@ -114,6 +119,9 @@ __all__ = [
     "NO_KB_GOLDEN_SET_REF",
     "NO_KB_TENANT_LABEL",
     "no_kb_golden_set",
+    "drop_pending_scorecards",
+    "read_pending_scorecard",
+    "write_pending_scorecard",
     "select_core",
     "SmokeResult",
     "StubAgentRunner",
