@@ -53,6 +53,24 @@ WHERE table_schema = 'eval' AND table_name = 'scorecards' AND column_name = 'rec
 """
 
 
+def _khoi_bang(sql: str, ten_bang: str) -> str:
+    """Phần DDL nói về đúng một bảng: từ `CREATE TABLE … <ten_bang>` tới `);` đầu tiên, cộng mọi
+    dòng `ALTER TABLE <ten_bang>`. Đủ cho các phép grep dưới đây và không kéo bảng khác vào."""
+    lines = sql.splitlines()
+    out: list[str] = []
+    trong_create = False
+    for line in lines:
+        if line.startswith("CREATE TABLE") and ten_bang in line:
+            trong_create = True
+        if trong_create:
+            out.append(line)
+            if line.strip().startswith(");"):
+                trong_create = False
+        elif line.startswith(f"ALTER TABLE {ten_bang}"):
+            out.append(line)
+    return "\n".join(out)
+
+
 def test_recipe_hash_co_o_ca_hai_duong_ddl() -> None:
     """Cả `CREATE TABLE` (fresh clone) lẫn `ALTER TABLE … ADD COLUMN IF NOT EXISTS` (DB đã tồn tại).
 
@@ -72,7 +90,11 @@ def test_recipe_hash_nullable_khong_bi_siet_thanh_not_null() -> None:
     `NOT NULL` chặt hơn hợp đồng `Scorecard.recipe_hash: str | None`, và trên bảng đã có row thì
     `ADD COLUMN … NOT NULL` **không `DEFAULT`** còn **raise** ngay lúc boot — hỏng ở máy người khác,
     không ở máy người sửa."""
-    sql = ddl()
+    # Cắt về ĐÚNG khối `eval.scorecards` thay vì grep cả chuỗi DDL: `eval.eval_jobs` cũng có cột
+    # `recipe_hash`, và ở đó `NOT NULL` là ĐÚNG (job luôn biết hash lúc tạo). Bản trước grep toàn
+    # bộ nên bảng mới làm bài này đỏ vì một dòng thuộc bảng khác — một chốt báo nhầm chỗ còn tệ
+    # hơn không có chốt, vì nó dạy người sửa đi sai hướng.
+    sql = _khoi_bang(ddl(), "eval.scorecards")
 
     assert "recipe_hash TEXT NOT NULL" not in sql, (
         "recipe_hash bị siết thành NOT NULL — chặt hơn hợp đồng (str | None), và raise trên bảng đã có row"

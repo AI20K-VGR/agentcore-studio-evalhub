@@ -10,6 +10,16 @@ from studio_evalhub.agent_runner import AgentAnswer, AgentRunner, CaseRun, StubA
 from studio_evalhub.agreement import AgreementResult, agreement, nhan_tu_golden_set
 from studio_evalhub.compute import compute_scorecard
 from studio_evalhub.core_set import CoreSelection, CoreSelectionError, select_core
+from studio_evalhub.eval_job_store import (
+    EvalJob,
+    JobStatus,
+    create_eval_job,
+    fail_eval_job,
+    finish_eval_job,
+    read_eval_job,
+    record_job_progress,
+    sweep_stale_jobs,
+)
 from studio_evalhub.golden_case import GoldenCase, GoldenSet
 from studio_evalhub.golden_loader import load_golden_set
 from studio_evalhub.golden_merge import (
@@ -38,6 +48,7 @@ from studio_evalhub.harness import (
     tenant_scope_ok,
 )
 from studio_evalhub.judge import JudgeUnavailable, JudgeUnavailableReason, LLMJudge
+from studio_evalhub.no_kb_golden import NO_KB_GOLDEN_SET_REF, NO_KB_TENANT_LABEL, no_kb_golden_set
 from studio_evalhub.render import render_run_cases, render_scorecard
 from studio_evalhub.replay import (
     FixtureUnreadable,
@@ -60,6 +71,11 @@ from studio_evalhub.run_report import (
     score_run_from_trace,
 )
 from studio_evalhub.schema import ddl
+from studio_evalhub.scorecard_store import (
+    drop_pending_scorecards,
+    read_pending_scorecard,
+    write_pending_scorecard,
+)
 from studio_evalhub.wilson import Z_95, WilsonInterval, wilson
 
 __all__ = [
@@ -110,6 +126,20 @@ __all__ = [
     "RunCostError",
     "score_case",
     "score_run_from_trace",
+    "NO_KB_GOLDEN_SET_REF",
+    "NO_KB_TENANT_LABEL",
+    "no_kb_golden_set",
+    "drop_pending_scorecards",
+    "read_pending_scorecard",
+    "write_pending_scorecard",
+    "EvalJob",
+    "JobStatus",
+    "create_eval_job",
+    "fail_eval_job",
+    "finish_eval_job",
+    "read_eval_job",
+    "record_job_progress",
+    "sweep_stale_jobs",
     "select_core",
     "SmokeResult",
     "StubAgentRunner",
