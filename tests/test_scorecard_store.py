@@ -15,6 +15,7 @@ Phân biệt hai loại dòng bằng `recipe_version`:
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 from uuid import UUID
 
@@ -124,3 +125,39 @@ async def test_huy_chi_xoa_dong_tam_khong_dung_chung_nhan_da_publish(pool: Any) 
         row = await cur.fetchone()
     assert row is not None
     assert row[0] == 1, "chứng nhận của version đã publish phải còn nguyên"
+
+
+async def test_hai_luot_ghi_dong_thoi_van_chi_con_mot_dong_cho(pool: Any) -> None:
+    """Bất biến *"tối đa một dòng chờ"* phải do **DB** cưỡng chế, không do thứ tự câu SQL trong hàm.
+
+    Bản đầu xoá-rồi-ghi bằng hai câu rời. Dưới READ COMMITTED, hai lượt Chấm điểm cùng agent + cùng
+    `recipe_hash` (double click, hai tab) đều thấy `DELETE` khớp 0 dòng — bên kia chưa commit — rồi
+    đều `INSERT` ⇒ 2 dòng cùng khoá, đúng thứ docstring khai là không thể. **Đo được**: bài này cho
+    `count = 2` trước khi có index một phần `eval_scorecards_one_pending_per_recipe`, `1` sau.
+
+    Barrier để hai transaction chắc chắn CÙNG mở trước khi bên nào ghi — không có nó thì hai lượt
+    chạy nối đuôi và bài test xanh mà chưa hề chạm tới ca đồng thời (review AIE-1, PR #57)."""
+    barrier = asyncio.Barrier(2)
+
+    async def _ghi(verdict: str) -> None:
+        async with pool.connection() as conn, conn.transaction():
+            await _bind(conn, ANKOR_ID)
+            await barrier.wait()
+            await write_pending_scorecard(conn, _card(verdict=verdict), ANKOR_ID)
+
+    ket_qua = await asyncio.gather(_ghi("PASS"), _ghi("FAIL"), return_exceptions=True)
+    loi = [r for r in ket_qua if isinstance(r, BaseException)]
+    assert loi == [], f"ghi đồng thời không được ném: {loi}"
+
+    async with pool.connection() as conn, conn.transaction():
+        await _bind(conn, ANKOR_ID)
+        cur = await conn.execute(
+            "SELECT count(*) FROM eval.scorecards WHERE agent_id = %s AND recipe_hash = %s AND recipe_version IS NULL",
+            ("agent-a", "h1"),
+        )
+        row = await cur.fetchone()
+        doc = await read_pending_scorecard(conn, "agent-a", "h1")
+    assert row is not None
+    assert row[0] == 1, f"hai lượt ghi đồng thời để lại {row[0]} dòng chờ"
+    # Và dòng còn lại vẫn đọc được nguyên vẹn — không phải một bản ghi dở dang.
+    assert doc is not None and doc.gate.verdict in ("PASS", "FAIL")

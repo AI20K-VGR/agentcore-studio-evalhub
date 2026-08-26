@@ -39,24 +39,32 @@ from studio_contracts import Aggregate, CaseResult, Gate, Scorecard
 async def write_pending_scorecard(conn: Any, scorecard: Scorecard, tenant_id: UUID) -> None:
     """Ghi điểm của một lượt Chấm điểm. `recipe_version` để `NULL` — đây chưa phải chứng nhận.
 
-    **Xoá bản tạm cũ của cùng `(agent_id, recipe_hash)` trước khi ghi**, để mỗi cặp đó có nhiều
-    nhất một dòng chờ. Không phải để dọn dẹp — mà vì "bản mới nhất thắng" phải là **cấu trúc**, chứ
-    dựa vào `ORDER BY created_at` thì không tất định: `now()` cố định trong một transaction, nên hai
-    lượt ghi cùng transaction có `created_at` BẰNG NHAU và `id` (`gen_random_uuid()`) quyết định thứ
-    tự một cách ngẫu nhiên. Đo được — bài `test_ban_moi_nhat_thang` đỏ trước bản vá này.
+    **Một câu `INSERT ... ON CONFLICT DO UPDATE`, không phải delete-rồi-insert** (review AIE-1,
+    PR #57). Bất biến *"tối đa một dòng chờ cho mỗi `(tenant_id, agent_id, recipe_hash)`"* được
+    cưỡng chế bởi index một phần `eval_scorecards_one_pending_per_recipe` (`schema.py`), không phải
+    bởi thứ tự hai câu SQL trong hàm này.
 
-    Điểm tạm là thứ dùng một lần rồi bỏ, không phải lịch sử: lịch sử chứng nhận nằm ở các dòng
-    `recipe_version IS NOT NULL` và không hàm nào trong module này chạm tới.
+    Bản đầu dùng hai câu rời, và nó **vỡ thật** dưới ghi đồng thời: hai lượt Chấm điểm cùng agent +
+    cùng `recipe_hash` (double click, hai tab) đều thấy `DELETE` khớp 0 dòng dưới READ COMMITTED
+    rồi đều `INSERT` ⇒ 2 dòng cùng khoá. Tái hiện được bằng 2 transaction đồng bộ qua barrier —
+    `count = 2` trước bản vá, `1` sau. Cùng khuôn `golden_store.write_golden_set` đã dùng cho đúng
+    lớp bài toán này (`evalhub#46`).
+
+    `created_at = now()` khi ghi đè: dòng chờ mang nghĩa *"điểm của lượt chấm gần nhất"*, nên mốc
+    thời gian phải theo lượt mới chứ không giữ lại mốc của lượt đã bị thay thế.
     """
-    await conn.execute(
-        "DELETE FROM eval.scorecards WHERE agent_id = %s AND recipe_hash = %s AND recipe_version IS NULL",
-        (scorecard.agent_id, scorecard.recipe_hash),
-    )
     await conn.execute(
         """
         INSERT INTO eval.scorecards
             (tenant_id, agent_id, golden_set_ref, results, aggregate, gate, recipe_hash, recipe_version)
         VALUES (%s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s, NULL)
+        ON CONFLICT (tenant_id, agent_id, recipe_hash) WHERE recipe_version IS NULL
+        DO UPDATE SET
+            golden_set_ref = EXCLUDED.golden_set_ref,
+            results = EXCLUDED.results,
+            aggregate = EXCLUDED.aggregate,
+            gate = EXCLUDED.gate,
+            created_at = now()
         """,
         (
             str(tenant_id),

@@ -203,6 +203,31 @@ CREATE POLICY eval_golden_sets_tenant_isolation ON eval.golden_sets
     USING (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
     WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
 
+-- **Tối đa MỘT dòng chờ cho mỗi `(tenant_id, agent_id, recipe_hash)`** — cưỡng chế ở DB, không phải
+-- bằng "delete rồi insert" trong mã (review AIE-1, PR #57).
+--
+-- Bản đầu của `write_pending_scorecard` xoá bản cũ rồi ghi bản mới bằng HAI câu SQL rời. Dưới
+-- READ COMMITTED, hai lượt Chấm điểm cùng agent + cùng `recipe_hash` chạy gần đồng thời (double
+-- click, hai tab) đều thấy `DELETE` khớp 0 dòng (bên kia chưa commit) rồi đều `INSERT` — ra 2 dòng
+-- cùng khoá, đúng thứ docstring hàm đó khai là không thể. **Tái hiện được**: 2 transaction đồng bộ
+-- bằng barrier cho ra `count = 2`.
+--
+-- `CREATE UNIQUE INDEX IF NOT EXISTS` chứ không `ADD CONSTRAINT` — cùng lý do đã ghi cho
+-- `eval.golden_sets` ở trên: Postgres không có `ADD CONSTRAINT IF NOT EXISTS`, còn `CREATE INDEX`
+-- thì có sẵn, và về cưỡng chế hai dạng tương đương.
+--
+-- Index **một phần** (`WHERE recipe_version IS NULL`): chỉ dòng CHỜ mới bị ràng buộc duy nhất. Dòng
+-- đã publish (`recipe_version IS NOT NULL`) là lịch sử chứng nhận — nhiều version của cùng một
+-- agent hoàn toàn có thể mang cùng `recipe_hash` (rollback rồi publish lại), nên ràng buộc chúng
+-- là cấm một việc hợp lệ.
+--
+-- Có `tenant_id` trong khoá dù `recipe_hash` trên thực tế đã bao hàm tenant (`Recipe.tenant_id` nằm
+-- trong thứ được băm): dựa vào điều đó là buộc index vào chi tiết BÊN TRONG hàm băm ở quadrant
+-- khác. Thêm một cột vào index thì rẻ; gỡ một giả định ngầm sau này thì không.
+CREATE UNIQUE INDEX IF NOT EXISTS eval_scorecards_one_pending_per_recipe
+    ON eval.scorecards (tenant_id, agent_id, recipe_hash)
+    WHERE recipe_version IS NULL;
+
 CREATE TABLE IF NOT EXISTS eval.eval_jobs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL,
