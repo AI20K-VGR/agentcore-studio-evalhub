@@ -38,6 +38,7 @@ from studio_evalhub.harness import (
     tenant_scope_ok,
 )
 from studio_evalhub.judge import JudgeUnavailable, JudgeUnavailableReason, LLMJudge
+from studio_evalhub.no_kb_golden import NO_KB_GOLDEN_SET_REF, NO_KB_TENANT_LABEL, no_kb_golden_set
 from studio_evalhub.render import render_run_cases, render_scorecard
 from studio_evalhub.replay import (
     FixtureUnreadable,
@@ -110,6 +111,9 @@ __all__ = [
     "RunCostError",
     "score_case",
     "score_run_from_trace",
+    "NO_KB_GOLDEN_SET_REF",
+    "NO_KB_TENANT_LABEL",
+    "no_kb_golden_set",
     "select_core",
     "SmokeResult",
     "StubAgentRunner",
