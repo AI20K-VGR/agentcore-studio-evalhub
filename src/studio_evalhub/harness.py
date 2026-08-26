@@ -16,9 +16,10 @@ itself (R-SPEC A4 ownership fence).
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from pathlib import Path
 from typing import TypedDict, cast
 from uuid import UUID
@@ -559,6 +560,7 @@ class EvalHarness:
         core_only: bool = False,
         core_max_cases: int = DEFAULT_MAX_CASES,
         core_min_answer: int = DEFAULT_MIN_ANSWER,
+        on_progress: Callable[[int, int], Awaitable[None]] | None = None,
     ) -> Scorecard:
         """Chạy **mọi** case của `golden_set_ref` qua `agent_id` rồi trả `Scorecard` có verdict thật.
 
@@ -744,7 +746,11 @@ class EvalHarness:
 
         results: list[CaseResult] = []
         scored_case_ids: set[str] = set()
-        for case in golden.cases:
+        # Mẫu số lấy từ `golden.cases` SAU khi `select_core` đã cắt (biến `golden` được gán lại ở
+        # trên khi `core_only`), không phải từ bộ gốc: báo "3/40" trong khi chỉ chạy 3 case là một
+        # thanh tiến độ nói dối, và người vận hành đọc nó để quyết đợi hay huỷ.
+        total_cases = len(golden.cases)
+        for index, case in enumerate(golden.cases, start=1):
             case_run = await runner.run_case(
                 agent_id=agent_id,
                 query=case.query,
@@ -780,6 +786,14 @@ class EvalHarness:
             )
             if not case.expects_refusal:
                 scored_case_ids.add(case.case_id)
+
+            if on_progress is not None:
+                # Móc là BÁO CÁO, không phải cổng: ghi tiến độ hỏng (mất kết nối, job bị xoá giữa
+                # chừng) không được kéo theo cả lượt chấm. Người dùng mất điểm vì thanh tiến độ là
+                # đổi một phiền toái lấy một hỏng hóc. Nuốt hẳn ở đây, không log lại — module này
+                # không sở hữu logger nào, và caller mới là nơi biết ghi vào đâu.
+                with contextlib.suppress(Exception):
+                    await on_progress(index, total_cases)
 
         return compute_scorecard(
             agent_id,
