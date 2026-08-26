@@ -203,6 +203,35 @@ CREATE POLICY eval_golden_sets_tenant_isolation ON eval.golden_sets
     USING (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
     WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
 
+CREATE TABLE IF NOT EXISTS eval.eval_jobs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    agent_id TEXT NOT NULL,
+    recipe_hash TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('running', 'done', 'failed')),
+    done INT NOT NULL DEFAULT 0,
+    total INT NOT NULL DEFAULT 0,
+    detail TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- `CHECK` trên `status` chứ không để TEXT trần: tập đóng 3 giá trị, và một `'runing'` gõ nhầm mà
+-- lọt sẽ làm job đó không bao giờ được quét dọn lẫn không bao giờ trả kết quả — hỏng im lặng.
+-- Đây là chỗ `kb.knowledge_bases.status` đã bỏ sót và docstring của chính nó ghi lại.
+--
+-- KHÔNG lưu Scorecard ở đây. Job chỉ mang TIẾN ĐỘ; kết quả đi vào `eval.scorecards`
+-- (`recipe_version IS NULL`, xem `scorecard_store`) — đúng chỗ `/publish` vốn đã tra. Lưu hai bản
+-- là hai nguồn sự thật cho cùng một verdict, và chúng lệch nhau vào ngày ai đó sửa một bên.
+
+ALTER TABLE eval.eval_jobs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE eval.eval_jobs FORCE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS eval_eval_jobs_tenant_isolation ON eval.eval_jobs;
+CREATE POLICY eval_eval_jobs_tenant_isolation ON eval.eval_jobs
+    USING (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
+
 ALTER TABLE eval.scorecards ENABLE ROW LEVEL SECURITY;
 ALTER TABLE eval.scorecards FORCE ROW LEVEL SECURITY;
 
@@ -214,5 +243,5 @@ CREATE POLICY eval_scorecards_tenant_isolation ON eval.scorecards
 
 
 def ddl() -> str:
-    """Return this quadrant's idempotent DDL — `eval.golden_sets` + `eval.scorecards`."""
+    """Return this quadrant's idempotent DDL — `eval.golden_sets` + `eval.scorecards` + `eval.eval_jobs`."""
     return _EVAL_DDL

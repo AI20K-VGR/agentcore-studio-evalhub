@@ -81,4 +81,6 @@ async def test_eval_schema_ddl_idempotent(admin_pool: Pool) -> None:
             "SELECT table_name FROM information_schema.tables WHERE table_schema = 'eval' ORDER BY table_name"
         )
         tables = {row[0] for row in await cur.fetchall()}
-    assert tables == {"golden_sets", "scorecards"}
+    # Tập ĐÓNG có chủ đích: thêm bảng vào schema `eval` phải là một quyết định tường minh, không
+    # phải thứ trôi vào qua một PR khác. `eval_jobs` vào cùng lượt Chấm điểm chạy nền.
+    assert tables == {"golden_sets", "scorecards", "eval_jobs"}

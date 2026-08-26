@@ -10,6 +10,16 @@ from studio_evalhub.agent_runner import AgentAnswer, AgentRunner, CaseRun, StubA
 from studio_evalhub.agreement import AgreementResult, agreement, nhan_tu_golden_set
 from studio_evalhub.compute import compute_scorecard
 from studio_evalhub.core_set import CoreSelection, CoreSelectionError, select_core
+from studio_evalhub.eval_job_store import (
+    EvalJob,
+    JobStatus,
+    create_eval_job,
+    fail_eval_job,
+    finish_eval_job,
+    read_eval_job,
+    record_job_progress,
+    sweep_stale_jobs,
+)
 from studio_evalhub.golden_case import GoldenCase, GoldenSet
 from studio_evalhub.golden_loader import load_golden_set
 from studio_evalhub.golden_merge import (
@@ -122,6 +132,14 @@ __all__ = [
     "drop_pending_scorecards",
     "read_pending_scorecard",
     "write_pending_scorecard",
+    "EvalJob",
+    "JobStatus",
+    "create_eval_job",
+    "fail_eval_job",
+    "finish_eval_job",
+    "read_eval_job",
+    "record_job_progress",
+    "sweep_stale_jobs",
     "select_core",
     "SmokeResult",
     "StubAgentRunner",
