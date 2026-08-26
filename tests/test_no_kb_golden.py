@@ -15,6 +15,7 @@ import pytest
 from studio_contracts.scorecard import CaseResult
 from studio_evalhub.compute import compute_scorecard
 from studio_evalhub.core_set import select_core
+from studio_evalhub.harness import _contains_phrase
 from studio_evalhub.no_kb_golden import NO_KB_GOLDEN_SET_REF, NO_KB_TENANT_LABEL, no_kb_golden_set
 
 
@@ -123,3 +124,54 @@ def test_set_is_a_fresh_object_each_call() -> None:
     mới từ `cases` nhưng caller khác vẫn cầm được list gốc — chia sẻ một object giữa hai lượt
     publish là đúng chỗ một lượt sửa nhầm rò sang lượt sau."""
     assert no_kb_golden_set() is not no_kb_golden_set()
+
+
+# ------------------------------------------------- luật chấm THẬT (`_contains_phrase`)
+#
+# Tám bài trên ghim HÌNH DẠNG bộ. Không bài nào chạy luật quyết định PASS/FAIL — và đó đúng là chỗ
+# bản đầu của module này hỏng mà cả 8 vẫn xanh: `expected` khi đó là
+# `"không có thông tin về nội dung này"`, mà `_contains_phrase` dò TOÀN BỘ chuỗi token liên tiếp,
+# nên ngay cả câu trả lời lý tưởng cũng trượt ⇒ bộ FAIL mọi case. Nhóm dưới là bài còn thiếu đó.
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "Tôi không có thông tin về chính sách này.",
+        "Rất tiếc, tôi không có thông tin để trả lời câu hỏi này.",
+        "Không có thông tin trong tài liệu tôi được cấp.",
+    ],
+)
+def test_the_not_knowing_answer_actually_matches(answer: str) -> None:
+    """Câu trả lời ĐÚNG kiểu phải khớp luật chấm thật, không chỉ "trông giống".
+
+    `success = (answer.refused is False) and _contains_phrase(answer.answer, case.expected)` —
+    đây là vế thứ hai, vế duy nhất phụ thuộc nội dung bộ này. Thiếu bài này thì `expected` dài ra
+    một chữ là bộ trượt sạch mà không bài nào đỏ."""
+    for case in no_kb_golden_set().cases:
+        assert _contains_phrase(answer, case.expected), f"{case.case_id}: {case.expected!r} không khớp {answer!r}"
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "Công ty cho nghỉ 12 ngày phép mỗi năm.",
+        "Nhân viên thử việc được hưởng 85% lương và đầy đủ bảo hiểm.",
+    ],
+)
+def test_a_fabricated_answer_does_not_match(answer: str) -> None:
+    """Vế bất đối xứng: agent BỊA ra một chính sách phải trượt — nếu không, cổng này không chặn gì."""
+    for case in no_kb_golden_set().cases:
+        assert not _contains_phrase(answer, case.expected), f"{case.case_id}: câu bịa lại khớp {case.expected!r}"
+
+
+def test_a_negated_fabrication_does_not_match() -> None:
+    """Ca sát biên, tách riêng vì nó là lý do KHÔNG rút `expected` xuống cụm ngắn `"không có"`.
+
+    *"Công ty không có quy định nghỉ phép nào cả"* là một câu BỊA — agent khẳng định về nội dung
+    tài liệu nó chưa từng đọc — nhưng mở đầu bằng đúng cụm phủ định. Đo được: cụm `"không có"` cho
+    nó đi lọt, `"không có thông tin"` thì không. Rút ngắn `expected` là thủng cổng ở đúng ca cổng
+    sinh ra để chặn."""
+    fabrication = "Công ty không có quy định nghỉ phép nào cả."
+    for case in no_kb_golden_set().cases:
+        assert not _contains_phrase(fabrication, case.expected)

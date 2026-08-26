@@ -60,7 +60,20 @@ _SECTION_ROLE = "public"
 trả-lời; `public` là vai mọi phiên đều có nên không phụ thuộc cấu hình phòng ban của tenant nào."""
 
 _EXPECTED = "không có thông tin"
-"""Cụm từ `_contains_phrase` (token liên tiếp, lowercase) dò trong câu trả lời."""
+"""Cụm `_contains_phrase` dò trong câu trả lời — **token liên tiếp**, không phải "có chứa ý này".
+
+Hai cạnh sắc, cả hai đo được (`test_no_kb_golden.py`):
+
+- **Dài thêm một chữ là trượt sạch.** Bản đầu viết `f"{_EXPECTED} về nội dung này"`, và ngay cả câu
+  trả lời lý tưởng *"Tôi không có thông tin về chính sách này."* cũng KHÔNG khớp — bộ FAIL mọi case
+  trong khi agent cư xử hoàn hảo.
+- **Ngắn đi cũng không được.** Rút xuống `"không có"` cho *"Công ty không có quy định nghỉ phép nào
+  cả"* đi lọt — một câu BỊA (agent khẳng định về nội dung tài liệu nó chưa từng đọc) mở đầu bằng
+  đúng cụm phủ định. Thủng cổng ở đúng ca cổng sinh ra để chặn.
+
+Cách diễn đạt khác (*"tôi chưa được cung cấp tài liệu nào"*) không khớp exact-match và rơi sang
+**LLM-judge** — `publish.py` truyền `judge=` thật, và `_duoc_hoi_judge` cho case nhánh trả-lời
+trượt exact-match đi qua judge ngữ nghĩa. Đó là lý do cụm này không cần phủ mọi cách nói."""
 
 # Câu hỏi chọn theo đúng thứ một nhân viên hỏi trợ lý nội bộ, và đều là thứ **chỉ trả lời được nếu
 # có tài liệu công ty**. Agent không gắn KB mà trả lời được một câu trong đây nghĩa là nó đang bịa
@@ -92,7 +105,7 @@ def no_kb_golden_set() -> GoldenSet:
                 section_roles=[_SECTION_ROLE],
                 expected_tenant=NO_KB_TENANT_LABEL,
                 expected_section_role=_SECTION_ROLE,
-                expected=f"{_EXPECTED} về nội dung này",
+                expected=_EXPECTED,
                 expected_citation=[],
             )
             for i, query in enumerate(_QUERIES, start=1)
