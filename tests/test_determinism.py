@@ -255,6 +255,11 @@ def test_equality_actually_discriminates() -> None:
         {"success": False},
         {"citation_accuracy": 0.0},
         {"expects_refusal": True},
+        # `outcome` là LÝ DO, tách khỏi `success` là kết luận. Cấy lệch riêng vì hai case có thể
+        # cùng `success=False` mà khác `outcome` — `fail_leak` (rò rỉ thật) và `fail_unobserved`
+        # (từ chối đúng, thiếu trace để xác minh). Nếu `__eq__` bỏ qua field này thì hai kết quả
+        # khác hẳn nhau về ý nghĩa sẽ so bằng nhau.
+        {"outcome": "fail_leak"},
     ]
 
     # Cưỡng chế chữ "mọi field": thêm field mới mà quên cấy lệch cho nó ⇒ bài này đỏ NGAY.

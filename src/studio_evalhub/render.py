@@ -72,8 +72,12 @@ _AGGREGATE_NOT_RECOMPUTABLE = (
 )
 
 
-RUN_CASE_COLUMNS: tuple[str, ...] = ("case_id", "expects_refusal", "success", "citation_accuracy")
-"""Field của `SmokeResult` **có** lên bảng per-case, theo đúng thứ tự cột."""
+RUN_CASE_COLUMNS: tuple[str, ...] = ("case_id", "expects_refusal", "outcome", "success", "citation_accuracy")
+"""Field của `SmokeResult` **có** lên bảng per-case, theo đúng thứ tự cột.
+
+`outcome` đứng ngay TRƯỚC `success` là có chủ ý: người đọc gặp lý do trước khi gặp kết luận. Một cột
+`success=False` đứng một mình không phân biệt được *"hàng rào bị thủng"* với *"từ chối đúng nhưng
+thiếu trace để xác minh"* — hai ca cùng con số, khác hẳn nhau về việc phải làm."""
 
 RUN_CASE_FIELDS_NOT_SHOWN: tuple[str, ...] = ("expected", "actual")
 """Field của `SmokeResult` **cố ý không** lên bảng: hai trường văn bản dài, in ra sẽ vỡ hàng và đẩy
@@ -152,7 +156,7 @@ def render_run_cases(
     """
     header = f"RUN CASES — {run_id}"
     rule = "-" * max(len(header), 78)
-    col = f"{'case_id':<20} {'expects_refusal':<16} {'success':<8} {'citation_accuracy':>18}"
+    col = f"{'case_id':<20} {'expects_refusal':<16} {'outcome':<18} {'success':<8} {'citation_accuracy':>18}"
 
     lines = [
         header,
@@ -167,7 +171,7 @@ def render_run_cases(
     for r in results:
         branch = "từ-chối" if r.expects_refusal else "trả-lời"
         acc = f"{'n/a':>18}" if r.expects_refusal else f"{r.citation_accuracy:>18.2f}"
-        lines.append(f"{r.case_id:<20} {branch:<16} {('PASS' if r.success else 'FAIL'):<8} {acc}")
+        lines.append(f"{r.case_id:<20} {branch:<16} {r.outcome:<18} {('PASS' if r.success else 'FAIL'):<8} {acc}")
 
     answerable = [r for r in results if not r.expects_refusal]
     n_success = len(results)
