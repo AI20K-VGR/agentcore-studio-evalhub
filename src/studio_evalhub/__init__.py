@@ -33,6 +33,9 @@ from studio_evalhub.golden_merge import (
 from studio_evalhub.golden_store import (
     GoldenSetNotFound,
     GoldenSetScopeError,
+    GoldenSetSummary,
+    delete_golden_set,
+    list_golden_sets,
     read_golden_set,
     write_golden_set,
 )
@@ -102,6 +105,8 @@ __all__ = [
     "GoldenSet",
     "GoldenSetMergeConflict",
     "GoldenSetNotFound",
+    "GoldenSetSummary",
+    "delete_golden_set",
     "GoldenSetScopeError",
     "JudgeUnavailable",
     "JudgeUnavailableReason",
@@ -112,6 +117,7 @@ __all__ = [
     "MergeConflict",
     "nhan_tu_golden_set",
     "normalize_query",
+    "list_golden_sets",
     "read_golden_set",
     "read_run_unscoped",
     "RecordingLLM",

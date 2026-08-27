@@ -30,6 +30,8 @@ truyền, rồi mới chạm bảng — xem `GoldenSetScopeError`.
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 
@@ -64,6 +66,27 @@ FROM eval.golden_sets
 WHERE golden_set_ref = %s
 """
 
+# Đếm bằng SQL chứ không đọc `cases` lên rồi đếm ở Python: danh sách là màn hình MỞ ĐẦU, và một
+# tenant có vài bộ Full (100–500 case) sẽ phải kéo vài megabyte JSONB qua dây chỉ để hiện mấy con
+# số. `jsonb_array_elements` chạy trong Postgres, trả về đúng 5 số nguyên mỗi dòng.
+#
+# `n_trap` suy từ `expected_citation` RỖNG, không phải từ một cờ `is_trap` — đó là cùng đường suy mà
+# `GoldenCase.is_refusal` và bộ chấm của evalhub đang dùng (xem `golden_from_kb.build_cases`). Thêm
+# một cờ riêng ở tầng hiển thị là mở đường cho hai nguồn sự thật lệch nhau.
+_LIST = """
+SELECT golden_set_ref,
+       jsonb_array_length(cases) AS n_cases,
+       (SELECT count(*) FROM jsonb_array_elements(cases) c WHERE c->>'source' = 'ai') AS n_ai,
+       (SELECT count(*) FROM jsonb_array_elements(cases) c WHERE c->>'source' = 'human') AS n_human,
+       (SELECT count(*) FROM jsonb_array_elements(cases) c
+         WHERE jsonb_array_length(COALESCE(c->'expected_citation', '[]'::jsonb)) = 0) AS n_trap,
+       created_at
+FROM eval.golden_sets
+ORDER BY golden_set_ref
+"""
+
+_DELETE = "DELETE FROM eval.golden_sets WHERE golden_set_ref = %s"
+
 _WRITE = """
 INSERT INTO eval.golden_sets (tenant_id, golden_set_ref, cases, kb_id)
 VALUES (%s, %s, %s::jsonb, %s)
@@ -93,6 +116,58 @@ async def _assert_scope(conn: Any, tenant_id: UUID) -> None:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class GoldenSetSummary:
+    """Một dòng trong danh sách bộ golden — đủ để chọn, chưa đủ để chấm.
+
+    Cố ý KHÔNG mang `cases`: danh sách tồn tại để người dùng biết *có những bộ nào*, còn nội dung
+    thì đọc bằng `read_golden_set` khi họ mở đúng một bộ. Nhét cases vào đây biến một màn hình
+    danh sách thành một lượt tải toàn bộ dữ liệu chấm của tenant.
+
+    Ba con số `n_ai`/`n_human`/`n_trap` **không cộng lại thành `n_cases`** và điều đó là đúng:
+
+    - `source` có thể là `None` (*chưa khai* — xem `DEC-D16-03`), nên `n_ai + n_human <= n_cases`;
+    - `n_trap` cắt ngang trục `source`: một case bẫy vẫn mang `source="ai"`.
+
+    Người đọc cần thấy được cả *"bộ này máy sinh hay người viết"* lẫn *"có bao nhiêu case bẫy"*, và
+    hai câu hỏi đó độc lập nhau.
+    """
+
+    golden_set_ref: str
+    n_cases: int
+    n_ai: int
+    n_human: int
+    n_trap: int
+    created_at: datetime
+
+
+async def list_golden_sets(conn: Any, tenant_id: UUID) -> tuple[GoldenSetSummary, ...]:
+    """Mọi bộ golden của tenant đang bind, kèm số liệu tóm tắt. Không có bộ nào ⇒ tuple rỗng.
+
+    Khác `read_golden_set`, rỗng ở đây **không** phải lỗi: một tenant chưa nạp tài liệu nào thì
+    đúng là chưa có bộ nào, và đó là trạng thái bình thường chứ không phải thiếu dữ liệu.
+
+    Vẫn đi qua `_assert_scope` như hai hàm kia. Đây mới là chỗ dễ mất cảnh giác nhất trong ba: một
+    `SELECT` danh sách trả rỗng vì quên bind `app.tenant_id` trông **y hệt** một tenant chưa có bộ
+    nào — không có `GoldenSetNotFound` nào để phân biệt hai ca, nên nếu bỏ `_assert_scope` thì cấu
+    hình hỏng sẽ hiện ra thành một màn hình trống trông rất hợp lý.
+    """
+    await _assert_scope(conn, tenant_id)
+    cur = await conn.execute(_LIST)
+    rows = await cur.fetchall()
+    return tuple(
+        GoldenSetSummary(
+            golden_set_ref=str(row[0]),
+            n_cases=int(row[1]),
+            n_ai=int(row[2]),
+            n_human=int(row[3]),
+            n_trap=int(row[4]),
+            created_at=row[5],
+        )
+        for row in rows
+    )
+
+
 async def read_golden_set(conn: Any, ref: str, tenant_id: UUID) -> GoldenSet:
     """Bộ case của `(tenant_id, ref)`. Không có ⇒ `GoldenSetNotFound`, **không** trả bộ rỗng.
 
@@ -113,6 +188,33 @@ async def read_golden_set(conn: Any, ref: str, tenant_id: UUID) -> GoldenSet:
             f"golden_store: không có golden set {ref!r} cho tenant {tenant_id} trong eval.golden_sets"
         )
     return GoldenSet(golden_set_ref=row[0], cases=[GoldenCase(**c) for c in row[1]])
+
+
+async def delete_golden_set(conn: Any, ref: str, tenant_id: UUID) -> bool:
+    """Xoá bộ `(tenant_id, ref)`. Trả `True` nếu có dòng bị xoá, `False` nếu vốn không có.
+
+    ## Vì sao cần một đường XOÁ, khi đã có đường ghi-đè
+
+    `regenerate_for_section` mang guard *"rỗng thì không ghi"*: lượt sinh ra 0 case thì nó **giữ
+    nguyên bộ cũ**. Guard đó đúng cho ca *sinh hụt* — một bộ 0 case đi tiếp vào `EvalHarness.run()`
+    cho `success_rate` trên mẫu số 0. Nhưng nó sai cho ca *không còn gì để chấm*: xoá tài liệu cuối
+    của một phòng ban thì bộ cũ ở lại nguyên vẹn, với `expected_citation` trỏ vào những `chunk_id`
+    đã biến mất, và cổng publish vẫn chấm bằng đúng bộ đó.
+
+    Ghi đè bằng một bộ rỗng KHÔNG thay được: `GoldenSet` rỗng vẫn là một hàng trong bảng, và mọi
+    caller đọc nó sẽ thấy "có bộ, 0 case" — khác hẳn "chưa có bộ nào", vốn là sự thật.
+
+    ## Trả `bool`, không phải `None`
+
+    Caller cần phân biệt *"đã xoá"* với *"vốn không có"*. Im lặng cho cả hai là cách một lệnh xoá
+    hụt trông y hệt một lệnh xoá thành công.
+
+    Không lọc `tenant_id` trong `WHERE` — cùng lý do `read_golden_set`: RLS đã lọc, và thêm mệnh đề
+    thứ hai che mất ca *"RLS tắt"*. Nhưng `_assert_scope` ở đây đắt hơn hẳn hai hàm kia: đọc nhầm
+    tenant là rò một lần, **xoá** nhầm tenant là mất dữ liệu vĩnh viễn."""
+    await _assert_scope(conn, tenant_id)
+    cur = await conn.execute(_DELETE, (ref,))
+    return int(cur.rowcount) > 0
 
 
 async def write_golden_set(conn: Any, golden: GoldenSet, tenant_id: UUID, *, kb_id: UUID | None = None) -> None:

@@ -27,6 +27,8 @@ from studio_evalhub.golden_case import GoldenCase, GoldenSet
 from studio_evalhub.golden_store import (
     GoldenSetNotFound,
     GoldenSetScopeError,
+    delete_golden_set,
+    list_golden_sets,
     read_golden_set,
     write_golden_set,
 )
@@ -172,3 +174,144 @@ async def test_field_la_trong_jsonb_do_o_luc_doc(pool: Any) -> None:
         )
         with pytest.raises(Exception, match="field_la_hoac_go_nham"):
             await read_golden_set(conn, "co-field-la", ANKOR_ID)
+
+
+def _case_with(case_id: str, *, source: str | None, citation: list[str]) -> GoldenCase:
+    """Fixture BẤT ĐỐI XỨNG có chủ đích — mỗi tham số điều khiển đúng một trục mà `list_golden_sets`
+    đếm, để một bài đếm sai không thể xanh nhờ hai trục tình cờ bằng nhau."""
+    return GoldenCase(
+        case_id=case_id,
+        query="Nghỉ phép năm được bao nhiêu ngày?",
+        tenant="ankor",
+        section_roles=["hr"],
+        expected_tenant="ankor",
+        expected_section_role="hr",
+        expected="12 ngày",
+        expected_citation=citation,
+        source=source,
+    )
+
+
+async def test_list_dem_dung_tung_truc_va_khong_cong_lai_thanh_tong(pool: Any) -> None:
+    """`n_ai`/`n_human`/`n_trap` đếm ĐỘC LẬP, và tổng ba số đó KHÁC `n_cases` — đúng thiết kế.
+
+    Bộ dựng ở đây cố tình lệch cả hai chiều:
+
+    - 1 case `source=None` (*chưa khai*) ⇒ `n_ai + n_human = 3 < n_cases = 4`;
+    - 1 trong 2 case `source="ai"` là case bẫy ⇒ `n_trap` CẮT NGANG trục `source`, không cộng thêm.
+
+    Nếu ai đó "sửa" hàm cho ba số cộng lại thành tổng — bằng cách đếm `None` vào `human`, hoặc tách
+    case bẫy ra khỏi `n_ai` — bài này đỏ. Đó là điểm khác biệt duy nhất giữa một bảng thống kê đọc
+    được và một bảng trông cân đối nhưng nói sai."""
+    golden = GoldenSet(
+        golden_set_ref="probe-list-mixed",
+        cases=[
+            _case_with("U-01", source="ai", citation=["ankor-leave-001#c1"]),
+            _case_with("U-02", source="ai", citation=[]),  # bẫy, VẪN là source="ai"
+            _case_with("U-03", source="human", citation=["ankor-leave-001#c2"]),
+            _case_with("U-04", source=None, citation=["ankor-leave-001#c3"]),  # chưa khai
+        ],
+    )
+
+    async with pool.connection() as conn, conn.transaction():
+        await _bind(conn, ANKOR_ID)
+        await write_golden_set(conn, golden, ANKOR_ID)
+        rows = await list_golden_sets(conn, ANKOR_ID)
+
+    row = next(r for r in rows if r.golden_set_ref == "probe-list-mixed")
+    assert row.n_cases == 4
+    assert row.n_ai == 2, "case bẫy vẫn mang source='ai' — không được trừ ra"
+    assert row.n_human == 1
+    assert row.n_trap == 1, "bẫy suy từ expected_citation RỖNG, cùng đường suy với is_refusal"
+    assert row.n_ai + row.n_human < row.n_cases, "case source=None không được đếm vào bên nào"
+
+
+async def test_list_khong_ro_ri_bo_cua_tenant_khac(pool: Any) -> None:
+    """Hai tenant, mỗi bên chỉ thấy bộ của mình. RLS làm việc này, nhưng đường DANH SÁCH chưa từng
+    được đo — `read_golden_set` có `GoldenSetNotFound` để lộ ca hỏng, còn `list` rò sang tenant khác
+    thì chỉ biểu hiện thành *"có thêm mấy dòng lạ"*, không có ngoại lệ nào bật lên."""
+    async with pool.connection() as conn, conn.transaction():
+        await _bind(conn, ANKOR_ID)
+        await write_golden_set(
+            conn, GoldenSet(golden_set_ref="probe-list-ankor", cases=[_case("U-01", "ankor", "12")]), ANKOR_ID
+        )
+
+    async with pool.connection() as conn, conn.transaction():
+        await _bind(conn, BOREA_ID)
+        await write_golden_set(
+            conn, GoldenSet(golden_set_ref="probe-list-borea", cases=[_case("U-01", "borea", "15")]), BOREA_ID
+        )
+        refs_borea = {r.golden_set_ref for r in await list_golden_sets(conn, BOREA_ID)}
+
+    assert "probe-list-borea" in refs_borea
+    assert "probe-list-ankor" not in refs_borea
+
+
+async def test_list_chua_bind_tenant_thi_raise_chu_khong_tra_rong(pool: Any) -> None:
+    """**Ca nguy hiểm riêng của đường danh sách.** `read_golden_set` phân biệt được "không có bộ"
+    với "quên bind" nhờ `GoldenSetNotFound`; `list` thì KHÔNG — rỗng là kết quả hợp lệ của một
+    tenant chưa nạp gì. Thiếu `_assert_scope`, một connection quên bind sẽ vẽ ra màn hình trống
+    trông hoàn toàn hợp lý, và người dùng kết luận sai rằng bộ golden của họ đã biến mất."""
+    async with pool.connection() as conn, conn.transaction():
+        with pytest.raises(GoldenSetScopeError):
+            await list_golden_sets(conn, ANKOR_ID)
+
+
+async def test_list_tenant_chua_co_bo_nao_tra_rong_chu_khong_raise(pool: Any) -> None:
+    """Đối trọng bài trên: rỗng THẬT là hợp lệ, không phải lỗi. Thiếu bài này, ai đó có thể "vá" ca
+    trên bằng cách raise mỗi khi rỗng, và tenant mới toanh sẽ không mở nổi màn hình."""
+    unused_tenant = UUID("c0000000-0000-0000-0000-0000000000ff")
+    async with pool.connection() as conn, conn.transaction():
+        await _bind(conn, unused_tenant)
+        assert await list_golden_sets(conn, unused_tenant) == ()
+
+
+async def test_delete_removes_the_set_and_says_whether_it_existed(pool: Any) -> None:
+    """Xoá bộ golden — và nói rõ có thật sự xoá được gì không.
+
+    Cần vì guard *"rỗng thì không ghi"* của `regenerate_for_section`: khi phòng ban không còn tài
+    liệu nào, lượt sinh lại ra 0 case và guard **giữ nguyên bộ cũ**. Guard đó đúng cho ca "sinh
+    hụt" (một bộ 0 case đi tiếp vào `EvalHarness.run()` cho `success_rate` trên mẫu số 0), nhưng
+    sai cho ca "không còn gì để chấm" — bộ cũ ở lại với `expected_citation` trỏ vào những `chunk_id`
+    đã bị xoá, và cổng publish vẫn chấm bằng đúng bộ đó.
+
+    Trả `bool` chứ không `None`: caller cần phân biệt *"đã xoá"* với *"vốn không có"* để báo đúng —
+    im lặng cho cả hai là cách một lệnh xoá hụt trông y hệt một lệnh xoá thành công."""
+    golden = GoldenSet(golden_set_ref="probe-delete", cases=[_case("U-01", "ankor", "12 ngày")])
+
+    async with pool.connection() as conn, conn.transaction():
+        await _bind(conn, ANKOR_ID)
+        await write_golden_set(conn, golden, ANKOR_ID)
+        assert await delete_golden_set(conn, "probe-delete", ANKOR_ID) is True
+        assert await delete_golden_set(conn, "probe-delete", ANKOR_ID) is False
+
+        with pytest.raises(GoldenSetNotFound):
+            await read_golden_set(conn, "probe-delete", ANKOR_ID)
+
+
+async def test_delete_cannot_reach_another_tenants_set(pool: Any) -> None:
+    """Xoá là thao tác PHÁ HUỶ, nên hàng rào ở đây đắt hơn ở đường đọc: đọc nhầm tenant là rò một
+    lần, xoá nhầm tenant là mất dữ liệu vĩnh viễn."""
+    async with pool.connection() as conn, conn.transaction():
+        await _bind(conn, ANKOR_ID)
+        await write_golden_set(
+            conn, GoldenSet(golden_set_ref="probe-cross", cases=[_case("U-01", "ankor", "12")]), ANKOR_ID
+        )
+
+    async with pool.connection() as conn, conn.transaction():
+        await _bind(conn, BOREA_ID)
+        assert await delete_golden_set(conn, "probe-cross", BOREA_ID) is False
+
+    async with pool.connection() as conn, conn.transaction():
+        await _bind(conn, ANKOR_ID)
+        assert await read_golden_set(conn, "probe-cross", ANKOR_ID) is not None
+
+
+async def test_delete_without_binding_a_tenant_raises(pool: Any) -> None:
+    """Chưa bind `app.tenant_id` ⇒ raise, không phải "xoá 0 dòng rồi báo False".
+
+    Dưới RLS `FORCE`, một `DELETE` không bind tenant chạm 0 dòng và **thành công** — nên nếu không
+    tự kiểm, một lệnh xoá hỏng cấu hình sẽ báo `False` y hệt một bộ vốn không tồn tại."""
+    async with pool.connection() as conn, conn.transaction():
+        with pytest.raises(GoldenSetScopeError):
+            await delete_golden_set(conn, "probe-delete", ANKOR_ID)
