@@ -85,6 +85,8 @@ FROM eval.golden_sets
 ORDER BY golden_set_ref
 """
 
+_DELETE = "DELETE FROM eval.golden_sets WHERE golden_set_ref = %s"
+
 _WRITE = """
 INSERT INTO eval.golden_sets (tenant_id, golden_set_ref, cases, kb_id)
 VALUES (%s, %s, %s::jsonb, %s)
@@ -186,6 +188,33 @@ async def read_golden_set(conn: Any, ref: str, tenant_id: UUID) -> GoldenSet:
             f"golden_store: không có golden set {ref!r} cho tenant {tenant_id} trong eval.golden_sets"
         )
     return GoldenSet(golden_set_ref=row[0], cases=[GoldenCase(**c) for c in row[1]])
+
+
+async def delete_golden_set(conn: Any, ref: str, tenant_id: UUID) -> bool:
+    """Xoá bộ `(tenant_id, ref)`. Trả `True` nếu có dòng bị xoá, `False` nếu vốn không có.
+
+    ## Vì sao cần một đường XOÁ, khi đã có đường ghi-đè
+
+    `regenerate_for_section` mang guard *"rỗng thì không ghi"*: lượt sinh ra 0 case thì nó **giữ
+    nguyên bộ cũ**. Guard đó đúng cho ca *sinh hụt* — một bộ 0 case đi tiếp vào `EvalHarness.run()`
+    cho `success_rate` trên mẫu số 0. Nhưng nó sai cho ca *không còn gì để chấm*: xoá tài liệu cuối
+    của một phòng ban thì bộ cũ ở lại nguyên vẹn, với `expected_citation` trỏ vào những `chunk_id`
+    đã biến mất, và cổng publish vẫn chấm bằng đúng bộ đó.
+
+    Ghi đè bằng một bộ rỗng KHÔNG thay được: `GoldenSet` rỗng vẫn là một hàng trong bảng, và mọi
+    caller đọc nó sẽ thấy "có bộ, 0 case" — khác hẳn "chưa có bộ nào", vốn là sự thật.
+
+    ## Trả `bool`, không phải `None`
+
+    Caller cần phân biệt *"đã xoá"* với *"vốn không có"*. Im lặng cho cả hai là cách một lệnh xoá
+    hụt trông y hệt một lệnh xoá thành công.
+
+    Không lọc `tenant_id` trong `WHERE` — cùng lý do `read_golden_set`: RLS đã lọc, và thêm mệnh đề
+    thứ hai che mất ca *"RLS tắt"*. Nhưng `_assert_scope` ở đây đắt hơn hẳn hai hàm kia: đọc nhầm
+    tenant là rò một lần, **xoá** nhầm tenant là mất dữ liệu vĩnh viễn."""
+    await _assert_scope(conn, tenant_id)
+    cur = await conn.execute(_DELETE, (ref,))
+    return int(cur.rowcount) > 0
 
 
 async def write_golden_set(conn: Any, golden: GoldenSet, tenant_id: UUID, *, kb_id: UUID | None = None) -> None:

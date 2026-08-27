@@ -27,6 +27,7 @@ from studio_evalhub.golden_case import GoldenCase, GoldenSet
 from studio_evalhub.golden_store import (
     GoldenSetNotFound,
     GoldenSetScopeError,
+    delete_golden_set,
     list_golden_sets,
     read_golden_set,
     write_golden_set,
@@ -263,3 +264,54 @@ async def test_list_tenant_chua_co_bo_nao_tra_rong_chu_khong_raise(pool: Any) ->
     async with pool.connection() as conn, conn.transaction():
         await _bind(conn, unused_tenant)
         assert await list_golden_sets(conn, unused_tenant) == ()
+
+
+async def test_delete_removes_the_set_and_says_whether_it_existed(pool: Any) -> None:
+    """Xoá bộ golden — và nói rõ có thật sự xoá được gì không.
+
+    Cần vì guard *"rỗng thì không ghi"* của `regenerate_for_section`: khi phòng ban không còn tài
+    liệu nào, lượt sinh lại ra 0 case và guard **giữ nguyên bộ cũ**. Guard đó đúng cho ca "sinh
+    hụt" (một bộ 0 case đi tiếp vào `EvalHarness.run()` cho `success_rate` trên mẫu số 0), nhưng
+    sai cho ca "không còn gì để chấm" — bộ cũ ở lại với `expected_citation` trỏ vào những `chunk_id`
+    đã bị xoá, và cổng publish vẫn chấm bằng đúng bộ đó.
+
+    Trả `bool` chứ không `None`: caller cần phân biệt *"đã xoá"* với *"vốn không có"* để báo đúng —
+    im lặng cho cả hai là cách một lệnh xoá hụt trông y hệt một lệnh xoá thành công."""
+    golden = GoldenSet(golden_set_ref="probe-delete", cases=[_case("U-01", "ankor", "12 ngày")])
+
+    async with pool.connection() as conn, conn.transaction():
+        await _bind(conn, ANKOR_ID)
+        await write_golden_set(conn, golden, ANKOR_ID)
+        assert await delete_golden_set(conn, "probe-delete", ANKOR_ID) is True
+        assert await delete_golden_set(conn, "probe-delete", ANKOR_ID) is False
+
+        with pytest.raises(GoldenSetNotFound):
+            await read_golden_set(conn, "probe-delete", ANKOR_ID)
+
+
+async def test_delete_cannot_reach_another_tenants_set(pool: Any) -> None:
+    """Xoá là thao tác PHÁ HUỶ, nên hàng rào ở đây đắt hơn ở đường đọc: đọc nhầm tenant là rò một
+    lần, xoá nhầm tenant là mất dữ liệu vĩnh viễn."""
+    async with pool.connection() as conn, conn.transaction():
+        await _bind(conn, ANKOR_ID)
+        await write_golden_set(
+            conn, GoldenSet(golden_set_ref="probe-cross", cases=[_case("U-01", "ankor", "12")]), ANKOR_ID
+        )
+
+    async with pool.connection() as conn, conn.transaction():
+        await _bind(conn, BOREA_ID)
+        assert await delete_golden_set(conn, "probe-cross", BOREA_ID) is False
+
+    async with pool.connection() as conn, conn.transaction():
+        await _bind(conn, ANKOR_ID)
+        assert await read_golden_set(conn, "probe-cross", ANKOR_ID) is not None
+
+
+async def test_delete_without_binding_a_tenant_raises(pool: Any) -> None:
+    """Chưa bind `app.tenant_id` ⇒ raise, không phải "xoá 0 dòng rồi báo False".
+
+    Dưới RLS `FORCE`, một `DELETE` không bind tenant chạm 0 dòng và **thành công** — nên nếu không
+    tự kiểm, một lệnh xoá hỏng cấu hình sẽ báo `False` y hệt một bộ vốn không tồn tại."""
+    async with pool.connection() as conn, conn.transaction():
+        with pytest.raises(GoldenSetScopeError):
+            await delete_golden_set(conn, "probe-delete", ANKOR_ID)
